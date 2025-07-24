@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "express": "^5.1.0",
     "mdb-react-ui-kit": "^9.0.0"
   }
 }

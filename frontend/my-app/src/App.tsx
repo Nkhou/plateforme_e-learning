@@ -1,21 +1,20 @@
-import { useState } from 'react'
-import 'bootstrap/dist/css/bootstrap.min.css';
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import Login from './component/user/login'
-import './App.css'
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Login from "./component/user/login";
+import Dashboard from "./component/dashboard/dashboard";
+import axios from "axios";
 
 function App() {
-  const [count, setCount] = useState(0)
+  axios.defaults.withCredentials = true;
 
   return (
-    <>
-      <div>
-        <Login/>
-      </div>
-    
-    </>
-  )
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;

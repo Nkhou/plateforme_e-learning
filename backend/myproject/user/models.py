@@ -1,6 +1,6 @@
 from django.db import models
-
-class CustomUser(models.Model):
+from django.contrib.auth.models import AbstractUser
+class CustomUser(AbstractUser):
     PRIVILEGE_CHOICES = [
         ('A', 'Admin'),
         ('AP', 'Apprenant'),
@@ -9,12 +9,10 @@ class CustomUser(models.Model):
 
     FirstName = models.CharField(max_length=50)
     LastName = models.CharField(max_length=50)
-    email = models.CharField(max_length=50, unique=True)
-    password = models.CharField(max_length=100)
     Privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
 
     def __str__(self):
-        return f"{self.FirstName} {self.LastName}"
+      return self.username
 
 
 class Course(models.Model):
