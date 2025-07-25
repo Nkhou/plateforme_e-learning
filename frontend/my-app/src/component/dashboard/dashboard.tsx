@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import axios from "axios";
 
 const Dashboard = () => {
-    let navigate = useNavigate();
     return (
         <div>
             <h1>hello, you are in dashboard</h1>

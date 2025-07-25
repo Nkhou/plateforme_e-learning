@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./component/user/login";
+import SignUp from "./component/user/sigUnp";
 import Dashboard from "./component/dashboard/dashboard";
 import AuthGuard from "./layout";
 import axios from "axios";
@@ -16,6 +17,14 @@ function App() {
           element={
             <AuthGuard>
               <Dashboard />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <AuthGuard>
+              <SignUp />
             </AuthGuard>
           }
         />
