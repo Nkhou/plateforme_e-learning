@@ -11,31 +11,6 @@ const Login = () => {
     const [responseStore, SetResponseStore] = useState('');
     const [error, setError] = useState('');
     let navigate = useNavigate();
-    const [loading, setLoading] = useState(true)
-    useEffect(() => {
-        axios.get('http://localhost:8000/api/CheckAuthentification/', { withCredentials: true })
-            .then(res => {
-                if (res.data.authenticated) {
-                    setLoading(false);
-                    // If already on dashboard, no need to navigate
-                    if (location.pathname !== '/dashboard') {
-                        navigate('/dashboard');
-                    }
-                } else {
-                    setLoading(false);
-                    // If not authenticated and not on login page, redirect
-                    if (location.pathname !== '/login') {
-                        navigate('/login');
-                    }
-                }
-            })
-            .catch(() => {
-                setLoading(false);
-                if (location.pathname !== '/login') {
-                    navigate('/login');
-                }
-            });
-    }, [navigate, location]);
     //useEffect(() => {
     //    axios.get('http://127.0.0.1:8000/api/CheckAuthentification/', { withCredentials: true })
     //        .then(res => {
@@ -79,9 +54,6 @@ const Login = () => {
                     : error.response?.data?.error || error.message;
                 setError(errorMsg)
             });
-    }
-    if (loading) {
-        return <div>Loading...</div>; // Optional loading screen while checking auth
     }
     return (
         <MDBContainer fluid className='my-5'>

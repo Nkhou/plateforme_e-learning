@@ -81,19 +81,38 @@ class LogoutView(APIView):
 
 class CheckAuthentificationView(APIView):
     def get(self, request):
-        print(request.COOKIES)
         token = request.COOKIES.get('accessToken')
         if not token:
-            return Response({'authenticated': False, 'message': 'No token'}, status=status.HTTP_401_UNAUTHORIZED)
-    
+            return Response({
+                'authenticated': False, 
+                'debug': 'authenticated1', 
+                'message': 'No token'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
         try:
+            print(token)
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-            # Optionally include user info in response
-            return Response({'authenticated': True, 'user': payload.get('user_id')}, status=status.HTTP_200_OK)
+            return Response({
+                'authenticated': True, 
+                'debug': 'authenticated2', 
+                'user': payload.get('user_id')
+            }, status=status.HTTP_200_OK)
+
         except jwt.ExpiredSignatureError:
-            return Response({'authenticated': False, 'message': 'Token expired'}, status=status.HTTP_401_UNAUTHORIZED)
+            request.delete_cookie('accessToken')
+            return Response({
+                'authenticated': False, 
+                'debug': 'authenticated3', 
+                'message': 'Token expired'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
         except jwt.InvalidTokenError:
-            return Response({'authenticated': False, 'message': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+            request.delete_cookie('accessToken')
+            return Response({
+                'authenticated': False, 
+                'debug': 'authenticated4', 
+                'message': 'Invalid token'
+            }, status=status.HTTP_401_UNAUTHORIZED)
 
 class DashboardView(APIView):
     def get(self, request):
