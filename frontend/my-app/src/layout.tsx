@@ -21,19 +21,19 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 setLoading(false);
 
 
-                if (!isAuthenticated && location.pathname !== '/login') {
-                    navigate('/login');
+                if (!isAuthenticated && location.pathname !== '/') {
+                    navigate('/');
                 }
 
-                if (isAuthenticated && location.pathname === '/login') {
+                if (isAuthenticated && location.pathname === '/') {
                     navigate('/dashboard');
                 }
             })
             .catch(() => {
                 console.log('ana hna');
                 setLoading(false);
-                if (location.pathname !== '/login') {
-                    navigate('/login');
+                if (location.pathname !== '/') {
+                    navigate('/');
                 }
             });
     }, [navigate, location]);

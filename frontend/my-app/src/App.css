@@ -51,6 +51,7 @@ html, body {
 
 .login-section {
   padding: 2rem;
+  background-color: #e6def0;
   z-index: 2; /* Ensure login appears above background */
 }
 
@@ -72,6 +73,9 @@ html, body {
 .content-section {
   flex: 1;
   position: relative;
+}
+.no-scale-on-click:active {
+    transform: none !important;
 }
 
 .content-background {

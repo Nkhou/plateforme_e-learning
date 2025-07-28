@@ -66,7 +66,6 @@ const Login = () => {
                     </MDBCol>
                     <MDBCol md='6' className='mx-auto'>
                         <MDBContainer className='shadow p-5 rounded bg-white'>
-
                             <h4 className='mb-4'>Login</h4>
                             <form onSubmit={handulSubmit}>
                                 <input className='form-control form-control-lg mb-4' placeholder="Email" type="email" value={email} onChange={handulEmail} />

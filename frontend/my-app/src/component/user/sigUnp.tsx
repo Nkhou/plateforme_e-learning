@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-    MDBBtn,
     MDBContainer,
     MDBRow,
     MDBCol,
@@ -9,33 +8,34 @@ import {
     MDBInput,
     MDBRadio,
     MDBFile
-}
-    from 'mdb-react-ui-kit';
-
+} from 'mdb-react-ui-kit';
+import axios from "axios";
 function SignUp() {
-    const [toggle, stToggle] = useState(true);
-    const [file, setFile] = useState(null);
-    const [error, setError] = useState('')
+    const [toggle, setToggle] = useState(true);
+    const [file, setFile] = useState<File | null>(null);
+    const [error, setError] = useState('');
     const [firstName, setFirstName] = useState('');
-    const [LastName, setLastName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
-    const [SelectedRole, setSelectedRole] = useState('');
-    const handallfillchange = (e: any) => {
-        const selectedFile = e.target.files[0];
+    const [selectedRole, setSelectedRole] = useState('');
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0];
 
         if (!selectedFile) {
             setError('No file selected.');
             setFile(null);
             return;
-        } if (selectedFile.size > 2 * 1024 * 1024) {
+        }
+
+        if (selectedFile.size > 2 * 1024 * 1024) {
             setError('File is too large. Maximum size is 2MB.');
             setFile(null);
             return;
         }
 
         const allowedTypes = ['text/csv', 'application/vnd.ms-excel'];
-        const isCSV =
-            selectedFile.type === allowedTypes ||
+        const isCSV = allowedTypes.includes(selectedFile.type) ||
             selectedFile.name.toLowerCase().endsWith('.csv');
 
         if (!isCSV) {
@@ -43,89 +43,211 @@ function SignUp() {
             setFile(null);
             return;
         }
+
         setError('');
         setFile(selectedFile);
-
     }
-    const handleSubmit = () => {
-        if (!file) {
-            alert('Please upload a valid CSV file first.');
-            return;
+
+    const validateSingleUser = () => {
+        if (!firstName || !lastName || !email) {
+            alert('Please complete all fields');
+            return false;
         }
-        console.log('CSV file ready:', file);
+        return true;
+    }
+
+    const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!toggle) {
+        if (!validateSingleUser()) return;
+
+        try {
+            // First get CSRF token
+            await axios.get('http://localhost:8000/api/CheckAuthentification/', {
+                withCredentials: true
+            });
+
+            // Then make the POST request
+            const response = await axios.post(
+                'http://localhost:8000/api/RegisterwithoutFile/',
+                {
+                    email: email,
+                    firstName: firstName,
+                    lastName: lastName,
+                    Privilege: selectedRole,
+                },
+                {
+                    withCredentials: true,
+                    headers: {
+                        'X-CSRFToken': getCsrfToken(),
+                        'Content-Type': 'application/json',
+                    }
+                }
+            );
+            console.log("Registration success:", response.data);
+        } catch (error: unknown) {
+            let errorMessage: string;
+            
+            if (axios.isAxiosError(error)) {
+                // Handle Axios errors
+                errorMessage = typeof error.response?.data === 'string' 
+                    ? error.response.data
+                    : error.response?.data?.error || error.message;
+            } else if (error instanceof Error) {
+                // Handle native JavaScript errors
+                errorMessage = error.message;
+            } else {
+                // Handle cases where the error isn't an Error object
+                errorMessage = "An unknown error occurred";
+            }
+            
+            console.error("Login error:", errorMessage);
+            setError(errorMessage);
+        }
+    }
+};
+
+// Helper function to get CSRF token (should be outside handleSubmit)
+function getCsrfToken() {
+    const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='))
+        ?.split('=')[1];
+    return cookieValue || '';
+}
+
+    const handleRegistrationTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setToggle(e.target.value === "more_than_one");
     };
-    const handallFirstName = (e:any) =>{
-        const value = e.target.value;
-        setFirstName(value);
-    }
-    const handalllastName = (e:any) =>{
-         const value = e.target.value;
-        setLastName(value);
-    }
-    const handallEmail = (e:any) =>{
-        const value = e.target.value;
-        setEmail(value)
-    }
-    const handleRoleChange = (e:any) => {
-    setSelectedRole(e.target.value);
-    console.log('Selected Role:', e.target.value);
-  };
+
     return (
-        <MDBContainer fluid>
+        <MDBContainer fluid className="vh-100 d-flex align-items-center">
+            <MDBRow className='justify-content-center w-100'>
+                <MDBCol md="8" lg="6" xl="5">
+                    <MDBCard className="mb-4" style={{ minHeight: 'auto' }}>
+                        <MDBCardBody className='p-4'>
+                            <h2 className='text-center mb-4'>Register</h2>
 
-            <MDBRow className='justify-content-center align-items-center m-5'>
+                            {/* Registration Type Selection */}
+                            <MDBRow className='mb-4'>
+                                <MDBCol>
+                                    <h6 className="fw-bold">Registration Type: </h6>
+                                    <div className="d-flex flex-wrap gap-3">
+                                        <MDBRadio
+                                            name='registrationType'
+                                            id='singleUser'
+                                            value='single_user'
+                                            label='Register one person'
+                                            checked={!toggle}
+                                            onChange={handleRegistrationTypeChange}
+                                        />
+                                        <MDBRadio
+                                            name='registrationType'
+                                            id='multipleUsers'
+                                            value='more_than_one'
+                                            label='Register multiple users'
+                                            checked={toggle}
+                                            onChange={handleRegistrationTypeChange}
+                                        />
+                                    </div>
+                                </MDBCol>
+                            </MDBRow>
 
-                <MDBCard>
-                    <MDBCardBody className='px-4'>
-                        <h2>Register</h2>
-                        <MDBRow>
+                            {toggle ? (
+                                /* CSV Upload for multiple users */
+                                <MDBRow className='mb-4'>
+                                    <MDBCol>
+                                        <MDBFile
+                                            label="User CSV File"
+                                            id="userCsvFile"
+                                            onChange={handleFileChange}
+                                            required={toggle}
+                                        />
+                                        {error && <div className="text-danger small mt-2">{error}</div>}
+                                    </MDBCol>
+                                </MDBRow>
+                            ) : (
+                                /* Form fields for single user */
+                                <>
+                                    <MDBRow className='mb-3'>
+                                        <MDBCol md='6' className='mb-3 mb-md-0'>
+                                            <MDBInput
+                                                id='firstName'
+                                                type='text'
+                                                value={firstName}
+                                                placeholder='First name'
+                                                onChange={(e) => setFirstName(e.target.value)}
+                                                required={!toggle}
+                                            />
+                                        </MDBCol>
+                                        <MDBCol md='6'>
+                                            <MDBInput
+                                                id='lastName'
+                                                type='text'
+                                                value={lastName}
+                                                placeholder='Last name'
+                                                onChange={(e) => setLastName(e.target.value)}
+                                                required={!toggle}
+                                            />
+                                        </MDBCol>
+                                    </MDBRow>
+                                    <MDBRow className='mb-4'>
+                                        <MDBCol>
+                                            <MDBInput
+                                                id='email'
+                                                type='email'
+                                                placeholder='Email'
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                required={!toggle}
+                                            />
+                                        </MDBCol>
+                                    </MDBRow>
+                                </>
+                            )}
 
-                            <MDBCol md='6'>
-                                <MDBInput wrapperClass='mb-4' label='First Name' size='lg' id='form1' type='text' onChange={handallFirstName} />
-                            </MDBCol>
+                            {/* User Role Selection */}
+                            <MDBRow className='mb-4'>
+                                <MDBCol>
+                                    <h6 className="fw-bold">User Role: </h6>
+                                    <div className="d-flex flex-wrap gap-3">
+                                        <MDBRadio
+                                            name='userRole'
+                                            id='roleLearner'
+                                            value='Apprenant'
+                                            label='Apprenant'
+                                            checked={selectedRole === 'Apprenant'}
+                                            onChange={(e) => setSelectedRole(e.target.value)}
+                                        />
+                                        <MDBRadio
+                                            name='userRole'
+                                            id='roleTrainer'
+                                            value='Formateur'
+                                            label='Formateur'
+                                            checked={selectedRole === 'Formateur'}
+                                            onChange={(e) => setSelectedRole(e.target.value)}
+                                        />
+                                        <MDBRadio
+                                            name='userRole'
+                                            id='roleAdmin'
+                                            value='Admin'
+                                            label='Admin'
+                                            checked={selectedRole === 'Admin'}
+                                            onChange={(e) => setSelectedRole(e.target.value)}
+                                        />
+                                    </div>
+                                </MDBCol>
+                            </MDBRow>
 
-                            <MDBCol md='6'>
-                                <MDBInput wrapperClass='mb-4' label='Last Name' size='lg' id='form2' type='text' onChange={handalllastName} />
-                            </MDBCol>
-
-                        </MDBRow>
-
-                        <MDBRow>
-
-                            <MDBCol md='6'>
-                                <MDBInput wrapperClass='mb-4' label='Email' size='lg' id='form4' type='email' onChange={handallEmail}/>
-                            </MDBCol>
-                        </MDBRow>
-                        <MDBRow className="align-items-end mb-4">
-                            <MDBCol md="6">
-                                <MDBFile
-                                    label="File of user"
-                                    id="customFile"
-                                    onChange={handallfillchange}
-                                    className="form-control-sm"
-                                />
-                                {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}
-                            </MDBCol>
-
-                        </MDBRow>
-                        <MDBRow>
-                            <MDBCol md='6' className='mb-4'>
-                                <h6 className="fw-bold">Role: </h6>
-                                <MDBRadio name='inlineRadio' id='inlineRadio1' value='Apprenant' label='Apprenant' inline onChange={ handleRoleChange} />
-                                <MDBRadio name='inlineRadio' id='inlineRadio2' value='Formateur' label='Formateur' inline onChange={ handleRoleChange} />
-                                <MDBRadio name='inlineRadio' id='inlineRadio3' value='Admin' label='Admin' inline onChange={ handleRoleChange} />
-                            </MDBCol>
-
-                        </MDBRow>
-
-                        <MDBCol md="3">
-                            <MDBBtn size="lg" onClick={handleSubmit}>
-                                Submit
-                            </MDBBtn>
-                        </MDBCol>
-                    </MDBCardBody>
-                </MDBCard>
-
+                            <div className="text-center">
+                                <div className="text-center">
+                                    <button type="submit" className="btn" style={{ backgroundColor: '#6235aaff', color: 'white' }} onClick={handleSubmit}>Register</button>
+                                </div>
+                            </div>
+                        </MDBCardBody>
+                    </MDBCard>
+                </MDBCol>
             </MDBRow>
         </MDBContainer>
     );

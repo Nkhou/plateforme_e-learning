@@ -46,7 +46,7 @@ function FirstPage() {
       </Navbar>
 
       {/* Main content area */}
-      <div className="main-layout">
+      <div className="main-layout ">
         {/* Login section - top right */}
         <div className="login-section">
           <MDBContainer className="login-container">
@@ -57,10 +57,12 @@ function FirstPage() {
                   <form onSubmit={handleSubmit}>
                     <input 
                       className='form-control form-control-lg mb-4' 
+                      name='email'
                       placeholder="Email" 
                       type="email" 
                       value={email} 
-                      onChange={handleEmail} 
+                      onChange={handleEmail}
+                      autoComplete="email"
                     />
                     <Form.Group className="mb-3" controlId="formBasicPassword">
                       <Form.Control 

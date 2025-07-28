@@ -153,10 +153,14 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
-MIDDLEWARE = ['corsheaders.middleware.CorsMiddleware'] + MIDDLEWARE
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
 ]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
@@ -174,6 +178,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+# For development only - disable in production
+CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_HTTPONLY = False
+SESSION_COOKIE_SAME_SITE = 'Lax'
+CSRF_COOKIE_SAME_SITE = 'Lax'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

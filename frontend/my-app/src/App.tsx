@@ -15,7 +15,11 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<FirstPage />} />
+        <Route path="/" element={
+            <AuthGuard>
+              <FirstPage />
+            </AuthGuard>
+          } />
         <Route
           path="/dashboard"
           element={

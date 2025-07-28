@@ -13,6 +13,8 @@ from .serializers import CustomUserSerializer  # Fixed import
 from django.contrib.auth import authenticate
 import logging
 import jwt
+from django.contrib.auth.hashers import make_password
+from django.utils.crypto import get_random_string
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -128,3 +130,70 @@ class DashboardView(APIView):
         except jwt.InvalidTokenError:
             return Response({'authenticated': False, 'message': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
 
+import secrets
+import string
+
+def generate_random_password():
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return ''.join(secrets.choice(alphabet) for _ in range(12))
+
+from django.contrib.auth.hashers import make_password
+
+class RegisterwithoutFileView(APIView):
+    def post(self, request):
+        try:
+            email = request.data.get('email', '').strip()
+            firstName = request.data.get('firstName', '').strip()
+            lastName = request.data.get('lastName', '').strip()
+            Privilege = request.data.get('Privilege', 'AP').strip()  # Default to Apprenant
+            
+            print(f"Extracted values - email: {email}, firstName: {firstName}, lastName: {lastName}, Privilege: {Privilege}")  # Debug
+            
+            # Validate required fields
+            if not all([email, firstName, lastName]):
+                print("Missing required fields")  # Debug
+                return Response(
+                    {
+                        "error": "All fields are required",
+                        "missing_fields": [
+                            field for field in ['email', 'firstName', 'lastName'] 
+                            if not request.data.get(field)
+                        ]
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Generate credentials
+            password = str(generate_random_password())  # Ensure string type
+            username = f"{firstName} {lastName}".strip()
+
+            if CustomUser.objects.filter(email=email).exists():
+                return Response(
+                    {"error": "Email already in use."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            user_data = {
+                'username': username,
+                'email': email,
+                'FirstName': firstName,
+                'LastName': lastName,
+                'Privilege': Privilege,
+                'password': make_password(password)
+            }
+            serializer = CustomUserSerializer(data=user_data)
+            if serializer.is_valid():
+                user = serializer.save()
+                return Response(
+                    {"message": "User registered successfully"},
+                    status=status.HTTP_201_CREATED
+                )
+            else:
+                print('kfkkfkkf')
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
