@@ -99,12 +99,13 @@ class CheckAuthentificationView(APIView):
             }, status=status.HTTP_200_OK)
 
         except jwt.ExpiredSignatureError:
-            request.delete_cookie('accessToken')
-            return Response({
+            Response({
                 'authenticated': False, 
                 'debug': 'authenticated3', 
                 'message': 'Token expired'
             }, status=status.HTTP_401_UNAUTHORIZED)
+            Response.delete_cookie('accessToken')
+            return Response
 
         except jwt.InvalidTokenError:
             request.delete_cookie('accessToken')

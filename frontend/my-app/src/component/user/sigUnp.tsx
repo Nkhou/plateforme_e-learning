@@ -43,7 +43,6 @@ function SignUp() {
             setFile(null);
             return;
         }
-
         setError('');
         setFile(selectedFile);
 
