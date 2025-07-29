@@ -6,9 +6,6 @@ class CustomUser(AbstractUser):
         ('AP', 'Apprenant'),
         ('F', 'Formateur'),
     ]
-
-    FirstName = models.CharField(max_length=50)
-    LastName = models.CharField(max_length=50)
     Privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
 
     def __str__(self):

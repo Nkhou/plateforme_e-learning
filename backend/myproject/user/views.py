@@ -101,12 +101,12 @@ class CheckAuthentificationView(APIView):
             }, status=status.HTTP_200_OK)
 
         except jwt.ExpiredSignatureError:
-            Response({
+            response = Response({
                 'authenticated': False, 
                 'debug': 'authenticated3', 
                 'message': 'Token expired'
             }, status=status.HTTP_401_UNAUTHORIZED)
-            Response.delete_cookie('accessToken')
+            response.delete_cookie('accessToken')
             return Response
 
         except jwt.InvalidTokenError:
@@ -133,67 +133,113 @@ class DashboardView(APIView):
 import secrets
 import string
 
+import string
+import secrets
+from django.contrib.auth.hashers import make_password
+
 def generate_random_password():
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(secrets.choice(alphabet) for _ in range(12))
 
-from django.contrib.auth.hashers import make_password
-
 class RegisterwithoutFileView(APIView):
     def post(self, request):
         try:
-            email = request.data.get('email', '').strip()
-            firstName = request.data.get('firstName', '').strip()
-            lastName = request.data.get('lastName', '').strip()
-            Privilege = request.data.get('Privilege', 'AP').strip()  # Default to Apprenant
-            
-            print(f"Extracted values - email: {email}, firstName: {firstName}, lastName: {lastName}, Privilege: {Privilege}")  # Debug
-            
-            # Validate required fields
-            if not all([email, firstName, lastName]):
-                print("Missing required fields")  # Debug
+            email = request.data.get('email', '').strip().lower()
+            first_name = request.data.get('firstName', '').strip()
+            last_name = request.data.get('lastName', '').strip()
+            privilege = request.data.get('Privilege', 'AP').strip().upper()
+            if not all([email, first_name, last_name]):
+                missing = [field for field in ['email', 'firstName', 'lastName'] 
+                         if not request.data.get(field)]
                 return Response(
                     {
                         "error": "All fields are required",
-                        "missing_fields": [
-                            field for field in ['email', 'firstName', 'lastName'] 
-                            if not request.data.get(field)
-                        ]
+                        "missing_fields": missing
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
-            # Generate credentials
-            password = str(generate_random_password())  # Ensure string type
-            username = f"{firstName} {lastName}".strip()
-
             if CustomUser.objects.filter(email=email).exists():
                 return Response(
-                    {"error": "Email already in use."},
+                    {"error": "Email already in use"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            password = generate_random_password()
+            username = f"{first_name.lower()}_{last_name.lower()}"[:150]
+            username = ''.join(c for c in username if c.isalnum() or c in '._-')
 
             user_data = {
                 'username': username,
                 'email': email,
-                'FirstName': firstName,
-                'LastName': lastName,
-                'Privilege': Privilege,
-                'password': make_password(password)
+                'first_name': first_name,
+                'last_name': last_name,
+                'First_name': first_name,
+                'Last_name': last_name,
+                'Privilege': privilege,
+                'password': password
             }
+
             serializer = CustomUserSerializer(data=user_data)
+            
             if serializer.is_valid():
                 user = serializer.save()
                 return Response(
-                    {"message": "User registered successfully"},
+                    {
+                        "message": "User registered successfully",
+                        "username": username,
+                    },
                     status=status.HTTP_201_CREATED
                 )
             else:
-                print('kfkkfkkf')
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+                print("Serializer errors:", serializer.errors)
+                return Response(
+                    {
+                        "error": "Invalid data",
+                        "details": serializer.errors
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         except Exception as e:
+            print(f"Unexpected error: {str(e)}")
             return Response(
-                {"error": str(e)},
+                {"error": "Internal server error"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser
+from rest_framework.response import Response
+from rest_framework import status
+import csv
+from io import TextIOWrapper
+
+class CSVUploadView(APIView):
+    parser_classes = [MultiPartParser]
+    
+    def post(self, request):
+        if 'csv_file' not in request.FILES:
+            return Response({'error': 'No CSV file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        csv_file = request.FILES['csv_file']
+        try:
+            decoded_file = TextIOWrapper(csv_file.file, encoding='utf-8')
+            csv_reader = csv.DictReader(decoded_file)
+            for row in csv_reader:
+                password = generate_random_password()
+                username = username = f"{first_name.lower()}_{last_name.lower()}"[:150]
+
+                user_data = {
+                    'username': Username,
+                    'email': row['email'],
+                    'first_name': row['first_name'],
+                    'last_name': row['last_name'],
+                    'password': password
+                }
+                serializer = CustomUserSerializer(data=user_data)
+                if serializer.is_valid():
+                    serializer.save()
+                else:
+                    continue
+            return Response({'message': 'CSV processed successfully'}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

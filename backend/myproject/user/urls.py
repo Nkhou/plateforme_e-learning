@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import UserView, LoginView, LogoutView, CheckAuthentificationView, RegisterwithoutFileView
+from .views import UserView, LoginView, LogoutView, CheckAuthentificationView, RegisterwithoutFileView, CSVUploadView
 from .views import DashboardView
 
 urlpatterns = [
@@ -11,4 +11,5 @@ urlpatterns = [
     path('RegisterwithoutFile/', RegisterwithoutFileView.as_view(), name='RegisterwithoutFile'),
     #dashboard
     path('Dashboard/', DashboardView.as_view(), name='Dashboard'),
+    path('CSVUpload/', CSVUploadView.as_view(), name='CSVUpload'),
 ]

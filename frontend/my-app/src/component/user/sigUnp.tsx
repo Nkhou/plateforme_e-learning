@@ -47,7 +47,6 @@ function SignUp() {
         setError('');
         setFile(selectedFile);
     }
-
     const validateSingleUser = () => {
         if (!firstName || !lastName || !email) {
             alert('Please complete all fields');
@@ -57,65 +56,119 @@ function SignUp() {
     }
 
     const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+        event.preventDefault();
 
-    if (!toggle) {
-        if (!validateSingleUser()) return;
+        if (!toggle) {
+            if (!validateSingleUser()) return;
 
-        try {
-            // First get CSRF token
-            await axios.get('http://localhost:8000/api/CheckAuthentification/', {
-                withCredentials: true
-            });
+            try {
+                await axios.get('http://localhost:8000/api/CheckAuthentification/', {
+                    withCredentials: true
+                });
 
-            // Then make the POST request
-            const response = await axios.post(
-                'http://localhost:8000/api/RegisterwithoutFile/',
-                {
-                    email: email,
-                    firstName: firstName,
-                    lastName: lastName,
-                    Privilege: selectedRole,
-                },
-                {
-                    withCredentials: true,
-                    headers: {
-                        'X-CSRFToken': getCsrfToken(),
-                        'Content-Type': 'application/json',
+                const response = await axios.post(
+                    'http://localhost:8000/api/RegisterwithoutFile/',
+                    {
+                        email: email,
+                        firstName: firstName,
+                        lastName: lastName,
+                        Privilege: selectedRole,
+                    },
+                    {
+                        withCredentials: true,
+                        headers: {
+                            'X-CSRFToken': getCsrfToken(),
+                            'Content-Type': 'application/json',
+                        }
+                    }
+                );
+                console.log("Registration success:", response.data);
+            } catch (error: unknown) {
+                let errorMessage: string;
+
+                if (axios.isAxiosError(error)) {
+                    errorMessage = typeof error.response?.data === 'string'
+                        ? error.response.data
+                        : error.response?.data?.error || error.message;
+                } else if (error instanceof Error) {
+                    errorMessage = error.message;
+                } else {
+                    errorMessage = "An unknown error occurred";
+                }
+
+                console.error("Login error:", errorMessage);
+                setError(errorMessage);
+            }
+        }
+        else {
+            if (!file) return;
+
+            try {
+                await axios.get('http://localhost:8000/api/CheckAuthentification/', {
+                    withCredentials: true
+                });
+                const reader = new FileReader()
+                reader.onload = async (event) => {
+                    if (!event.target?.result) {
+                        setError('File reading failed');
+                        return;
+                    }
+                    const csvData = event.target?.result as string;
+                    const lines = csvData.split('\n');
+                    const headers = lines[0].split(',');
+                    const jsonData = [];
+
+                    for (let i = 1; i < lines.length; i++) {
+                         const obj: Record<string, string> = {};
+                        const currentline = lines[i].split(',');
+
+                        for (let j = 0; j < headers.length; j++) {
+                            obj[headers[j]] = currentline[j];
+                        }
+
+                        jsonData.push(obj);
                     }
                 }
-            );
-            console.log("Registration success:", response.data);
-        } catch (error: unknown) {
-            let errorMessage: string;
-            
-            if (axios.isAxiosError(error)) {
-                // Handle Axios errors
-                errorMessage = typeof error.response?.data === 'string' 
-                    ? error.response.data
-                    : error.response?.data?.error || error.message;
-            } else if (error instanceof Error) {
-                // Handle native JavaScript errors
-                errorMessage = error.message;
-            } else {
-                // Handle cases where the error isn't an Error object
-                errorMessage = "An unknown error occurred";
-            }
-            
-            console.error("Login error:", errorMessage);
-            setError(errorMessage);
-        }
-    }
-};
 
-// Helper function to get CSRF token (should be outside handleSubmit)
-function getCsrfToken() {
-    const cookieValue = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrftoken='))
-        ?.split('=')[1];
-    return cookieValue || '';
-}
+                const response = await axios.post(
+                    'http://localhost:8000/api/CSVUpload/',
+                    {
+                        csv_file: file,
+                    },
+                    {
+                        withCredentials: true,
+                        headers: {
+                            'X-CSRFToken': getCsrfToken(),
+                            'Content-Type': 'application/json',
+                        }
+                    }
+                );
+                console.log("Registration success:", response.data);
+            } catch (error: unknown) {
+                let errorMessage: string;
+
+                if (axios.isAxiosError(error)) {
+                    errorMessage = typeof error.response?.data === 'string'
+                        ? error.response.data
+                        : error.response?.data?.error || error.message;
+                } else if (error instanceof Error) {
+                    errorMessage = error.message;
+                } else {
+                    errorMessage = "An unknown error occurred";
+                }
+
+                console.error("Login error:", errorMessage);
+                setError(errorMessage);
+            }
+        }
+    };
+    function getCsrfToken() {
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1];
+        return cookieValue || '';
+    }
 
     const handleRegistrationTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setToggle(e.target.value === "more_than_one");
@@ -128,8 +181,6 @@ function getCsrfToken() {
                     <MDBCard className="mb-4" style={{ minHeight: 'auto' }}>
                         <MDBCardBody className='p-4'>
                             <h2 className='text-center mb-4'>Register</h2>
-
-                            {/* Registration Type Selection */}
                             <MDBRow className='mb-4'>
                                 <MDBCol>
                                     <h6 className="fw-bold">Registration Type: </h6>
@@ -155,7 +206,6 @@ function getCsrfToken() {
                             </MDBRow>
 
                             {toggle ? (
-                                /* CSV Upload for multiple users */
                                 <MDBRow className='mb-4'>
                                     <MDBCol>
                                         <MDBFile
@@ -168,7 +218,6 @@ function getCsrfToken() {
                                     </MDBCol>
                                 </MDBRow>
                             ) : (
-                                /* Form fields for single user */
                                 <>
                                     <MDBRow className='mb-3'>
                                         <MDBCol md='6' className='mb-3 mb-md-0'>
@@ -206,8 +255,6 @@ function getCsrfToken() {
                                     </MDBRow>
                                 </>
                             )}
-
-                            {/* User Role Selection */}
                             <MDBRow className='mb-4'>
                                 <MDBCol>
                                     <h6 className="fw-bold">User Role: </h6>
@@ -215,7 +262,7 @@ function getCsrfToken() {
                                         <MDBRadio
                                             name='userRole'
                                             id='roleLearner'
-                                            value='Apprenant'
+                                            value='AP'
                                             label='Apprenant'
                                             checked={selectedRole === 'Apprenant'}
                                             onChange={(e) => setSelectedRole(e.target.value)}
@@ -223,7 +270,7 @@ function getCsrfToken() {
                                         <MDBRadio
                                             name='userRole'
                                             id='roleTrainer'
-                                            value='Formateur'
+                                            value='F'
                                             label='Formateur'
                                             checked={selectedRole === 'Formateur'}
                                             onChange={(e) => setSelectedRole(e.target.value)}
@@ -231,7 +278,7 @@ function getCsrfToken() {
                                         <MDBRadio
                                             name='userRole'
                                             id='roleAdmin'
-                                            value='Admin'
+                                            value='A'
                                             label='Admin'
                                             checked={selectedRole === 'Admin'}
                                             onChange={(e) => setSelectedRole(e.target.value)}
@@ -254,3 +301,4 @@ function getCsrfToken() {
 }
 
 export default SignUp;
+
