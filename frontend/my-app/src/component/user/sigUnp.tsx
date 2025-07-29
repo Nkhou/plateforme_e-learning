@@ -54,6 +54,41 @@ function SignUp() {
         }
         return true;
     }
+    const readCSVFile = (file: File): Promise<Record<string, string>[]> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = (event) => {
+                if (!event.target?.result) {
+                    reject("File reading failed");
+                    return;
+                }
+
+                const csvData = event.target.result as string;
+                const lines = csvData.trim().split('\n');
+                const headers = lines[0].split(',');
+
+                const jsonData: Record<string, string>[] = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                    const currentLine = lines[i].split(',');
+                    if (currentLine.length !== headers.length) continue;
+
+                    const obj: Record<string, string> = {};
+                    for (let j = 0; j < headers.length; j++) {
+                        obj[headers[j].trim()] = currentLine[j].trim();
+                    }
+
+                    jsonData.push(obj);
+                }
+
+                resolve(jsonData);
+            };
+
+            reader.onerror = () => reject("File reading error");
+            reader.readAsText(file);
+        });
+    };
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -101,40 +136,21 @@ function SignUp() {
             }
         }
         else {
-            if (!file) return;
+            if (!file) {
+                setError("No file selected.");
+                return;
+            }
 
             try {
                 await axios.get('http://localhost:8000/api/CheckAuthentification/', {
                     withCredentials: true
                 });
-                const reader = new FileReader()
-                reader.onload = async (event) => {
-                    if (!event.target?.result) {
-                        setError('File reading failed');
-                        return;
-                    }
-                    const csvData = event.target?.result as string;
-                    const lines = csvData.split('\n');
-                    const headers = lines[0].split(',');
-                    const jsonData = [];
 
-                    for (let i = 1; i < lines.length; i++) {
-                         const obj: Record<string, string> = {};
-                        const currentline = lines[i].split(',');
-
-                        for (let j = 0; j < headers.length; j++) {
-                            obj[headers[j]] = currentline[j];
-                        }
-
-                        jsonData.push(obj);
-                    }
-                }
-
+                const jsonData = await readCSVFile(file);
+                console.log('hello', jsonData);
                 const response = await axios.post(
                     'http://localhost:8000/api/CSVUpload/',
-                    {
-                        csv_file: file,
-                    },
+                    { csv_file: jsonData },
                     {
                         withCredentials: true,
                         headers: {
@@ -143,21 +159,19 @@ function SignUp() {
                         }
                     }
                 );
-                console.log("Registration success:", response.data);
-            } catch (error: unknown) {
-                let errorMessage: string;
 
+                console.log("CSV upload success:", response.data);
+            } catch (error: unknown) {
+                let errorMessage = "An unknown error occurred";
                 if (axios.isAxiosError(error)) {
                     errorMessage = typeof error.response?.data === 'string'
                         ? error.response.data
                         : error.response?.data?.error || error.message;
                 } else if (error instanceof Error) {
                     errorMessage = error.message;
-                } else {
-                    errorMessage = "An unknown error occurred";
                 }
 
-                console.error("Login error:", errorMessage);
+                console.error("CSV upload error:", errorMessage);
                 setError(errorMessage);
             }
         }

@@ -83,6 +83,11 @@ REST_FRAMEWORK = {
    }
 
 WSGI_APPLICATION = 'myproject.wsgi.application'
+DEFAULT_PARSER_CLASSES: [
+    'rest_framework.parsers.JSONParser',
+    'rest_framework.parsers.FormParser',
+    'rest_framework.parsers.MultiPartParser',
+]
 
 
 # Database

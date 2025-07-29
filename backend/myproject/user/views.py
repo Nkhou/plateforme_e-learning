@@ -214,30 +214,24 @@ import csv
 from io import TextIOWrapper
 
 class CSVUploadView(APIView):
-    parser_classes = [MultiPartParser]
-    
     def post(self, request):
-        if 'csv_file' not in request.FILES:
-            return Response({'error': 'No CSV file provided'}, status=status.HTTP_400_BAD_REQUEST)
-        csv_file = request.FILES['csv_file']
+        csv_file = request.data.get('csv_file')
         try:
-            decoded_file = TextIOWrapper(csv_file.file, encoding='utf-8')
-            csv_reader = csv.DictReader(decoded_file)
-            for row in csv_reader:
+            for row in csv_file:
                 password = generate_random_password()
-                username = username = f"{first_name.lower()}_{last_name.lower()}"[:150]
-
+                username = f"{row['firstName'].lower()}_{row['lastName'].lower()}"[:150]
                 user_data = {
-                    'username': Username,
+                    'username': username,
                     'email': row['email'],
-                    'first_name': row['first_name'],
-                    'last_name': row['last_name'],
+                    'first_name': row['firstName'],
+                    'last_name': row['lastName'],
                     'password': password
                 }
                 serializer = CustomUserSerializer(data=user_data)
                 if serializer.is_valid():
                     serializer.save()
                 else:
+                    print(serializer)
                     continue
             return Response({'message': 'CSV processed successfully'}, status=status.HTTP_200_OK)
             
