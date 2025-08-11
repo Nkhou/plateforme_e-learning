@@ -83,21 +83,31 @@ class LogoutView(APIView):
 
 class CheckAuthentificationView(APIView):
     def get(self, request):
-        token = request.COOKIES.get('accessToken')
-        if not token:
-            return Response({
-                'authenticated': False, 
-                'debug': 'authenticated1', 
-                'message': 'No token'
-            }, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
-            print(token)
+            token = request.COOKIES.get('accessToken')
+            if not token:
+                return Response({
+                    'authenticated': False, 
+                    'debug': 'authenticated1', 
+                    'message': 'No token'
+                }, status=status.HTTP_401_UNAUTHORIZED)
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            print("-----------------------------",payload.get('username'))
+            UserById_ = CustomUser.objects.filter(id=payload.get('user_id')).first()
+
+            user = {
+                "user_id": payload.get('user_id'),
+                "username": UserById_.username,
+                "firstname": UserById_.first_name,
+                "lastName": UserById_.last_name,
+                "email": UserById_.email,
+                "Privilege": UserById_.Privilege
+            }
             return Response({
                 'authenticated': True, 
                 'debug': 'authenticated2', 
-                'user': payload.get('user_id')
+                'user': user
             }, status=status.HTTP_200_OK)
 
         except jwt.ExpiredSignatureError:
@@ -173,8 +183,6 @@ class RegisterwithoutFileView(APIView):
                 'email': email,
                 'first_name': first_name,
                 'last_name': last_name,
-                'First_name': first_name,
-                'Last_name': last_name,
                 'Privilege': privilege,
                 'password': password
             }

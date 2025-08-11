@@ -3,8 +3,10 @@ import Login from "./component/user/login";
 import SignUp from "./component/user/sigUnp";
 import Dashboard from "./component/dashboard/dashboard";
 import AuthGuard from "./layout";
+import User from "./layout"; // Removed unused import
 import NotFound from "./notFound";
 import axios from "axios";
+import '@coreui/coreui/dist/css/coreui.min.css'
 import FirstPage from "./component/user/firstPage";
 import './App.css';
 
@@ -24,6 +26,7 @@ function App() {
           path="/dashboard"
           element={
             <AuthGuard>
+              <></>
               <Dashboard />
             </AuthGuard>
           }

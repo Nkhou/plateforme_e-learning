@@ -11,21 +11,6 @@ const Login = () => {
     const [responseStore, SetResponseStore] = useState('');
     const [error, setError] = useState('');
     let navigate = useNavigate();
-    //useEffect(() => {
-    //    axios.get('http://127.0.0.1:8000/api/CheckAuthentification/', { withCredentials: true })
-    //        .then(res => {
-    //            if (res.data.authenticated) {
-    //                if (location.pathname !== '/dashboard') {
-    //                    navigate('/dashboard');
-    //                }
-    //            } else {
-    //                navigate('/login');
-    //            }
-    //        })
-    //        .catch(() => {
-    //            navigate('/login');
-    //        });
-    //}, [navigate]);
 
     const handulEmail = (event: any) => {
         const value = event.target.value;

@@ -11,6 +11,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@coreui/icons": "^3.0.1",
+    "@coreui/icons-react": "^2.3.0",
+    "@coreui/react": "^5.7.1",
     "axios": "^1.11.0",
     "bootstrap": "^5.3.7",
     "jquery": "^3.7.1",
