@@ -232,20 +232,57 @@ html, body {
 .carousel-track {
   display: flex;
   gap: 1rem;
-  animation: scroll-left 20s linear infinite;
+  transition: transform 0.5s ease; /* Smooth sliding animation */
   padding: 0 1rem;
 }
 
-.carousel-container:hover .carousel-track {
+.carousel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.8);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.carousel-nav:hover {
+  background: white;
+}
+
+.carousel-nav.left {
+  left: 10px;
+}
+
+.carousel-nav.right {
+  right: 10px;
+}
+
+/* Rest of your existing card styles remain the same */
+
+/* Duplicate the items to create seamless looping */
+.carousel-track.original, .carousel-track.clone {
+  animation: scroll-left 20s linear infinite;
+}
+
+.carousel-container:hover .carousel-track.original,
+.carousel-container:hover .carousel-track.clone {
   animation-play-state: paused;
 }
 
 @keyframes scroll-left {
   0% {
-    transform: translateX(0%);
+    transform: translateX(0);
   }
   100% {
-    transform: translateX(-50%);
+    transform: translateX(-100%);
   }
 }
 
