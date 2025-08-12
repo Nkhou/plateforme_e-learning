@@ -220,21 +220,9 @@ html, body {
     animation: logo-spin infinite 20s linear;
   }
 }
-/* /card  */
+/* /card 
 /* CAROUSEL SECTION - FIXED */
-.carousel-container {
-  overflow: hidden;
-  position: relative;
-  width: 100%;
-  padding: 1rem 0;
-}
-
-.carousel-track {
-  display: flex;
-  gap: 1rem;
-  transition: transform 0.5s ease; /* Smooth sliding animation */
-  padding: 0 1rem;
-}
+/* Main page container */
 
 .carousel-nav {
   position: absolute;
@@ -268,7 +256,7 @@ html, body {
 /* Rest of your existing card styles remain the same */
 
 /* Duplicate the items to create seamless looping */
-.carousel-track.original, .carousel-track.clone {
+/* .carousel-track.original, .carousel-track.clone {
   animation: scroll-left 20s linear infinite;
 }
 
@@ -284,10 +272,10 @@ html, body {
   100% {
     transform: translateX(-100%);
   }
-}
+} */
 
 /* SCOPED card-carousel styling - ONLY affects cards inside carousel-container */
-.carousel-container .card-carousel {
+/* .carousel-container .card-carousel {
     min-width: 300px;
     padding: 1.5rem;
     flex: 0 0 auto;
@@ -327,15 +315,17 @@ html, body {
     color: #6c757d;
     font-size: 0.9rem;
     line-height: 1.4;
-}
+} */
 
 /* DASHBOARD WRAPPER IMPROVEMENTS */
-.dashboard-wrapper {
-  width: 100%;
+/* .dashboard-wrapper { */
+  /* width: 100%;
   flex: 1;
-  overflow-x: hidden; /* Changed from auto to hidden to prevent unwanted scrollbars */
+  overflow-x: hidden; /* Changed from auto to hidden to prevent unwanted scrollbars 
   padding: 1rem;
-}
+  overflow-y: auto; /* Allow vertical scrolling */
+  /* -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS  */
+/* }   */
 
 /* PROTECTION FOR NAVBAR AND SIDEBAR */
 .navbar {
@@ -373,7 +363,7 @@ html, body {
 }
 
 /* Mobile responsive carousel */
-@media (max-width: 768px) {
+/* @media (max-width: 768px) {
   .carousel-container .card-carousel {
     min-width: 280px;
     padding: 1rem;
@@ -400,8 +390,8 @@ html, body {
   
   .carousel-container .card-carousel .card-text {
     font-size: 0.85rem;
-  }
-}
+  } */
+/* } */
 
 /* Ensure all elements stay within bounds */
 * {
@@ -550,21 +540,46 @@ html, body {
   }
 }
 
+/* .carousel-track {
+  touch-action: pan-y; /* Allow vertical scrolling by default */
+ */
+.dashboard-wrapper {
+  width: 100%;
+  height: 100vh; /* Full viewport height */
+  overflow-y: auto; /* Enable vertical scrolling */
+  overflow-x: hidden; /* Disable horizontal scroll */
+  -webkit-overflow-scrolling: touch; /* Smooth iOS scrolling */
+  padding: 1rem;
+}
+
+.carousel-track {
+  display: flex;
+  gap: 16px;
+  transition: transform 0.3s ease;
+  touch-action: pan-y; /* Allow vertical scrolling by default */
+  will-change: transform; /* Optimize for animation */
+}
+
+.card-carousel {
+  flex: 0 0 auto;
+  width: 300px; /* Or your preferred card width */
+  user-select: none; /* Prevent text selection during swipe */
+  touch-action: pan-y; /* Explicitly allow vertical scrolling */
+}
+
+
+
+/* .card-carousel {
+  user-select: none; /* Prevent text selection during swipe */
 
 /* CARD DASHBORD */
-.dashboard-wrapper {
+/* .dashboard-wrapper {
   width: 100%;
   height: 100%;
   flex: 1;
   overflow-x: auto;
-}
+} */
 
-.dashboard-wrapper {
-  width: 100%;
-  height: 100%;
-  flex: 1;
-  overflow-x: auto;
-}
 @keyframes slide-left-to-right {
   0% {
     transform: translateX(-100%);
