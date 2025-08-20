@@ -9,6 +9,7 @@ import axios from "axios";
 import '@coreui/coreui/dist/css/coreui.min.css'
 import FirstPage from "./component/user/firstPage";
 import './App.css';
+import Cours from "./pages/courses";
 
 function App() {
   axios.defaults.withCredentials = true;
@@ -16,10 +17,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={
+        <Route path="/" element={<FirstPage />} />
+        <Route path="/cours" element={
             <AuthGuard>
-              <FirstPage />
+              <Cours />
             </AuthGuard>
           } />
         <Route

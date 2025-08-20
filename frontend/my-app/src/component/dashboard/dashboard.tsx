@@ -20,83 +20,159 @@ const Dashboard = () => {
     { id: 6, title: "Course 6", description: "UI/UX Design Fundamentals", image: "/group.avif" },
   ];
 
-  // Proper touch event handling with passive listeners
+  // Add debug logging to identify the source
+  useEffect(() => {
+    
+    // Check for any global variables that might be corrupted
+    if (typeof window !== 'undefined') {
+      console.log('Window object exists');
+    }
+    
+    return () => {
+      console.log('Dashboard component unmounting');
+    };
+  }, []);
+
+  // Enhanced touch event handling with better error handling
   useEffect(() => {
     const tracks = [trackRef1.current, trackRef2.current].filter(Boolean);
     
     const handleTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.touches[0].clientX;
-      touchStartY.current = e.touches[0].clientY;
-      isDragging.current = true;
+      try {
+        touchStartX.current = e.touches[0]?.clientX || 0;
+        touchStartY.current = e.touches[0]?.clientY || 0;
+        isDragging.current = true;
+        console.log('Touch start:', { x: touchStartX.current, y: touchStartY.current });
+      } catch (error) {
+        console.error('Error in handleTouchStart:', error);
+      }
     };
     
     const handleTouchMove = (e: TouchEvent) => {
       if (!isDragging.current) return;
       
-      const touchX = e.touches[0].clientX;
-      const touchY = e.touches[0].clientY;
-      const diffX = touchStartX.current - touchX;
-      const diffY = touchStartY.current - touchY;
-      
-      if (Math.abs(diffX) > Math.abs(diffY)) {
-        e.preventDefault();
-        const track = e.currentTarget as HTMLDivElement;
-        const cardWidth = track.children[0]?.clientWidth || 300;
-        const gap = 16;
-        const scrollAmount = cardWidth + gap;
+      try {
+        const touchX = e.touches[0]?.clientX || 0;
+        const touchY = e.touches[0]?.clientY || 0;
+        const diffX = touchStartX.current - touchX;
+        const diffY = touchStartY.current - touchY;
         
-        if (diffX > 0) {
-          // Swipe left
-          setCurrentPosition1(prev => Math.max(prev - scrollAmount, -(track.scrollWidth - track.clientWidth)));
-        } else {
-          // Swipe right
-          setCurrentPosition1(prev => Math.min(prev + scrollAmount, 0));
+        if (Math.abs(diffX) > Math.abs(diffY)) {
+          e.preventDefault();
+          const track = e.currentTarget as HTMLDivElement;
+          const cardWidth = track.children[0]?.clientWidth || 300;
+          const gap = 16;
+          const scrollAmount = cardWidth + gap;
+          
+          if (diffX > 0) {
+            // Swipe left
+            setCurrentPosition1(prev => {
+              const maxScroll = track.scrollWidth - track.clientWidth;
+              const newPos = Math.max(prev - scrollAmount, -maxScroll);
+              console.log('Swipe left, new position:', newPos);
+              return newPos;
+            });
+          } else {
+            // Swipe right
+            setCurrentPosition1(prev => {
+              const newPos = Math.min(prev + scrollAmount, 0);
+              console.log('Swipe right, new position:', newPos);
+              return newPos;
+            });
+          }
         }
+      } catch (error) {
+        console.error('Error in handleTouchMove:', error);
       }
     };
     
     const handleTouchEnd = () => {
-      isDragging.current = false;
+      try {
+        isDragging.current = false;
+        console.log('Touch end');
+      } catch (error) {
+        console.error('Error in handleTouchEnd:', error);
+      }
     };
 
-    tracks.forEach(track => {
-      track?.addEventListener('touchstart', handleTouchStart, { passive: true });
-      track?.addEventListener('touchmove', handleTouchMove, { passive: false });
-      track?.addEventListener('touchend', handleTouchEnd, { passive: true });
+    // Add error handling for event listeners
+    tracks.forEach((track, index) => {
+      if (track) {
+        try {
+          track.addEventListener('touchstart', handleTouchStart, { passive: true });
+          track.addEventListener('touchmove', handleTouchMove, { passive: false });
+          track.addEventListener('touchend', handleTouchEnd, { passive: true });
+        } catch (error) {
+          console.error(`Error adding event listeners to track ${index + 1}:`, error);
+        }
+      }
     });
 
     return () => {
-      tracks.forEach(track => {
-        track?.removeEventListener('touchstart', handleTouchStart);
-        track?.removeEventListener('touchmove', handleTouchMove);
-        track?.removeEventListener('touchend', handleTouchEnd);
+      tracks.forEach((track, index) => {
+        if (track) {
+          try {
+            track.removeEventListener('touchstart', handleTouchStart);
+            track.removeEventListener('touchmove', handleTouchMove);
+            track.removeEventListener('touchend', handleTouchEnd);
+          } catch (error) {
+            console.error(`Error removing event listeners from track ${index + 1}:`, error);
+          }
+        }
       });
     };
   }, []);
 
   const scrollLeft = (trackRef: React.RefObject<HTMLDivElement>, setPosition: React.Dispatch<React.SetStateAction<number>>) => {
-    if (!trackRef.current) return;
-    const cardWidth = trackRef.current.children[0]?.clientWidth || 300;
-    const gap = 16;
-    const scrollAmount = cardWidth + gap;
-    
-    setPosition(prev => {
-      const newPosition = prev + scrollAmount;
-      return Math.min(newPosition, 0);
-    });
+    try {
+      if (!trackRef.current) {
+        console.warn('Track ref is null');
+        return;
+      }
+      
+      const cardWidth = trackRef.current.children[0]?.clientWidth || 300;
+      const gap = 16;
+      const scrollAmount = cardWidth + gap;
+      
+      setPosition(prev => {
+        const newPosition = Math.min(prev + scrollAmount, 0);
+        console.log('Scroll left, new position:', newPosition);
+        return newPosition;
+      });
+    } catch (error) {
+      console.error('Error in scrollLeft:', error);
+    }
   };
 
   const scrollRight = (trackRef: React.RefObject<HTMLDivElement>, setPosition: React.Dispatch<React.SetStateAction<number>>) => {
-    if (!trackRef.current) return;
-    const cardWidth = trackRef.current.children[0]?.clientWidth || 300;
-    const gap = 16;
-    const scrollAmount = cardWidth + gap;
-    const maxScroll = trackRef.current.scrollWidth - trackRef.current.clientWidth;
-    
-    setPosition(prev => {
-      const newPosition = prev - scrollAmount;
-      return Math.max(newPosition, -maxScroll);
-    });
+    try {
+      if (!trackRef.current) {
+        console.warn('Track ref is null');
+        return;
+      }
+      
+      const cardWidth = trackRef.current.children[0]?.clientWidth || 300;
+      const gap = 16;
+      const scrollAmount = cardWidth + gap;
+      const maxScroll = trackRef.current.scrollWidth - trackRef.current.clientWidth;
+      
+      setPosition(prev => {
+        const newPosition = Math.max(prev - scrollAmount, -maxScroll);
+        console.log('Scroll right, new position:', newPosition);
+        return newPosition;
+      });
+    } catch (error) {
+      console.error('Error in scrollRight:', error);
+    }
+  };
+
+  // Add error boundary-like logging
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    console.error('Image failed to load:', e.currentTarget.src);
+  };
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    console.log('Image loaded successfully:', e.currentTarget.src);
   };
 
   return (
@@ -117,8 +193,14 @@ const Dashboard = () => {
           style={{ transform: `translateX(${currentPosition1}px)` }}
         >
           {cards.map((item) => (
-            <div className="card-carousel" key={`rec-${item.id}`}>
-              <img src={item.image} className="card-img-top" alt={item.title} />
+            <div className="card-carousel card-hover" key={`rec-${item.id}`}>
+              <img 
+                src={item.image} 
+                className="card-img-top" 
+                alt={item.title}
+                onError={handleImageError}
+                onLoad={handleImageLoad}
+              />
               <div className="card-body">
                 <h5 className="card-title">{item.title}</h5>
                 <p className="card-text">{item.description}</p>
@@ -152,8 +234,14 @@ const Dashboard = () => {
           style={{ transform: `translateX(${currentPosition2}px)` }}
         >
           {cards.map((item) => (
-            <div className="card-carousel" key={`my-${item.id}`}>
-              <img src={item.image} className="card-img-top" alt={item.title} />
+            <div className="card-carousel card-hover" key={`my-${item.id}`}>
+              <img 
+                src={item.image} 
+                className="card-img-top" 
+                alt={item.title}
+                onError={handleImageError}
+                onLoad={handleImageLoad}
+              />
               <div className="card-body">
                 <h5 className="card-title">{item.title}</h5>
                 <p className="card-text">{item.description}</p>

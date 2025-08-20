@@ -1,0 +1,221 @@
+.button {
+    width: 150px;
+    height: 50px;
+    background-color: rgb(45, 66, 133);
+    border-radius: 30px;
+    box-shadow: 8px 8px 15px #bebebe, -8px -8px 15px #ffffff;
+    border: none;
+    cursor: pointer;
+    
+    /* Floating to the right */
+    float: right;
+    margin: 20px; /* Adjust margin as needed */
+}
+
+.button:hover {
+    background-color: rgb(15, 120, 218);
+
+}
+.fullscreen-container {
+    position: fixed;
+    top: 56px; /* Navbar height */
+    left: 250px; /* Sidebar width */
+    right: 0;
+    bottom: 0;
+    background-color: white;
+    z-index: 999;
+    overflow-y: auto;
+    transition: all 0.3s ease;
+    
+    /* Hide scrollbar but keep functionality */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Hide scrollbar for WebKit browsers (Chrome, Safari) */
+.fullscreen-container::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+/* Optional: Add smooth scrolling */
+.fullscreen-container {
+    scroll-behavior: smooth;
+}
+
+/* COSE BUTTON */
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  max-width: 500px;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+  z-index: 1000;
+}
+
+.close-button {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #333;
+  padding: 5px 10px;
+}
+
+.close-button:hover {
+  color: #000;
+  background: #f0f0f0;
+  border-radius: 50%;
+}
+/* CLOSE */
+
+.close-button {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #333;
+    padding: 5px 10px;
+    z-index: 1000;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
+}
+
+.close-button:hover {
+    color: #000;
+    background: #f0f0f0;
+}
+
+/* Tablet styles (768px - 1024px) */
+@media (max-width: 1024px) {
+    .fullscreen-container {
+        left: 220px; /* Reduced sidebar width */
+        top: 60px;
+    }
+    
+    .close-button {
+        top: 75px;
+        right: 15px;
+        font-size: 22px;
+        padding: 4px 8px;
+    }
+}
+
+/* Mobile landscape and smaller tablets (max-width: 768px) */
+@media (max-width: 768px) {
+    .fullscreen-container {
+        left: 0; /* Full width on mobile */
+        top: 50px; /* Adjusted for smaller navbar */
+        padding: 10px;
+    }
+    
+    .close-button {
+        top: 60px;
+        right: 10px;
+        font-size: 20px;
+        padding: 3px 6px;
+        background: rgba(255, 255, 255, 0.9);
+    }
+}
+
+/* Small mobile devices (max-width: 480px) */
+@media (max-width: 480px) {
+    .fullscreen-container {
+        top: 45px; /* Even smaller navbar height */
+        padding: 8px;
+    }
+    
+    .close-button {
+        top: 55px;
+        right: 8px;
+        font-size: 18px;
+        padding: 2px 5px;
+    }
+}
+
+/* Extra small devices (max-width: 320px) */
+@media (max-width: 320px) {
+    .fullscreen-container {
+        top: 40px;
+        padding: 5px;
+    }
+    
+    .close-button {
+        top: 50px;
+        right: 5px;
+        font-size: 16px;
+        padding: 2px 4px;
+    }
+}
+
+/* Landscape orientation for mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    .fullscreen-container {
+        top: 45px;
+        padding: 5px;
+    }
+    
+    .close-button {
+        top: 55px;
+        right: 10px;
+        font-size: 18px;
+    }
+}
+
+/* High DPI screens */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .close-button {
+        border: 0.5px solid rgba(0, 0, 0, 0.1);
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .fullscreen-container {
+        background-color: #fcfcfc;
+    }
+    
+    .close-button {
+        background: #2d2d2d;
+        color: #fff;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+    }
+    
+    .close-button:hover {
+        background: #3d3d3d;
+        color: #fff;
+    }
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    .fullscreen-container,
+    .close-button {
+        transition: none;
+    }
+}
+
+/* Print styles */
+@media print {
+    .fullscreen-container {
+        position: static;
+        background: white;
+    }
+    
+    .close-button {
+        display: none;
+    }
+}

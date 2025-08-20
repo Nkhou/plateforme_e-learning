@@ -13,16 +13,22 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from datetime import timedelta
 from datetime import timedelta
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+# Add to your urls.py for serving media files in development
+from django.conf import settings
+from django.conf.urls.static import static
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&ea2&t=df@t#y1bp&^-a^8hewrb-xeuffd@e#%myb^f6utsl@!'
+# SECRET_KEY = 'django-insecure-&ea2&t=df@t#y1bp&^-a^8hewrb-xeuffd@e#%myb^f6utsl@!'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -75,15 +81,39 @@ TEMPLATES = [
         },
     },
 ]
-#add REST_FRAMEWORK to generate token
+
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = os.getenv('SECRET_KEY')
+
+DATABASES = {
+    'default': {
+        'ENGINE': os.getenv('DB_ENGINE'),
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+    }
+}
 REST_FRAMEWORK = {
-       'DEFAULT_AUTHENTICATION_CLASSES': (
-           'rest_framework_simplejwt.authentication.JWTAuthentication',
-       ),
-   }
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'user.authentication.JWTCookieAuthentication',  # Add your custom auth
+        'rest_framework_simplejwt.authentication.JWTAuthentication',  # Keep for API tokens
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
 
 WSGI_APPLICATION = 'myproject.wsgi.application'
-DEFAULT_PARSER_CLASSES: [
+DEFAULT_PARSER_CLASSES = [
     'rest_framework.parsers.JSONParser',
     'rest_framework.parsers.FormParser',
     'rest_framework.parsers.MultiPartParser',
@@ -99,7 +129,19 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+# Base directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Media files configuration
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Create media subfolders (optional but recommended)
+MEDIA_SUBFOLDERS = {
+    'course_images': 'course_images/',
+    'videos': 'videos/%y/%m/%d/',
+    'pdfs': 'pdfs/%y/%m/%d/',
+}
 
 
 SIMPLE_JWT = {
@@ -161,12 +203,18 @@ AUTH_PASSWORD_VALIDATORS = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+SESSION_COOKIE_SAMESITE = 'Lax'
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 

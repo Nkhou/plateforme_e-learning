@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-export const LoadingScreen = ({onComplete}) => 
+interface LoadingScreenProps {
+    onComplete: () => void;
+}
+
+export const LoadingScreen = ({onComplete}: LoadingScreenProps) => 
 {
     const [text, setText] = useState("");
     const fullText = "learning✍🏻";

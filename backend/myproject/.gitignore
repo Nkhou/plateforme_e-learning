@@ -1,0 +1,46 @@
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+db.sqlite3
+media/
+uploads/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# Static files (if collected)
+staticfiles/
+
+# Database migrations (optional - be careful with this)
+# */migrations/*.py
+# !*/migrations/__init__.py
+
+
+
+# Build files
+build/
+dist/
+*.egg-info/
