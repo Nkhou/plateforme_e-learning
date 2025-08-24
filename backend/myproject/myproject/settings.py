@@ -10,35 +10,131 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
-from datetime import timedelta
-import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# Add to your urls.py for serving media files in development
-from django.conf import settings
-from django.conf.urls.static import static
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = 'django-insecure-&ea2&t=df@t#y1bp&^-a^8hewrb-xeuffd@e#%myb^f6utsl@!'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-&ea2&t=df@t#y1bp&^-a^8hewrb-xeuffd@e#%myb^f6utsl@!')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = []
+# Determine if we're in production based on environment variables
+USE_SSL = os.getenv('USE_SSL', 'False').lower() == 'true'
+PRODUCTION = os.getenv('PRODUCTION', 'False').lower() == 'true'
+
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    'backend',  # Docker service name
+    # Add your production domain here
+    os.getenv('DOMAIN_NAME', ''),  # e.g., 'yourdomain.com'
+    f"www.{os.getenv('DOMAIN_NAME', '')}",  # e.g., 'www.yourdomain.com'
+]
+
+# Remove empty strings from ALLOWED_HOSTS
+ALLOWED_HOSTS = [host for host in ALLOWED_HOSTS if host]
+
+# SSL/HTTPS Settings
+if USE_SSL or PRODUCTION:
+    # Force HTTPS
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    
+    # HSTS Settings
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # Secure cookies
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+    
+    # X-Frame-Options
+    X_FRAME_OPTIONS = 'DENY'
+else:
+    # Development settings
+    SECURE_SSL_REDIRECT = False
+    SECURE_HSTS_SECONDS = 0
+
+
+
+
+
+
+
+
+
+
+# settings.py
+# CORS Configuration - Updated for development
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",      # React dev server
+    "http://127.0.0.1:3000",      # React dev server
+    "http://172.21.0.5:3000",     # Docker internal IP
+    "http://frontend:3000",       # Docker service name
+]
+
+# Allow credentials
+CORS_ALLOW_CREDENTIALS = True
+
+# Allow all methods
+CORS_ALLOW_ALL_ORIGINS = True  # For development only!
+
+# Allow specific headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# For development, you can also allow all origins (remove in production)
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000", 
+        "http://172.21.0.5:3000",
+        "http://frontend:3000",
+    ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+# Custom User Model
 AUTH_USER_MODEL = 'user.CustomUser'
 
-
 # Application definition
-
 INSTALLED_APPS = [
     'user',
     'channels',
@@ -82,68 +178,60 @@ TEMPLATES = [
     },
 ]
 
-from pathlib import Path
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-SECRET_KEY = os.getenv('SECRET_KEY')
-
-DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('DB_ENGINE'),
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT'),
-    }
-}
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'user.authentication.JWTCookieAuthentication',  # Add your custom auth
-        'rest_framework_simplejwt.authentication.JWTAuthentication',  # Keep for API tokens
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-}
-
 WSGI_APPLICATION = 'myproject.wsgi.application'
-DEFAULT_PARSER_CLASSES = [
-    'rest_framework.parsers.JSONParser',
-    'rest_framework.parsers.FormParser',
-    'rest_framework.parsers.MultiPartParser',
-]
-
+ASGI_APPLICATION = 'myproject.asgi.application'
 
 # Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# Choose one configuration based on your needs
+if os.getenv('DB_ENGINE'):
+    # Production/Custom database configuration
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    DATABASES = {
+        'default': {
+            'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
+            'NAME': os.environ.get('POSTGRES_DB'),
+            'USER': os.environ.get('POSTGRES_USER'),  
+            'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
+            'HOST': os.environ.get('POSTGRES_HOST'),  # Remove any default value here
+            'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        }
+}
+else:
+    # Development SQLite configuration
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
-# Base directory
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Media files configuration
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# Create media subfolders (optional but recommended)
-MEDIA_SUBFOLDERS = {
-    'course_images': 'course_images/',
-    'videos': 'videos/%y/%m/%d/',
-    'pdfs': 'pdfs/%y/%m/%d/',
+# Channels Configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [(os.environ.get('REDIS_HOST', 'redis'), 6379)], 
+        },
+    },
 }
 
+# REST Framework Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'user.authentication.JWTCookieAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
+}
 
+# JWT Configuration
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=455),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
@@ -183,9 +271,8 @@ SIMPLE_JWT = {
     "SLIDING_TOKEN_OBTAIN_SERIALIZER": "rest_framework_simplejwt.serializers.TokenObtainSlidingSerializer",
     "SLIDING_TOKEN_REFRESH_SERIALIZER": "rest_framework_simplejwt.serializers.TokenRefreshSlidingSerializer",
 }
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
+# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -201,45 +288,172 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# CORS Configuration - Updated for HTTPS
+if USE_SSL or PRODUCTION:
+    # Production HTTPS origins
+    CORS_ALLOWED_ORIGINS = [
+        f"https://{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
+        f"https://www.{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
+    ]
+    
+    CSRF_TRUSTED_ORIGINS = [
+        f"https://{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
+        f"https://www.{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
+        f"https://{os.getenv('DOMAIN_NAME', 'localhost')}",
+        f"https://www.{os.getenv('DOMAIN_NAME', 'localhost')}",
+    ]
+else:
+    # Development HTTP origins
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",      # React default port
+        "http://127.0.0.1:3000",      # React default port
+        "http://localhost:5173",      # Vite default port
+        "http://127.0.0.1:5173",      # Vite default port
+    ]
+
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_EXPOSE_HEADERS = [
+    'content-type',
+    'authorization',
+    'X-CSRFToken',
+]
+
+# Session Configuration - Updated for HTTPS
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+SESSION_COOKIE_SECURE = USE_SSL or PRODUCTION  # Secure cookies in production
 SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_NAME = 'sessionid'
+if USE_SSL or PRODUCTION:
+    SESSION_COOKIE_DOMAIN = f".{os.getenv('DOMAIN_NAME', 'localhost')}"
+
+# CSRF Configuration - Updated for HTTPS
+CSRF_COOKIE_SECURE = USE_SSL or PRODUCTION  # Secure CSRF cookies in production
+CSRF_COOKIE_HTTPONLY = False  # Keep False so JavaScript can read it
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_USE_SESSIONS = False  # Store CSRF token in cookie, not session
+CSRF_COOKIE_NAME = 'csrftoken'
+if USE_SSL or PRODUCTION:
+    CSRF_COOKIE_DOMAIN = f".{os.getenv('DOMAIN_NAME', 'localhost')}"
+
 # Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = 'static/'
-# For development only - disable in production
-CSRF_COOKIE_SECURE = False
-CSRF_COOKIE_HTTPONLY = False
-SESSION_COOKIE_SAME_SITE = 'Lax'
-CSRF_COOKIE_SAME_SITE = 'Lax'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Static files directories (optional)
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+] if os.path.exists(os.path.join(BASE_DIR, 'static')) else []
+
+# Media files configuration
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Media subfolders (optional but recommended)
+MEDIA_SUBFOLDERS = {
+    'course_images': 'course_images/',
+    'videos': 'videos/%y/%m/%d/',
+    'pdfs': 'pdfs/%y/%m/%d/',
+}
+
+# Redis Configuration
+REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')  # Get password from environment
+REDIS_DB = int(os.environ.get('REDIS_DB', 0))
+
+# Build Redis connection URL
+if REDIS_PASSWORD:
+    REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+else:
+    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+# Channels Configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [REDIS_URL],
+        },
+    },
+}
+
+# Celery Configuration
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
+CELERY_ENABLE_UTC = True
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'django.log'),
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
+# Create logs directory if it doesn't exist
+os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)

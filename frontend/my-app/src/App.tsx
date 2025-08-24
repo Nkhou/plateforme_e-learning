@@ -1,9 +1,9 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Login from "./component/user/login";
+// import Login from "./component/user/login";
 import SignUp from "./component/user/sigUnp";
 import Dashboard from "./component/dashboard/dashboard";
 import AuthGuard from "./layout";
-import User from "./layout"; // Removed unused import
+// import User from "./layout"; // Removed unused import
 import NotFound from "./notFound";
 import axios from "axios";
 import '@coreui/coreui/dist/css/coreui.min.css'
@@ -17,7 +17,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<FirstPage />} />
+        <Route path="/" element={<AuthGuard><FirstPage /></AuthGuard>} />
         <Route path="/cours" element={
             <AuthGuard>
               <Cours />

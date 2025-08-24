@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+// import api from './api/api';
+import api from './api/api';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -24,9 +26,9 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const location = useLocation();
 
   useEffect(() => {
-    axios.get('http://localhost:8000/api/CheckAuthentification/', {
-      withCredentials: true,
-    })
+     api.get('CheckAuthentification/', { // Use your configured api instance
+    withCredentials: true,
+  })
       .then(res => {
         const auth = res.data.authenticated;
         setIsAuthenticated(auth);

@@ -1,11 +1,8 @@
 import React from 'react';
-import { Container, Navbar, Form } from 'react-bootstrap';
 import { useState } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { MDBContainer, MDBRow, MDBCol } from 'mdb-react-ui-kit';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-
+import api from '../../api/api';
 
 function FirstPage() {
   const [email, setEmail] = useState('');
@@ -21,91 +18,119 @@ function FirstPage() {
     setPassword(event.target.value);
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    axios.post('http://localhost:8000/api/login/', {
-      email: email,
-      password: password
-    }, { withCredentials: true })
-      .then(() => navigate('/dashboard/'))
-      .catch(error => {
-        const errorMsg = typeof error.response?.data === 'string'
-          ? error.response.data
-          : error.response?.data?.error || error.message;
-        setError(errorMsg);
+    console.log('Login attempt:', { email, password });
+    
+    try {
+      const response = await api.post('login/', {
+        email: email,
+        password: password
       });
-  };
+      
+      console.log("Login successful - Full response:", response);
+      console.log("Response data:", response.data);
+      
+      // Store tokens
+      if (response.data.access) {
+        localStorage.setItem('accessToken', response.data.access);
+        api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access}`;
+        console.log("Access token stored");
+      }
+      if (response.data.refresh) {
+        localStorage.setItem('refreshToken', response.data.refresh);
+        console.log("Refresh token stored");
+      }
+      
+      console.log("Navigating to dashboard...");
+      navigate('/dashboard/');
+      
+    } catch (error: any) {
+      console.error("Login error:", error);
+      console.error("Error response:", error.response);
+      setError(error.response?.data?.error || error.response?.data?.detail || 'Failed to login');
+    }
+  }
+
 
   return (
-    <div className="full-page-container">
-      {/* Navbar - fixed at top */}
-      <Navbar bg="dark" variant="dark" expand="lg" className="navbar-custom">
-        <Container fluid>
-          <Navbar.Brand>My Navbar</Navbar.Brand>
-        </Container>
-      </Navbar>
+    <div className="min-vh-100 d-flex flex-column">
+      {/* Navbar */}
+      <nav className="navbar navbar-dark bg-dark navbar-expand-lg">
+        <div className="container-fluid">
+          <span className="navbar-brand">My Navbar</span>
+        </div>
+      </nav>
 
-      {/* Main content area */}
-      <div className="main-layout ">
-        {/* Login section - top right */}
-        <div className="login-section">
-          <MDBContainer className="login-container">
-            <MDBRow className="justify-content-end">
-              <MDBCol md="6">
-                <div className='shadow p-5 rounded bg-white'>
-                  <h4 className='mb-4'>Login</h4>
+      {/* Main content */}
+      <div className="flex-grow-1" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <div className="container-fluid h-100">
+          <div className="row h-100 justify-content-end align-items-center">
+            {/* Login section */}
+            <div className="col-md-6 col-lg-5 col-xl-4">
+              <div className="card shadow p-4 rounded">
+                <div className="card-body">
+                  <h4 className='mb-4 text-center'>Login</h4>
                   <form onSubmit={handleSubmit}>
-                    <input 
-                      className='form-control form-control-lg mb-4' 
-                      name='email'
-                      placeholder="Email" 
-                      type="email" 
-                      value={email} 
-                      onChange={handleEmail}
-                      autoComplete="email"
-                    />
-                    <Form.Group className="mb-3" controlId="formBasicPassword">
-                      <Form.Control 
-                        type="password" 
-                        placeholder="Password" 
-                        value={password} 
-                        onChange={handlePassword} 
+                    <div className="mb-3">
+                      <input
+                        type="email"
+                        className="form-control form-control-lg"
+                        placeholder="Email"
+                        value={email}
+                        onChange={handleEmail}
+                        autoComplete="email"
                       />
-                      <Form.Text className="text-danger">
-                        {error}
-                      </Form.Text>
-                    </Form.Group>
+                    </div>
+
+                    <div className="mb-3">
+                      <input
+                        type="password"
+                        className="form-control form-control-lg"
+                        placeholder="Password"
+                        value={password}
+                        onChange={handlePassword}
+                        autoComplete="current-password"
+                      />
+                      {error && (
+                        <div className="text-danger small mt-1">
+                          {error}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="text-center">
+                      
                       <button 
                         type="submit" 
-                        className="btn login-btn"
+                        className="btn btn-primary btn-lg w-100"
                       >
                         Login
                       </button>
                     </div>
                   </form>
                 </div>
-              </MDBCol>
-            </MDBRow>
-          </MDBContainer>
-        </div>
+              </div>
+            </div>
 
-        {/* Content section with background */}
-        <div className="content-section">
-          <div className="content-background">
-            <div className="content-overlay">
-              <h2>Hello Everyone</h2>
-              <p>Welcome to our platform. Please login to access your dashboard.</p>
+            {/* Content section */}
+            <div className="col-md-6 d-none d-md-flex align-items-center justify-content-center">
+              <div className="bg-white bg-opacity-10 rounded p-5 w-100 h-75 d-flex align-items-center justify-content-center">
+                <div className="text-center text-white">
+                  <h2>Hello Everyone</h2>
+                  <p className="mb-0">Welcome to our platform. Please login to access your dashboard.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Footer - fixed at bottom */}
-      <footer className="footer-custom">
-        <Container fluid>
-          <p className="mb-0">&copy; 2025 My Website</p>
-        </Container>
+      {/* Footer */}
+      <footer className="bg-dark text-white py-3">
+        <div className="container-fluid">
+          <p className="mb-0 text-center">&copy; 2025 My Website</p>
+        </div>
       </footer>
     </div>
   );

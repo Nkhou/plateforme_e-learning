@@ -19,9 +19,18 @@ class CustomUser(AbstractUser):
 
 class Course(models.Model):
     title_of_course = models.CharField(max_length=100, blank=False, null=False)
-    image = models.ImageField(upload_to='course_images/', blank=False, null=False)
     description = models.TextField(blank=True, null=True)
-    creator = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='created_courses')
+    image = models.ImageField(
+        upload_to='course_images/',
+        null=True,  # Allow null in database
+        blank=True,  # Allow blank in forms
+        max_length=100  # Match the VARCHAR(100) constraint
+    )
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,  # Use CASCADE instead of SET_NULL if creator is required
+        related_name='created_courses'
+    )    
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     subscribers = models.ManyToManyField(CustomUser, through='Subscription', related_name='subscribed_courses',blank=True)

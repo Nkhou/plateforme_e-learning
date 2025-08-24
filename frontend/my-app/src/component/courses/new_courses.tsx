@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import axios from "axios";
+// import axios from "axios";
 import 'bootstrap/dist/css/bootstrap.min.css';
 import api from '../../api/api';
+interface NewCoursProps {
+    onCourseCreated?: () => void;
+}
 
-function NewCours() {
-    const [toggle, setToggle] = useState(true);
+function NewCours({ onCourseCreated }: NewCoursProps) {
+    // const [toggle, setToggle] = useState(true);
     const [error, setError] = useState('');
     const [title, setTitle] = useState('');
     const [file, setFile] = useState<File | null>(null);
@@ -63,35 +66,71 @@ function NewCours() {
         reader.readAsDataURL(selectedFile);
     };
 
-    const getCsrfToken = (): string => {
-        const cookieValue = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('csrftoken='))
-            ?.split('=')[1];
+    // const getCsrfToken = (): string => {
+    //     const cookieValue = document.cookie
+    //         .split('; ')
+    //         .find(row => row.startsWith('csrftoken='))
+    //         ?.split('=')[1];
 
-        const metaToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content;
+    //     const metaToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content;
 
-        return cookieValue || metaToken || '';
-    };
+    //     return cookieValue || metaToken || '';
+    // };
 
 
-    const uploadImageToDjango = async (imageFile: File): Promise<any> => {
-        const formData = new FormData();
-        formData.append('title_of_course', title);
-        formData.append('image', imageFile);
-        formData.append('description', description);
+   const uploadImageToDjango = async (imageFile: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append('title_of_course', String(title));
+    formData.append('description', String(description));
+    formData.append('image', imageFile);
 
-        try {
-            const response = await api.post('courses/', formData);
-            // Remove the Content-Type header - let the browser set it automatically
-            console.log("Course created:", response.data);
-            return response.data;
-        } catch (error: any) {
-            console.error("Create course error:", error.response?.data || error.message);
-            setError(error.response?.data?.detail || 'Failed to create course');
-            throw error;
+    try {
+        const response = await api.post('courses/', formData);
+        return response;
+    } catch (error: any) {
+        console.error("Create course error:", error.response?.data || error.message);
+        
+        // ADD THIS TO SEE THE FULL RESPONSE
+        console.log("Full error response:", error.response);
+        console.log("Error data:", error.response?.data);
+        
+        let errorMessage = 'Failed to create course';
+        if (error.response?.data?.detail) {
+            errorMessage = error.response.data.detail;
+        } else if (error.response?.data?.error) {
+            errorMessage = error.response.data.error;
+        } else if (error.response?.data) {
+            // Handle field-specific errors from serializer
+            const errorData = error.response.data;
+            if (typeof errorData === 'object') {
+                // Extract all error messages from serializer errors
+                const errorMessages: string[] = [];
+                Object.values(errorData).forEach((fieldErrors: any) => {
+                    if (Array.isArray(fieldErrors)) {
+                        errorMessages.push(...fieldErrors);
+                    } else if (typeof fieldErrors === 'string') {
+                        errorMessages.push(fieldErrors);
+                    } else if (typeof fieldErrors === 'object') {
+                        // Handle nested errors
+                        Object.values(fieldErrors).forEach((nestedError: any) => {
+                            if (Array.isArray(nestedError)) {
+                                errorMessages.push(...nestedError);
+                            } else if (typeof nestedError === 'string') {
+                                errorMessages.push(nestedError);
+                            }
+                        });
+                    }
+                });
+                errorMessage = errorMessages.join(', ') || 'Validation error';
+            } else {
+                errorMessage = String(errorData);
+            }
         }
-    };
+        
+        setError(errorMessage);
+        throw error;
+    }
+};
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -120,15 +159,19 @@ function NewCours() {
             console.log('Upload successful:', result);
             setSuccess('Course created successfully!');
 
-            // Reset form after successful upload
+            // Reset form
             setFile(null);
             setImagePreview(null);
             setTitle('');
             setDescription('');
 
+            // Notify parent component
+            if (onCourseCreated) {
+                onCourseCreated();
+            }
+
         } catch (error: any) {
             console.error('Upload failed:', error);
-            setError(error.response?.data?.error || error.message || 'Failed to create course');
         } finally {
             setUploading(false);
         }

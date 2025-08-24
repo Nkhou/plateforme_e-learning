@@ -36,7 +36,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const [sidebarKey, setSidebarKey] = useState(0); // Force sidebar re-mount
   const navigate = useNavigate();
   const location = useLocation();
-  const [user, setUser] = useState<User | null>(null);
+  // const [user, setUser] = useState<User | null>(null);
 
   // Enhanced responsive breakpoint detection
   useEffect(() => {
@@ -79,7 +79,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
       .then(res => {
         console.log('res.data', res.data);
         const authenticated = res.data.authenticated;
-        setUser(res.data.user)
+        // setUser(res.data.user)
         setIsAuthenticated(authenticated);
         setLoading(false);
         if (!authenticated && location.pathname !== '/') {

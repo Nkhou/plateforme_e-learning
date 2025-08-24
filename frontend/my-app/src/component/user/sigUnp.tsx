@@ -1,15 +1,7 @@
 import React, { useState } from 'react';
-import {
-    MDBContainer,
-    MDBRow,
-    MDBCol,
-    MDBCard,
-    MDBCardBody,
-    MDBInput,
-    MDBRadio,
-    MDBFile
-} from 'mdb-react-ui-kit';
+import { Container, Row, Col, Card, Form, Button, Alert } from 'react-bootstrap';
 import axios from "axios";
+
 function SignUp() {
     const [toggle, setToggle] = useState(true);
     const [file, setFile] = useState<File | null>(null);
@@ -46,14 +38,16 @@ function SignUp() {
 
         setError('');
         setFile(selectedFile);
-    }
+    };
+
     const validateSingleUser = () => {
         if (!firstName || !lastName || !email) {
             alert('Please complete all fields');
             return false;
         }
         return true;
-    }
+    };
+
     const readCSVFile = (file: File): Promise<Record<string, string>[]> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -88,6 +82,14 @@ function SignUp() {
             reader.onerror = () => reject("File reading error");
             reader.readAsText(file);
         });
+    };
+
+    const getCsrfToken = (): string => {
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1];
+        return cookieValue || '';
     };
 
     const handleSubmit = async (event: React.FormEvent) => {
@@ -131,11 +133,10 @@ function SignUp() {
                     errorMessage = "An unknown error occurred";
                 }
 
-                console.error("Login error:", errorMessage);
+                console.error("Registration error:", errorMessage);
                 setError(errorMessage);
             }
-        }
-        else {
+        } else {
             if (!file) {
                 setError("No file selected.");
                 return;
@@ -147,7 +148,8 @@ function SignUp() {
                 });
 
                 const jsonData = await readCSVFile(file);
-                console.log('hello', jsonData);
+                console.log('CSV data:', jsonData);
+                
                 const response = await axios.post(
                     'http://localhost:8000/api/CSVUpload/',
                     { csv_file: jsonData },
@@ -176,143 +178,134 @@ function SignUp() {
             }
         }
     };
-    function getCsrfToken() {
-        const cookieValue = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('csrftoken='))
-            ?.split('=')[1];
-        return cookieValue || '';
-    }
-
-    const handleRegistrationTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setToggle(e.target.value === "more_than_one");
-    };
 
     return (
-        <MDBContainer fluid className="vh-100 d-flex align-items-center">
-            <MDBRow className='justify-content-center w-100'>
-                <MDBCol md="8" lg="6" xl="5">
-                    <MDBCard className="mb-4" style={{ minHeight: 'auto' }}>
-                        <MDBCardBody className='p-4'>
-                            <h2 className='text-center mb-4'>Register</h2>
-                            <MDBRow className='mb-4'>
-                                <MDBCol>
-                                    <h6 className="fw-bold">Registration Type: </h6>
-                                    <div className="d-flex flex-wrap gap-3">
-                                        <MDBRadio
-                                            name='registrationType'
-                                            id='singleUser'
-                                            value='single_user'
-                                            label='Register one person'
+        <Container fluid className="vh-100 d-flex align-items-center">
+            <Row className="justify-content-center w-100">
+                <Col md={8} lg={6} xl={5}>
+                    <Card className="mb-4">
+                        <Card.Body className="p-4">
+                            <h2 className="text-center mb-4">Register</h2>
+                            
+                            <Form onSubmit={handleSubmit}>
+                                <Form.Group className="mb-4">
+                                    <Form.Label className="fw-bold">Registration Type:</Form.Label>
+                                    <div className="d-flex gap-3">
+                                        <Form.Check
+                                            type="radio"
+                                            name="registrationType"
+                                            id="singleUser"
+                                            value="single_user"
+                                            label="Register one person"
                                             checked={!toggle}
-                                            onChange={handleRegistrationTypeChange}
+                                            onChange={(e) => setToggle(e.target.value === "more_than_one")}
                                         />
-                                        <MDBRadio
-                                            name='registrationType'
-                                            id='multipleUsers'
-                                            value='more_than_one'
-                                            label='Register multiple users'
+                                        <Form.Check
+                                            type="radio"
+                                            name="registrationType"
+                                            id="multipleUsers"
+                                            value="more_than_one"
+                                            label="Register multiple users"
                                             checked={toggle}
-                                            onChange={handleRegistrationTypeChange}
+                                            onChange={(e) => setToggle(e.target.value === "more_than_one")}
                                         />
                                     </div>
-                                </MDBCol>
-                            </MDBRow>
+                                </Form.Group>
 
-                            {toggle ? (
-                                <MDBRow className='mb-4'>
-                                    <MDBCol>
-                                        <MDBFile
-                                            label="User CSV File"
-                                            id="userCsvFile"
+                                {toggle ? (
+                                    <Form.Group className="mb-4">
+                                        <Form.Label>User CSV File</Form.Label>
+                                        <Form.Control
+                                            type="file"
                                             onChange={handleFileChange}
+                                            accept=".csv"
                                             required={toggle}
                                         />
-                                        {error && <div className="text-danger small mt-2">{error}</div>}
-                                    </MDBCol>
-                                </MDBRow>
-                            ) : (
-                                <>
-                                    <MDBRow className='mb-3'>
-                                        <MDBCol md='6' className='mb-3 mb-md-0'>
-                                            <MDBInput
-                                                id='firstName'
-                                                type='text'
-                                                value={firstName}
-                                                placeholder='First name'
-                                                onChange={(e) => setFirstName(e.target.value)}
-                                                required={!toggle}
-                                            />
-                                        </MDBCol>
-                                        <MDBCol md='6'>
-                                            <MDBInput
-                                                id='lastName'
-                                                type='text'
-                                                value={lastName}
-                                                placeholder='Last name'
-                                                onChange={(e) => setLastName(e.target.value)}
-                                                required={!toggle}
-                                            />
-                                        </MDBCol>
-                                    </MDBRow>
-                                    <MDBRow className='mb-4'>
-                                        <MDBCol>
-                                            <MDBInput
-                                                id='email'
-                                                type='email'
-                                                placeholder='Email'
+                                        {error && <Alert variant="danger" className="mt-2 small">{error}</Alert>}
+                                    </Form.Group>
+                                ) : (
+                                    <>
+                                        <Row className="mb-3">
+                                            <Col md={6} className="mb-3 mb-md-0">
+                                                <Form.Control
+                                                    type="text"
+                                                    placeholder="First name"
+                                                    value={firstName}
+                                                    onChange={(e) => setFirstName(e.target.value)}
+                                                    required={!toggle}
+                                                />
+                                            </Col>
+                                            <Col md={6}>
+                                                <Form.Control
+                                                    type="text"
+                                                    placeholder="Last name"
+                                                    value={lastName}
+                                                    onChange={(e) => setLastName(e.target.value)}
+                                                    required={!toggle}
+                                                />
+                                            </Col>
+                                        </Row>
+                                        <Form.Group className="mb-4">
+                                            <Form.Control
+                                                type="email"
+                                                placeholder="Email"
                                                 value={email}
                                                 onChange={(e) => setEmail(e.target.value)}
                                                 required={!toggle}
                                             />
-                                        </MDBCol>
-                                    </MDBRow>
-                                </>
-                            )}
-                            <MDBRow className='mb-4'>
-                                <MDBCol>
-                                    <h6 className="fw-bold">User Role: </h6>
-                                    <div className="d-flex flex-wrap gap-3">
-                                        <MDBRadio
-                                            name='userRole'
-                                            id='roleLearner'
-                                            value='AP'
-                                            label='Apprenant'
-                                            checked={selectedRole === 'Apprenant'}
+                                        </Form.Group>
+                                    </>
+                                )}
+
+                                <Form.Group className="mb-4">
+                                    <Form.Label className="fw-bold">User Role:</Form.Label>
+                                    <div className="d-flex gap-3">
+                                        <Form.Check
+                                            type="radio"
+                                            name="userRole"
+                                            id="roleLearner"
+                                            value="AP"
+                                            label="Apprenant"
+                                            checked={selectedRole === 'AP'}
                                             onChange={(e) => setSelectedRole(e.target.value)}
                                         />
-                                        <MDBRadio
-                                            name='userRole'
-                                            id='roleTrainer'
-                                            value='F'
-                                            label='Formateur'
-                                            checked={selectedRole === 'Formateur'}
+                                        <Form.Check
+                                            type="radio"
+                                            name="userRole"
+                                            id="roleTrainer"
+                                            value="F"
+                                            label="Formateur"
+                                            checked={selectedRole === 'F'}
                                             onChange={(e) => setSelectedRole(e.target.value)}
                                         />
-                                        <MDBRadio
-                                            name='userRole'
-                                            id='roleAdmin'
-                                            value='A'
-                                            label='Admin'
-                                            checked={selectedRole === 'Admin'}
+                                        <Form.Check
+                                            type="radio"
+                                            name="userRole"
+                                            id="roleAdmin"
+                                            value="A"
+                                            label="Admin"
+                                            checked={selectedRole === 'A'}
                                             onChange={(e) => setSelectedRole(e.target.value)}
                                         />
                                     </div>
-                                </MDBCol>
-                            </MDBRow>
+                                </Form.Group>
 
-                            <div className="text-center">
                                 <div className="text-center">
-                                    <button type="submit" className="btn" style={{ backgroundColor: '#6235aaff', color: 'white' }} onClick={handleSubmit}>Register</button>
+                                    <Button 
+                                        type="submit"
+                                        style={{ backgroundColor: '#6235aaff', borderColor: '#6235aaff' }}
+                                        size="lg"
+                                    >
+                                        Register
+                                    </Button>
                                 </div>
-                            </div>
-                        </MDBCardBody>
-                    </MDBCard>
-                </MDBCol>
-            </MDBRow>
-        </MDBContainer>
+                            </Form>
+                        </Card.Body>
+                    </Card>
+                </Col>
+            </Row>
+        </Container>
     );
 }
 
 export default SignUp;
-

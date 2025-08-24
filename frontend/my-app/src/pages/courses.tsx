@@ -1,7 +1,23 @@
-import React from "react";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import '../css/cours.css';
-import NewCours from '../component/courses/new_courses'
+import NewCours from '../component/courses/new_courses';
+import api from '../api/api';
+import CourseDetail from "../component/courses/CourseDetail";
+import CourseImage from '../component/courses/CourseImage'; // Import the CourseImage component
+
+// In your React component file or a types file
+interface Course {
+    id: number;
+    title_of_course: string;
+    description: string;
+    image: string;  // Original image field (relative path)
+    image_url?: string;  // Optional absolute URL field added by serializer
+    creator_username: string;
+    creator_first_name: string;
+    creator_last_name: string;
+    created_at?: string;
+    updated_at?: string;
+}
 
 const Cours = () => {
     const trackRef1 = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>;
@@ -9,16 +25,40 @@ const Cours = () => {
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
     const [newProject, setNewProject] = useState(false);
+    const [showCourseDetail, setShowCourseDetail] = useState(false);
+    const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
     const isDragging = useRef(false);
+    const [myCourses, setMyCourses] = useState<Course[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-    const cards = [
-        { id: 1, title: "Course 1", description: "Introduction to Web Development", image: "/group.avif" },
-        { id: 2, title: "Course 2", description: "Advanced React Techniques", image: "/group.avif" },
-        { id: 3, title: "Course 3", description: "Backend with Node.js", image: "/group.avif" },
-        { id: 4, title: "Course 4", description: "Database Design Principles", image: "/group.avif" },
-        { id: 5, title: "Course 5", description: "Mobile App Development", image: "/group.avif" },
-        { id: 6, title: "Course 6", description: "UI/UX Design Fundamentals", image: "/group.avif" },
-    ];
+    // Fetch user's created courses
+    const fetchMyCourses = async () => {
+        try {
+            setLoading(true);
+            const response = await api.get('courses/my-courses/');
+            console.log('Courses data:', response.data);
+            setMyCourses(response.data);
+            setError(''); // Clear any previous errors
+        } catch (error: any) {
+            console.error('Failed to fetch courses:', error);
+            setError('Failed to load your courses. Please check if the backend server is running.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Fetch courses when component mounts
+    useEffect(() => {
+        fetchMyCourses();
+    }, []);
+
+    // Refresh courses when returning from new course creation
+    useEffect(() => {
+        if (!newProject && !showCourseDetail) {
+            fetchMyCourses();
+        }
+    }, [newProject, showCourseDetail]);
 
     // Proper touch event handling with passive listeners
     useEffect(() => {
@@ -72,7 +112,8 @@ const Cours = () => {
                 track?.removeEventListener('touchend', handleTouchEnd);
             });
         };
-    }, []);
+    }, [myCourses]);
+
     const scrollLeft = (trackRef: React.RefObject<HTMLDivElement>, setPosition: React.Dispatch<React.SetStateAction<number>>) => {
         if (!trackRef.current) return;
         const cardWidth = trackRef.current.children[0]?.clientWidth || 300;
@@ -97,59 +138,122 @@ const Cours = () => {
             return Math.max(newPosition, -maxScroll);
         });
     };
+
     const createNewProject = () => {
         setNewProject(!newProject);
+    };
+
+    // Handle card click to show course detail component
+    const handleCardClick = (courseId: number) => {
+        setSelectedCourseId(courseId);
+        setShowCourseDetail(true);
+    };
+
+    // Handle closing course detail
+    const handleCloseCourseDetail = () => {
+        setShowCourseDetail(false);
+        setSelectedCourseId(null);
+    };
+
+    if (loading) {
+        return (
+            <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
+                <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        );
     }
+
     return (
         <>
-            {!newProject ? (
+            {!newProject && !showCourseDetail ? (
                 <div>
-                    <button className="button" onClick={createNewProject}> New project</button>
-                    <h4 className="mb-4">Recommended Courses</h4>
-                    <div className="carousel-container">
-                        <button
-                            className="carousel-nav left"
-                            onClick={() => scrollLeft(trackRef1, setCurrentPosition1)}
-                            aria-label="Scroll left"
-                        >
-                            &lt;
-                        </button>
-
-                        <div
-                            className="carousel-track"
-                            ref={trackRef1}
-                            style={{ transform: `translateX(${currentPosition1}px)` }}
-                        >
-                            {cards.map((item) => (
-                                <div className="card-carousel card-hover" key={`rec-${item.id}`}>
-                                    <img src={item.image} className="card-img-top" alt={item.title} />
-                                    <div className="card-body">
-                                        <h5 className="card-title">{item.title}</h5>
-                                        <p className="card-text">{item.description}</p>
-                                    </div>
-                                </div>
-                            ))}
+                    <button className="button" onClick={createNewProject}>New project</button>
+                    
+                    {error && (
+                        <div className="alert alert-danger" role="alert">
+                            <strong>Error:</strong> {error}
+                            <br />
+                            <small>Make sure your backend server is running on http://localhost:8000</small>
                         </div>
+                    )}
 
-                        <button
-                            className="carousel-nav right"
-                            onClick={() => scrollRight(trackRef1, setCurrentPosition1)}
-                            aria-label="Scroll right"
-                        >
-                            &gt;
-                        </button>
-                    </div>
+                    {myCourses.length === 0 && !error ? (
+                        <div className="text-center py-5">
+                            <h5>You haven't created any courses yet</h5>
+                            <p>Click "New project" to create your first course!</p>
+                        </div>
+                    ) : myCourses.length > 0 ? (
+                        <>
+                            <h4 className="mb-4">My Courses</h4>
+                            <div className="carousel-container">
+                                <button
+                                    className="carousel-nav left"
+                                    onClick={() => scrollLeft(trackRef1, setCurrentPosition1)}
+                                    aria-label="Scroll left"
+                                >
+                                    &lt;
+                                </button>
+
+                                <div
+                                    className="carousel-track"
+                                    ref={trackRef1}
+                                    style={{ transform: `translateX(${currentPosition1}px)` }}
+                                >
+                                    {myCourses.map((course) => (
+                                        <div 
+                                      className="card-carousel card-hover" 
+                                      key={`my-course-${course.id}`}
+                                      onClick={() => handleCardClick(course.id)}
+                                      style={{ cursor: 'pointer' }}
+                                    >
+                                      <CourseImage
+                                        src={course.image_url || course.image}  // Use image_url if available, fallback to image
+                                        alt={course.title_of_course}
+                                        className="card-img-top"
+                                        fallbackSrc="/group.avif"
+                                        style={{ height: '200px', objectFit: 'cover' }}
+                                      />
+                                            <div className="card-body">
+                                                <h5 className="card-title">{course.title_of_course}</h5>
+                                                <p className="card-text">{course.description || 'No description'}</p>
+                                                <small className="text-muted">
+                                                    Created by: {course.creator_first_name} {course.creator_last_name}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button
+                                    className="carousel-nav right"
+                                    onClick={() => scrollRight(trackRef1, setCurrentPosition1)}
+                                    aria-label="Scroll right"
+                                >
+                                    &gt;
+                                </button>
+                            </div>
+                        </>
+                    ) : null}
+                </div>
+            ) : showCourseDetail ? (
+                <div className="fullscreen-container">
+                    <button className="close-button" onClick={handleCloseCourseDetail}>
+                        ×
+                    </button>
+                    <CourseDetail courseId={selectedCourseId} onClose={handleCloseCourseDetail} />
                 </div>
             ) : (
                 <div className="fullscreen-container">
                     <button className="close-button" onClick={createNewProject}>
                         ×
-                        </button>
-                    <NewCours />
+                    </button>
+                    <NewCours onCourseCreated={() => setNewProject(false)} />
                 </div>
             )}
         </>
     );
 };
 
-export default Cours
+export default Cours;
