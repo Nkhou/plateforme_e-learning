@@ -2,12 +2,20 @@ from django.urls import path, include  # Add include
 from rest_framework.routers import DefaultRouter
 from .views import UserView, LoginView, LogoutView, CheckAuthentificationView, RegisterwithoutFileView, CSVUploadView
 from .views import DashboardView, CourseContentsView  # Add CourseViewSet
+from .views import  CourseContentsView
 from . import views
-
+from .views import (
+    AdminDashboardView, UserManagementView, CourseManagementView,
+    SystemAnalyticsView, ContentManagementView, UserDetailView
+)
+# from .admin_dashboard.views import FinancialReportsView, SystemHealthView
+from .views import (
+    AdminDashboardView, UserManagementView, CourseManagementView,
+    SystemAnalyticsView, ContentManagementView, UserDetailView,
+     SystemHealthView
+)
 # Create router for CourseViewSet
 router = DefaultRouter()
-# router.register(r'courses', CourseViewSet, basename='course')
-
 urlpatterns = [
     path('user/<int:pk>/', UserView.as_view(), name='user-detail'),
     # AUTH
@@ -38,13 +46,13 @@ urlpatterns = [
     path('courses/<int:pk>/contents/qcm/', views.CreateQCMContentView.as_view(), name='create-qcm-content'),
     
     # My courses
-    path('courses/my-courses/', views.MyCourses.as_view(), name='my-courses'),
+    # path('courses/my-courses/', views.MyCourses.as_view(), name='my-courses'),
     # Content endpoints
     # path('courses/<int:pk>/contents/', views.CourseContents.as_view(), name='course-contents'),
-    path('courses/<int:pk>/add-content/', views.AddCourseContent.as_view(), name='add-content'),
-    path('courses/<int:pk>/add-video/', views.AddVideoContent.as_view(), name='add-video'),
-    path('courses/<int:pk>/add-pdf/', views.AddPDFContent.as_view(), name='add-pdf'),
-    path('courses/<int:pk>/add-qcm/', views.AddQCMContent.as_view(), name='add-qcm'),
+    # path('courses/<int:pk>/add-content/', views.AddCourseContent.as_view(), name='add-content'),
+    # path('courses/<int:pk>/add-video/', views.AddVideoContent.as_view(), name='add-video'),
+    # path('courses/<int:pk>/add-pdf/', views.AddPDFContent.as_view(), name='add-pdf'),
+    # path('courses/<int:pk>/add-qcm/', views.AddQCMContent.as_view(), name='add-qcm'),
     
     # Subscription endpoints
     path('courses/<int:pk>/subscribers/', views.CourseSubscribers.as_view(), name='course-subscribers'),
@@ -65,6 +73,19 @@ urlpatterns = [
     path('courses/<int:pk>/qcm-progress/', views.QCMProgress.as_view(), name='qcm-progress'),
     path('courses/<int:pk>/check-access/', views.CheckContentAccess.as_view(), name='check-access'),
     # path('health/', HealthCheckView.as_view(), name='health'),
+    #admin 
+# urls.py
+
+
+    path('admin/dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
+    path('admin/users/', UserManagementView.as_view(), name='admin-users'),
+    path('admin/users/<int:user_id>/', UserDetailView.as_view(), name='admin-user-detail'),
+    path('admin/courses/', CourseManagementView.as_view(), name='admin-courses'),
+    path('admin/analytics/', SystemAnalyticsView.as_view(), name='admin-analytics'),
+    path('admin/contents/', ContentManagementView.as_view(), name='admin-contents'),
+    # path('admin/financial-reports/', FinancialReportsView.as_view(), name='financial-reports'),
+    path('admin/system-health/', SystemHealthView.as_view(), name='system-health'),
+
     # Include course routes
     path('', include(router.urls)),  # This adds /courses/, /courses/my_courses/, etc.
 ]

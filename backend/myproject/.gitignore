@@ -94,3 +94,6 @@ Dockerfile
 
 # Logs
 *.log
+*.mp4
+*.mov
+*.avi

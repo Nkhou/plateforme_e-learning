@@ -48,19 +48,15 @@ const Cours = () => {
         }
     };
 
-    // Fetch courses when component mounts
     useEffect(() => {
         fetchMyCourses();
     }, []);
-
-    // Refresh courses when returning from new course creation
     useEffect(() => {
         if (!newProject && !showCourseDetail) {
             fetchMyCourses();
         }
     }, [newProject, showCourseDetail]);
 
-    // Proper touch event handling with passive listeners
     useEffect(() => {
         const tracks = [trackRef1.current].filter(Boolean);
 
@@ -86,10 +82,8 @@ const Cours = () => {
                 const scrollAmount = cardWidth + gap;
 
                 if (diffX > 0) {
-                    // Swipe left
                     setCurrentPosition1(prev => Math.max(prev - scrollAmount, -(track.scrollWidth - track.clientWidth)));
                 } else {
-                    // Swipe right
                     setCurrentPosition1(prev => Math.min(prev + scrollAmount, 0));
                 }
             }

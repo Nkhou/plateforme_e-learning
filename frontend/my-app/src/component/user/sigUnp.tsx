@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert } from 'react-bootstrap';
 import axios from "axios";
 
 function SignUp() {
@@ -179,132 +178,228 @@ function SignUp() {
         }
     };
 
+    const containerStyle: React.CSSProperties = {
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        backgroundColor: '#f5f5f5'
+    };
+
+    const cardStyle: React.CSSProperties = {
+        backgroundColor: 'white',
+        padding: '2rem',
+        borderRadius: '8px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        width: '100%',
+        maxWidth: '600px'
+    };
+
+    const formGroupStyle: React.CSSProperties = {
+        marginBottom: '1.5rem'
+    };
+
+    const labelStyle: React.CSSProperties = {
+        display: 'block',
+        marginBottom: '0.5rem',
+        fontWeight: 'bold',
+        fontSize: '14px',
+        color: '#333'
+    };
+
+    const inputStyle: React.CSSProperties = {
+        width: '100%',
+        padding: '12px',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        fontSize: '14px',
+        boxSizing: 'border-box'
+    };
+
+    const radioContainerStyle: React.CSSProperties = {
+        display: 'flex',
+        gap: '1rem',
+        flexWrap: 'wrap'
+    };
+
+    const radioItemStyle: React.CSSProperties = {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem'
+    };
+
+    const rowStyle: React.CSSProperties = {
+        display: 'flex',
+        gap: '1rem',
+        marginBottom: '1rem'
+    };
+
+    const colStyle: React.CSSProperties = {
+        flex: 1
+    };
+
+    const buttonStyle: React.CSSProperties = {
+        backgroundColor: '#052c65',
+        color: 'white',
+        padding: '12px 30px',
+        border: 'none',
+        borderRadius: '4px',
+        fontSize: '16px',
+        cursor: 'pointer',
+        width: '100%'
+    };
+
+    const errorStyle: React.CSSProperties = {
+        backgroundColor: '#f8d7da',
+        color: '#721c24',
+        padding: '0.5rem',
+        borderRadius: '4px',
+        marginTop: '0.5rem',
+        fontSize: '14px'
+    };
+
+    const titleStyle: React.CSSProperties = {
+        textAlign: 'center',
+        marginBottom: '2rem',
+        fontSize: '24px',
+        color: '#333'
+    };
+
     return (
-        <Container fluid className="vh-100 d-flex align-items-center">
-            <Row className="justify-content-center w-100">
-                <Col md={8} lg={6} xl={5}>
-                    <Card className="mb-4">
-                        <Card.Body className="p-4">
-                            <h2 className="text-center mb-4">Register</h2>
-                            
-                            <Form onSubmit={handleSubmit}>
-                                <Form.Group className="mb-4">
-                                    <Form.Label className="fw-bold">Registration Type:</Form.Label>
-                                    <div className="d-flex gap-3">
-                                        <Form.Check
-                                            type="radio"
-                                            name="registrationType"
-                                            id="singleUser"
-                                            value="single_user"
-                                            label="Register one person"
-                                            checked={!toggle}
-                                            onChange={(e) => setToggle(e.target.value === "more_than_one")}
-                                        />
-                                        <Form.Check
-                                            type="radio"
-                                            name="registrationType"
-                                            id="multipleUsers"
-                                            value="more_than_one"
-                                            label="Register multiple users"
-                                            checked={toggle}
-                                            onChange={(e) => setToggle(e.target.value === "more_than_one")}
-                                        />
-                                    </div>
-                                </Form.Group>
+        <div style={containerStyle}>
+            <div style={cardStyle}>
+                <h2 style={titleStyle}>Register</h2>
+                
+                <form onSubmit={handleSubmit}>
+                    <div style={formGroupStyle}>
+                        <label style={labelStyle}>Registration Type:</label>
+                        <div style={radioContainerStyle}>
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="registrationType"
+                                    id="singleUser"
+                                    value="single_user"
+                                    checked={!toggle}
+                                    onChange={(e) => setToggle(e.target.value === "more_than_one")}
+                                />
+                                <label htmlFor="singleUser">Register one user</label>
+                            </div>
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="registrationType"
+                                    id="multipleUsers"
+                                    value="more_than_one"
+                                    checked={toggle}
+                                    onChange={(e) => setToggle(e.target.value === "more_than_one")}
+                                />
+                                <label htmlFor="multipleUsers">Register multiple users</label>
+                            </div>
+                        </div>
+                    </div>
 
-                                {toggle ? (
-                                    <Form.Group className="mb-4">
-                                        <Form.Label>User CSV File</Form.Label>
-                                        <Form.Control
-                                            type="file"
-                                            onChange={handleFileChange}
-                                            accept=".csv"
-                                            required={toggle}
-                                        />
-                                        {error && <Alert variant="danger" className="mt-2 small">{error}</Alert>}
-                                    </Form.Group>
-                                ) : (
-                                    <>
-                                        <Row className="mb-3">
-                                            <Col md={6} className="mb-3 mb-md-0">
-                                                <Form.Control
-                                                    type="text"
-                                                    placeholder="First name"
-                                                    value={firstName}
-                                                    onChange={(e) => setFirstName(e.target.value)}
-                                                    required={!toggle}
-                                                />
-                                            </Col>
-                                            <Col md={6}>
-                                                <Form.Control
-                                                    type="text"
-                                                    placeholder="Last name"
-                                                    value={lastName}
-                                                    onChange={(e) => setLastName(e.target.value)}
-                                                    required={!toggle}
-                                                />
-                                            </Col>
-                                        </Row>
-                                        <Form.Group className="mb-4">
-                                            <Form.Control
-                                                type="email"
-                                                placeholder="Email"
-                                                value={email}
-                                                onChange={(e) => setEmail(e.target.value)}
-                                                required={!toggle}
-                                            />
-                                        </Form.Group>
-                                    </>
-                                )}
-
-                                <Form.Group className="mb-4">
-                                    <Form.Label className="fw-bold">User Role:</Form.Label>
-                                    <div className="d-flex gap-3">
-                                        <Form.Check
-                                            type="radio"
-                                            name="userRole"
-                                            id="roleLearner"
-                                            value="AP"
-                                            label="Apprenant"
-                                            checked={selectedRole === 'AP'}
-                                            onChange={(e) => setSelectedRole(e.target.value)}
-                                        />
-                                        <Form.Check
-                                            type="radio"
-                                            name="userRole"
-                                            id="roleTrainer"
-                                            value="F"
-                                            label="Formateur"
-                                            checked={selectedRole === 'F'}
-                                            onChange={(e) => setSelectedRole(e.target.value)}
-                                        />
-                                        <Form.Check
-                                            type="radio"
-                                            name="userRole"
-                                            id="roleAdmin"
-                                            value="A"
-                                            label="Admin"
-                                            checked={selectedRole === 'A'}
-                                            onChange={(e) => setSelectedRole(e.target.value)}
-                                        />
-                                    </div>
-                                </Form.Group>
-
-                                <div className="text-center">
-                                    <Button 
-                                        type="submit"
-                                        style={{ backgroundColor: '#6235aaff', borderColor: '#6235aaff' }}
-                                        size="lg"
-                                    >
-                                        Register
-                                    </Button>
+                    {toggle ? (
+                        <div style={formGroupStyle}>
+                            <label style={labelStyle} htmlFor="csvFile">User CSV File</label>
+                            <input
+                                type="file"
+                                id="csvFile"
+                                style={inputStyle}
+                                onChange={handleFileChange}
+                                accept=".csv"
+                                required={toggle}
+                            />
+                            {error && <div style={errorStyle}>{error}</div>}
+                        </div>
+                    ) : (
+                        <>
+                            <div style={rowStyle}>
+                                <div style={colStyle}>
+                                    <input
+                                        type="text"
+                                        placeholder="First name"
+                                        style={inputStyle}
+                                        value={firstName}
+                                        onChange={(e) => setFirstName(e.target.value)}
+                                        required={!toggle}
+                                    />
                                 </div>
-                            </Form>
-                        </Card.Body>
-                    </Card>
-                </Col>
-            </Row>
-        </Container>
+                                <div style={colStyle}>
+                                    <input
+                                        type="text"
+                                        placeholder="Last name"
+                                        style={inputStyle}
+                                        value={lastName}
+                                        onChange={(e) => setLastName(e.target.value)}
+                                        required={!toggle}
+                                    />
+                                </div>
+                            </div>
+                            <div style={formGroupStyle}>
+                                <input
+                                    type="email"
+                                    placeholder="Email"
+                                    style={inputStyle}
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required={!toggle}
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    <div style={formGroupStyle}>
+                        <label style={labelStyle}>User Role:</label>
+                        <div style={radioContainerStyle}>
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="userRole"
+                                    id="roleLearner"
+                                    value="AP"
+                                    checked={selectedRole === 'AP'}
+                                    onChange={(e) => setSelectedRole(e.target.value)}
+                                />
+                                <label htmlFor="roleLearner">Apprenant</label>
+                            </div>
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="userRole"
+                                    id="roleTrainer"
+                                    value="F"
+                                    checked={selectedRole === 'F'}
+                                    onChange={(e) => setSelectedRole(e.target.value)}
+                                />
+                                <label htmlFor="roleTrainer">Formateur</label>
+                            </div>
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="userRole"
+                                    id="roleAdmin"
+                                    value="A"
+                                    checked={selectedRole === 'A'}
+                                    onChange={(e) => setSelectedRole(e.target.value)}
+                                />
+                                <label htmlFor="roleAdmin">Admin</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ textAlign: 'center' }}>
+                        <button 
+                            type="submit"
+                            style={buttonStyle}
+                        >
+                            Register
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     );
 }
 

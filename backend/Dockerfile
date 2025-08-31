@@ -40,8 +40,11 @@ RUN if [ ! -f "myproject/manage.py" ]; then \
 RUN if [ ! -f "myproject/myproject/settings.py" ]; then \
     echo "ERROR: settings.py not found!"; find . -name "settings.py"; exit 1; \
     else echo "SUCCESS: settings.py found"; fi
+# Copy create_superuser.py to the correct location BEFORE changing WORKDIR
+COPY create_superuser.py /app/myproject/
 
 # Change to the project directory
+# W# Change to the project directory
 WORKDIR /app/myproject
 
 # Create non-root user
@@ -50,4 +53,5 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Use the management command instead
+CMD python manage.py createsuperuserauto && python manage.py runserver 0.0.0.0:8000

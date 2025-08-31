@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Confirmation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f8;
+            margin: 0;
+            padding: 0;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: linear-gradient(135deg, #6c63ff, #7b49ff);
+            border-radius: 10px;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        p {
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        .action-button {
+            background-color: #fff;
+            color: #6c63ff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-decoration: none;
+            display: inline-block;
+            margin: 15px 0;
+        }
+        .footer {
+            font-size: 12px;
+            margin-top: 20px;
+            color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <h1>Welcome to the Training Platform</h1>
+        <p>Hi {{ user.username }},</p>
+        <p>We are excited to inform you that you have been successfully registered for the training program organized by your company.</p>
+        <p>This is your password to join us:</p>
+        <h4>{{ password }}</h4>
+        <p>To get started, please click the link below to log in to your account:</p>
+        <a href="{{ login_link }}" class="action-button">Login to Platform</a>
+        <p>If you did not register for this training, please contact your HR department immediately.</p>
+        <div class="footer">
+            <p>© 2025 Training Platform. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -170,7 +170,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           <CSidebarHeader className="border-bottom">
             <CSidebarBrand>
               <div style={{ padding: '0.5rem 1rem', fontWeight: 'bold' }}>
-                Your Brand
+                platform
               </div>
             </CSidebarBrand>
             {/* Close button for mobile/tablet */}

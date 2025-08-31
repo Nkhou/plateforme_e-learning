@@ -1,265 +1,156 @@
-import { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import "./dashboard.css";
+import '../../css/cours.css';
+import api from '../../api/api';
+import CourseDetailShow from "../courses/CourseDetailShow";
+import CourseImage from "../courses/CourseImage";
+
+interface Course {
+    id: number;
+    title_of_course: string;
+    description: string;
+    image: string;
+    image_url?: string;
+    creator_username: string;
+    creator_first_name: string;
+    creator_last_name: string;
+    created_at?: string;
+    updated_at?: string;
+}
 
 const Dashboard = () => {
-  const trackRef1 = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>;
-  const [currentPosition1, setCurrentPosition1] = useState(0);
-  const trackRef2 = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>;
-  const [currentPosition2, setCurrentPosition2] = useState(0);
-  
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-  const isDragging = useRef(false);
-  
-  const cards = [
-    { id: 1, title: "Course 1", description: "Introduction to Web Development", image: "/group.avif" },
-    { id: 2, title: "Course 2", description: "Advanced React Techniques", image: "/group.avif" },
-    { id: 3, title: "Course 3", description: "Backend with Node.js", image: "/group.avif" },
-    { id: 4, title: "Course 4", description: "Database Design Principles", image: "/group.avif" },
-    { id: 5, title: "Course 5", description: "Mobile App Development", image: "/group.avif" },
-    { id: 6, title: "Course 6", description: "UI/UX Design Fundamentals", image: "/group.avif" },
-  ];
+    const trackRef1 = useRef<HTMLDivElement | null>(null) as React.RefObject<HTMLDivElement>;
+    const [currentPosition1, setCurrentPosition1] = useState(0);
+    const trackRef2 = useRef<HTMLDivElement | null>(null) as React.RefObject<HTMLDivElement>;
+    const [currentPosition2, setCurrentPosition2] = useState(0);
+    const [showCourseDetail, setShowCourseDetail] = useState(false);
+    const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+    const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
+    const [myCourses, setMyCourses] = useState<Course[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-  // Add debug logging to identify the source
-  useEffect(() => {
-    
-    // Check for any global variables that might be corrupted
-    if (typeof window !== 'undefined') {
-      console.log('Window object exists');
-    }
-    
-    return () => {
-      console.log('Dashboard component unmounting');
-    };
-  }, []);
-
-  // Enhanced touch event handling with better error handling
-  useEffect(() => {
-    const tracks = [trackRef1.current, trackRef2.current].filter(Boolean);
-    
-    const handleTouchStart = (e: TouchEvent) => {
-      try {
-        touchStartX.current = e.touches[0]?.clientX || 0;
-        touchStartY.current = e.touches[0]?.clientY || 0;
-        isDragging.current = true;
-        console.log('Touch start:', { x: touchStartX.current, y: touchStartY.current });
-      } catch (error) {
-        console.error('Error in handleTouchStart:', error);
-      }
-    };
-    
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isDragging.current) return;
-      
-      try {
-        const touchX = e.touches[0]?.clientX || 0;
-        const touchY = e.touches[0]?.clientY || 0;
-        const diffX = touchStartX.current - touchX;
-        const diffY = touchStartY.current - touchY;
-        
-        if (Math.abs(diffX) > Math.abs(diffY)) {
-          e.preventDefault();
-          const track = e.currentTarget as HTMLDivElement;
-          const cardWidth = track.children[0]?.clientWidth || 300;
-          const gap = 16;
-          const scrollAmount = cardWidth + gap;
-          
-          if (diffX > 0) {
-            // Swipe left
-            setCurrentPosition1(prev => {
-              const maxScroll = track.scrollWidth - track.clientWidth;
-              const newPos = Math.max(prev - scrollAmount, -maxScroll);
-              console.log('Swipe left, new position:', newPos);
-              return newPos;
-            });
-          } else {
-            // Swipe right
-            setCurrentPosition1(prev => {
-              const newPos = Math.min(prev + scrollAmount, 0);
-              console.log('Swipe right, new position:', newPos);
-              return newPos;
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error in handleTouchMove:', error);
-      }
-    };
-    
-    const handleTouchEnd = () => {
-      try {
-        isDragging.current = false;
-        console.log('Touch end');
-      } catch (error) {
-        console.error('Error in handleTouchEnd:', error);
-      }
-    };
-
-    // Add error handling for event listeners
-    tracks.forEach((track, index) => {
-      if (track) {
-        try {
-          track.addEventListener('touchstart', handleTouchStart, { passive: true });
-          track.addEventListener('touchmove', handleTouchMove, { passive: false });
-          track.addEventListener('touchend', handleTouchEnd, { passive: true });
-        } catch (error) {
-          console.error(`Error adding event listeners to track ${index + 1}:`, error);
-        }
-      }
-    });
-
-    return () => {
-      tracks.forEach((track, index) => {
-        if (track) {
-          try {
-            track.removeEventListener('touchstart', handleTouchStart);
-            track.removeEventListener('touchmove', handleTouchMove);
-            track.removeEventListener('touchend', handleTouchEnd);
-          } catch (error) {
-            console.error(`Error removing event listeners from track ${index + 1}:`, error);
-          }
-        }
-      });
-    };
-  }, []);
-
-  const scrollLeft = (trackRef: React.RefObject<HTMLDivElement>, setPosition: React.Dispatch<React.SetStateAction<number>>) => {
+    // Fetch courses from backend
+    const fetchCourses = async () => {
     try {
-      if (!trackRef.current) {
-        console.warn('Track ref is null');
-        return;
-      }
-      
-      const cardWidth = trackRef.current.children[0]?.clientWidth || 300;
-      const gap = 16;
-      const scrollAmount = cardWidth + gap;
-      
-      setPosition(prev => {
-        const newPosition = Math.min(prev + scrollAmount, 0);
-        console.log('Scroll left, new position:', newPosition);
-        return newPosition;
-      });
-    } catch (error) {
-      console.error('Error in scrollLeft:', error);
+        setLoading(true);
+        console.log('Fetching recommended courses from:', `${api.defaults.baseURL}/courses/`);
+        const recRes = await api.get('courses/my-courses/');
+        console.log('Recommended courses response:', recRes.data);
+        
+        console.log('Fetching my courses from:', `${api.defaults.baseURL}/courses/my-courses/`);
+        const myRes = await api.get('courses/my-courses/');
+        console.log('My courses response:', myRes.data);
+
+        setRecommendedCourses(recRes.data);
+        setMyCourses(myRes.data);
+        setError('');
+    } catch (error: any) {
+        console.error("Detailed error information:", {
+            message: error.message,
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            url: error.config?.url,
+            method: error.config?.method,
+            fullError: error.response
+        });
+        setError(`Failed to load courses. Error ${error.response?.status}: ${error.response?.statusText}`);
+    } finally {
+        setLoading(false);
     }
-  };
+};
 
-  const scrollRight = (trackRef: React.RefObject<HTMLDivElement>, setPosition: React.Dispatch<React.SetStateAction<number>>) => {
-    try {
-      if (!trackRef.current) {
-        console.warn('Track ref is null');
-        return;
-      }
-      
-      const cardWidth = trackRef.current.children[0]?.clientWidth || 300;
-      const gap = 16;
-      const scrollAmount = cardWidth + gap;
-      const maxScroll = trackRef.current.scrollWidth - trackRef.current.clientWidth;
-      
-      setPosition(prev => {
-        const newPosition = Math.max(prev - scrollAmount, -maxScroll);
-        console.log('Scroll right, new position:', newPosition);
-        return newPosition;
-      });
-    } catch (error) {
-      console.error('Error in scrollRight:', error);
-    }
-  };
+    useEffect(() => {
+        fetchCourses();
 
-  // Add error boundary-like logging
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.error('Image failed to load:', e.currentTarget.src);
-  };
+    }, []);
 
-  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.log('Image loaded successfully:', e.currentTarget.src);
-  };
+    const scrollLeft = (ref: React.RefObject<HTMLDivElement>, set: React.Dispatch<React.SetStateAction<number>>) => {
+        if (!ref.current) return;
+        const cardWidth = ref.current.children[0]?.clientWidth || 300;
+        const gap = 16;
+        set(prev => Math.min(prev + cardWidth + gap, 0));
+    };
 
-  return (
-    <div className="dashboard-wrapper">
-      <h4 className="mb-4">Recommended Courses</h4>
-      <div className="carousel-container">
-        <button 
-          className="carousel-nav left" 
-          onClick={() => scrollLeft(trackRef1, setCurrentPosition1)}
-          aria-label="Scroll left"
-        >
-          &lt;
-        </button>
-        
-        <div 
-          className="carousel-track"
-          ref={trackRef1}
-          style={{ transform: `translateX(${currentPosition1}px)` }}
-        >
-          {cards.map((item) => (
-            <div className="card-carousel card-hover" key={`rec-${item.id}`}>
-              <img 
-                src={item.image} 
-                className="card-img-top" 
-                alt={item.title}
-                onError={handleImageError}
-                onLoad={handleImageLoad}
-              />
-              <div className="card-body">
-                <h5 className="card-title">{item.title}</h5>
-                <p className="card-text">{item.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        <button 
-          className="carousel-nav right" 
-          onClick={() => scrollRight(trackRef1, setCurrentPosition1)}
-          aria-label="Scroll right"
-        >
-          &gt;
-        </button>
-      </div>
+    const scrollRight = (ref: React.RefObject<HTMLDivElement>, set: React.Dispatch<React.SetStateAction<number>>) => {
+        if (!ref.current) return;
+        const cardWidth = ref.current.children[0]?.clientWidth || 300;
+        const gap = 16;
+        const maxScroll = ref.current.scrollWidth - ref.current.clientWidth;
+        set(prev => Math.max(prev - cardWidth - gap, -maxScroll));
+    };
 
-      <h4 className="mb-4 mt-5">My Courses</h4>
-      <div className="carousel-container">
-        <button 
-          className="carousel-nav left" 
-          onClick={() => scrollLeft(trackRef2, setCurrentPosition2)}
-          aria-label="Scroll left"
-        >
-          &lt;
-        </button>
-        
-        <div 
-          className="carousel-track"
-          ref={trackRef2}
-          style={{ transform: `translateX(${currentPosition2}px)` }}
-        >
-          {cards.map((item) => (
-            <div className="card-carousel card-hover" key={`my-${item.id}`}>
-              <img 
-                src={item.image} 
-                className="card-img-top" 
-                alt={item.title}
-                onError={handleImageError}
-                onLoad={handleImageLoad}
-              />
-              <div className="card-body">
-                <h5 className="card-title">{item.title}</h5>
-                <p className="card-text">{item.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        <button 
-          className="carousel-nav right" 
-          onClick={() => scrollRight(trackRef2, setCurrentPosition2)}
-          aria-label="Scroll right"
-        >
-          &gt;
-        </button>
-      </div>
-    </div>
-  );
+    const handleCardClick = (courseId: number) => {
+        setSelectedCourseId(courseId);
+        setShowCourseDetail(true);
+    };
+
+    const handleCloseCourseDetail = () => {
+        setSelectedCourseId(null);
+        setShowCourseDetail(false);
+    };
+
+    if (loading) return <p>Loading...</p>;
+    if (error) return <p className="alert alert-danger">{error}</p>;
+
+    return (
+        <>
+            {!showCourseDetail ? (
+                <div className="dashboard-wrapper">
+                    <h4 className="mb-4">Recommended Courses</h4>
+                    <div className="carousel-container">
+                        <button className="carousel-nav left" onClick={() => scrollLeft(trackRef1, setCurrentPosition1)}>&lt;</button>
+                        <div className="carousel-track" ref={trackRef1} style={{ transform: `translateX(${currentPosition1}px)` }}>
+                            {recommendedCourses.map(course => (
+                                <div className="card-carousel card-hover" key={course.id} onClick={() => handleCardClick(course.id)} style={{ cursor: 'pointer' }}>
+                                    <CourseImage
+                                        src={course.image_url || course.image}
+                                        fallbackSrc="/group.avif"
+                                        alt={course.title_of_course}
+                                        className="card-img-top"
+                                        style={{ height: '200px', objectFit: 'cover' }}
+                                    />
+                                    <div className="card-body">
+                                        <h5 className="card-title">{course.title_of_course}</h5>
+                                        <p className="card-text">{course.description}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <button className="carousel-nav right" onClick={() => scrollRight(trackRef1, setCurrentPosition1)}>&gt;</button>
+                    </div>
+
+                    <h4 className="mb-4 mt-5">My Courses</h4>
+                    <div className="carousel-container">
+                        <button className="carousel-nav left" onClick={() => scrollLeft(trackRef2, setCurrentPosition2)}>&lt;</button>
+                        <div className="carousel-track" ref={trackRef2} style={{ transform: `translateX(${currentPosition2}px)` }}>
+                            {myCourses.map(course => (
+                                <div className="card-carousel card-hover" key={course.id} onClick={() => handleCardClick(course.id)} style={{ cursor: 'pointer' }}>
+                                    <CourseImage
+                                        src={course.image_url || course.image}
+                                        fallbackSrc="/group.avif"
+                                        alt={course.title_of_course}
+                                        className="card-img-top"
+                                        style={{ height: '200px', objectFit: 'cover' }}
+                                    />
+                                    <div className="card-body">
+                                        <h5 className="card-title">{course.title_of_course}</h5>
+                                        <p className="card-text">{course.description}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <button className="carousel-nav right" onClick={() => scrollRight(trackRef2, setCurrentPosition2)}>&gt;</button>
+                    </div>
+                </div>
+            ) : (
+                <div className="fullscreen-container">
+                    <button className="close-button" onClick={handleCloseCourseDetail}>×</button>
+                    <CourseDetailShow courseId={selectedCourseId} onClose={handleCloseCourseDetail} />
+                </div>
+            )}
+        </>
+    );
 };
 
 export default Dashboard;

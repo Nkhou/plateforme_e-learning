@@ -10,6 +10,7 @@ import '@coreui/coreui/dist/css/coreui.min.css'
 import FirstPage from "./component/user/firstPage";
 import './App.css';
 import Cours from "./pages/courses";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   axios.defaults.withCredentials = true;
@@ -21,6 +22,11 @@ function App() {
         <Route path="/cours" element={
             <AuthGuard>
               <Cours />
+            </AuthGuard>
+          } />
+          <Route path="/admin" element={
+            <AuthGuard>
+              <AdminDashboard/>
             </AuthGuard>
           } />
         <Route

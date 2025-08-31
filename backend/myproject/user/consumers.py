@@ -67,6 +67,10 @@ class CourseConsumer(AsyncWebsocketConsumer):
                 'type': 'progress_update',
                 'data': progress_data
             }))
+        elif message_type == 'content_created':
+            # Handle notification when new content is created
+            content_data = text_data_json['content']
+            await self.handle_content_created(content_data)
 
     # Handle content completion
     async def handle_content_completed(self, user, content_id):
@@ -122,7 +126,16 @@ class CourseConsumer(AsyncWebsocketConsumer):
                     'data': leaderboard_data
                 }
             )
-
+    # Handle content creation notification
+    async def handle_content_created(self, content_data):
+        # Broadcast new content to all users in the course
+        await self.channel_layer.group_send(
+            self.course_group_name,
+            {
+                'type': 'content_created',
+                'data': content_data
+            }
+        )
     # Handler for group messages
     async def leaderboard_update(self, event):
         # Send leaderboard update to WebSocket

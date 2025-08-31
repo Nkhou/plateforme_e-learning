@@ -66,18 +66,6 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
         reader.readAsDataURL(selectedFile);
     };
 
-    // const getCsrfToken = (): string => {
-    //     const cookieValue = document.cookie
-    //         .split('; ')
-    //         .find(row => row.startsWith('csrftoken='))
-    //         ?.split('=')[1];
-
-    //     const metaToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content;
-
-    //     return cookieValue || metaToken || '';
-    // };
-
-
    const uploadImageToDjango = async (imageFile: File): Promise<any> => {
     const formData = new FormData();
     formData.append('title_of_course', String(title));
@@ -100,7 +88,6 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
         } else if (error.response?.data?.error) {
             errorMessage = error.response.data.error;
         } else if (error.response?.data) {
-            // Handle field-specific errors from serializer
             const errorData = error.response.data;
             if (typeof errorData === 'object') {
                 // Extract all error messages from serializer errors
@@ -159,7 +146,6 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
             console.log('Upload successful:', result);
             setSuccess('Course created successfully!');
 
-            // Reset form
             setFile(null);
             setImagePreview(null);
             setTitle('');
@@ -341,7 +327,7 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
                                         type="submit"
                                         className="btn btn-primary btn-lg px-4 px-sm-5 py-2 w-100 w-sm-auto"
                                         disabled={uploading}
-                                        style={{ marginBottom: '20px' }}
+                                        style={{ marginBottom: '20px'  , background: '#052c65'}}
                                     >
                                         {uploading ? (
                                             <>
@@ -350,7 +336,7 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
                                                 <span className="d-inline d-sm-none">Creating...</span>
                                             </>
                                         ) : (
-                                            'Create Course'
+                                            <h6 className='text-white'>Create Course</h6>
                                         )}
                                     </button>
                                 </div>

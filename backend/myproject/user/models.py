@@ -9,7 +9,15 @@ class CustomUser(AbstractUser):
         ('AP', 'Apprenant'),
         ('F', 'Formateur'),
     ]
+    DEPARTMENT_CHOICES = [
+        ('F', 'FINANCE'),
+        ('H', 'Human RESOURCES'),
+        ('M', 'MARKETING'),
+        ('O', 'OPERATIONS/PRODUCTION'),
+        ('S', 'Sales'),
+    ]
     Privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
+    departement = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
 
     def __str__(self):
       return self.username
@@ -18,13 +26,21 @@ class CustomUser(AbstractUser):
 # Use the CustomUser class defined above
 
 class Course(models.Model):
+    DEPARTMENT_CHOICES = [
+        ('F', 'FINANCE'),
+        ('H', 'Human RESOURCES'),
+        ('M', 'MARKETING'),
+        ('O', 'OPERATIONS/PRODUCTION'),
+        ('S', 'Sales'),
+    ]
     title_of_course = models.CharField(max_length=100, blank=False, null=False)
     description = models.TextField(blank=True, null=True)
+    departement = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
     image = models.ImageField(
         upload_to='course_images/',
-        null=True,  # Allow null in database
+        null=True, 
         blank=True,  # Allow blank in forms
-        max_length=100  # Match the VARCHAR(100) constraint
+        max_length=100  
     )
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,

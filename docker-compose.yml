@@ -4,10 +4,8 @@ services:
   # Database
   db:
     image: postgres:15
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-courseapp}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -41,30 +39,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"  # Expose backend for development
-    environment:
-      # Database settings
-      DB_ENGINE: django.db.backends.postgresql
-      POSTGRES_DB: ${POSTGRES_DB:-courseapp}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      
-      # Django settings
-      SECRET_KEY: ${SECRET_KEY:-your-very-secret-key-here-change-in-production}
-      DEBUG: ${DEBUG:-True}  # Set to True for development
-      
-      # SSL/Security settings - DISABLE for development
-      USE_SSL: ${USE_SSL:-False}
-      PRODUCTION: ${PRODUCTION:-False}
-      DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
-      FRONTEND_DOMAIN: ${FRONTEND_DOMAIN:-localhost:3000}
-      
-      # Redis settings
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      
+    env_file:
+      - .env
     volumes:
       - ./backend:/app
       - media_files:/app/media
@@ -84,10 +60,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-
-  # Frontend React Application (Development)
-
-  # Frontend React Application (Development)
   frontend:
     build:
       context: ./frontend
