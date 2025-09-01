@@ -7,14 +7,50 @@ from .models import (
 )
 
 # Custom User Admin
+# user/admin.py
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from .models import CustomUser
+
+# user/admin.py
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from django.utils.translation import gettext_lazy as _
+from .models import CustomUser
+
+# @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'Privilege', 'is_staff')
-    list_filter = ('Privilege', 'is_staff', 'is_superuser', 'is_active')
-    fieldsets = UserAdmin.fieldsets + (
-        ('Custom Fields', {'fields': ('Privilege',)}),
+    # Fields to display in the list view
+    list_display = ('username', 'email', 'first_name', 'last_name', 
+                   'privilege', 'department', 'is_staff', 'is_active')
+    
+    # Fields to filter by in the right sidebar
+    list_filter = ('privilege', 'department', 'is_staff', 'is_superuser', 'is_active')
+    
+    # Fields to search by
+    search_fields = ('username', 'first_name', 'last_name', 'email')
+    
+    # How results are ordered
+    ordering = ('username',)
+    
+    # Fieldsets for the edit view
+    fieldsets = (
+        (None, {'fields': ('username', 'password')}),
+        (_('Personal info'), {'fields': ('first_name', 'last_name', 'email')}),
+        (_('Permissions'), {
+            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+        }),
+        (_('Important dates'), {'fields': ('last_login', 'date_joined')}),
+        (_('Additional info'), {'fields': ('privilege', 'department')}),
     )
-    add_fieldsets = UserAdmin.add_fieldsets + (
-        ('Custom Fields', {'fields': ('Privilege',)}),
+    
+    # Fieldsets for the add view
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('username', 'password1', 'password2', 'email', 
+                      'first_name', 'last_name', 'privilege', 'department'),
+        }),
     )
 
 # Course Admin

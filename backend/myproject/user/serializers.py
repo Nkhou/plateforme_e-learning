@@ -1,6 +1,19 @@
 from rest_framework import serializers
-from .models import CustomUser, QCMAttempt, QCMCompletion
+from .models import CustomUser, QCMAttempt, QCMCompletion, Course, CourseContent, VideoContent, PDFContent, QCM, QCMOption, ContentType, Subscription
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth import get_user_model
+from django.db import models
+
+User = get_user_model()
+
+# Define choices at the module level to avoid duplication
+DEPARTMENT_CHOICES = [
+    ('F', 'FINANCE'),
+    ('H', 'Human RESOURCES'),
+    ('M', 'MARKETING'),
+    ('O', 'OPERATIONS/PRODUCTION'),
+    ('S', 'Sales'),
+]
 
 class CustomUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
@@ -8,13 +21,14 @@ class CustomUserSerializer(serializers.ModelSerializer):
         required=True,
         validators=[validate_password]
     )
+    department_display = serializers.CharField(source='get_department_display', read_only=True)
 
     class Meta:
         model = CustomUser
         fields = [
             'id', 'username', 'email', 
             'first_name', 'last_name', 
-            'Privilege', 'password'
+            'privilege', 'department', 'department_display', 'password'
         ]
         extra_kwargs = {
             'first_name': {'required': True},
@@ -38,15 +52,14 @@ class CustomUserSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
-# from rest_framework import serializers
-from .models import Course, CourseContent, VideoContent, PDFContent, QCM, QCMOption, ContentType
 
-# READ Serializers (for GET requests)
+# QCM Option Serializer
 class QCMOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = QCMOption
         fields = ['id', 'text', 'is_correct']
 
+# QCM Serializer
 class QCMSerializer(serializers.ModelSerializer):
     options = QCMOptionSerializer(many=True, read_only=True)
     
@@ -54,16 +67,19 @@ class QCMSerializer(serializers.ModelSerializer):
         model = QCM
         fields = ['id', 'question', 'options']
 
+# Video Content Serializer
 class VideoContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = VideoContent
         fields = ['id', 'video_file']
 
+# PDF Content Serializer
 class PDFContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = PDFContent
         fields = ['id', 'pdf_file']
 
+# Course Content Serializer
 class CourseContentSerializer(serializers.ModelSerializer):
     video_content = VideoContentSerializer(read_only=True)
     pdf_content = PDFContentSerializer(read_only=True)
@@ -75,16 +91,12 @@ class CourseContentSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'caption', 'order', 'content_type_name', 
                  'video_content', 'pdf_content', 'qcm']
 
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
-# Alternative approach using SerializerMethodField
+# Course Serializer
 class CourseSerializer(serializers.ModelSerializer):
-    # Add creator information
     creator_username = serializers.CharField(source='creator.username', read_only=True)
     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
+    department_display = serializers.CharField(source='get_department_display', read_only=True)
     
     # Add absolute image URL field
     image_url = serializers.SerializerMethodField()
@@ -95,6 +107,8 @@ class CourseSerializer(serializers.ModelSerializer):
             'id',
             'title_of_course', 
             'description', 
+            'department',
+            'department_display',
             'image',  # Original image field
             'image_url',  # Absolute URL field
             'creator_username',
@@ -113,256 +127,7 @@ class CourseSerializer(serializers.ModelSerializer):
             return obj.image.url
         return None
 
-# CREATE Serializers (for POST requests)
-# class CourseCreateSerializer(serializers.ModelSerializer):
-#     creator_username = serializers.CharField(source='creator.username', read_only=True)
-#     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
-#     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
-    
-#     class Meta:
-#         model = Course
-#         fields = [
-#             'title_of_course', 
-#             'description', 
-#             'image',
-#             'creator_username',
-#             'creator_first_name',
-#             'creator_last_name'
-#         ]
-    
-#     def create(self, validated_data):
-#         # Get the request from context
-#         request = self.context.get('request')
-        
-#         if request and request.user.is_authenticated:
-#             # User is authenticated, set them as creator
-#             validated_data['creator'] = request.user
-#             print(f"Setting creator to authenticated user: {request.user.username}")
-#         else:
-#             # User is not authenticated, allow creation without creator or handle differently
-#             print("No authenticated user found, setting creator to None")
-#             validated_data['creator'] = None
-        
-#         try:
-#             # Create the course
-#             course = Course.objects.create(**validated_data)
-#             print(f"Course created successfully: {course.title_of_course}")
-#             return course
-#         except Exception as e:
-#             print(f"Error creating course: {str(e)}")
-#             raise serializers.ValidationError(f"Failed to create course: {str(e)}")
-# class QCMOptionCreateSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = QCMOption
-#         fields = ['text', 'is_correct']
-# class CourseContentCreateSerializer(serializers.ModelSerializer):
-#     # For video content
-#     video_file = serializers.FileField(required=False, write_only=True)
-    
-#     # For PDF content  
-#     pdf_file = serializers.FileField(required=False, write_only=True)
-    
-#     # For QCM content
-#     qcm_question = serializers.CharField(required=False, write_only=True)
-#     qcm_options = QCMOptionCreateSerializer(many=True, required=False, write_only=True)
-    
-#     # Add QCM settings fields
-#     points = serializers.IntegerField(required=False, write_only=True, default=1)
-#     passing_score = serializers.IntegerField(required=False, write_only=True, default=80)
-#     max_attempts = serializers.IntegerField(required=False, write_only=True, default=3)
-#     time_limit = serializers.IntegerField(required=False, write_only=True, default=0)
-    
-#     class Meta:
-#         model = CourseContent
-#         fields = ['title', 'caption', 'order', 'content_type', 
-#                  'video_file', 'pdf_file', 'qcm_question', 'qcm_options',
-#                  'points', 'passing_score', 'max_attempts', 'time_limit']
-#         # Make content_type read-only since we set it automatically
-#         read_only_fields = ['content_type']
-    
-#     def validate(self, data):
-#         # Get content_type from context instead of data
-#         content_type = self.context.get('content_type')
-        
-#         if not content_type:
-#             raise serializers.ValidationError("Content type is required")
-        
-#         if content_type.name == 'Video' and not data.get('video_file'):
-#             raise serializers.ValidationError("Video file is required for video content")
-        
-#         if content_type.name == 'PDF' and not data.get('pdf_file'):
-#             raise serializers.ValidationError("PDF file is required for PDF content")
-        
-#         if content_type.name == 'QCM':
-#             if not data.get('qcm_question'):
-#                 raise serializers.ValidationError("Question is required for QCM content")
-#             if not data.get('qcm_options') or len(data.get('qcm_options', [])) < 2:
-#                 raise serializers.ValidationError("At least 2 options are required for QCM content")
-        
-#         return data
-    
-#     def create(self, validated_data):
-#         video_file = validated_data.pop('video_file', None)
-#         pdf_file = validated_data.pop('pdf_file', None)
-#         qcm_question = validated_data.pop('qcm_question', None)
-#         qcm_options = validated_data.pop('qcm_options', [])
-        
-#         # Extract QCM settings
-#         points = validated_data.pop('points', 1)
-#         passing_score = validated_data.pop('passing_score', 80)
-#         max_attempts = validated_data.pop('max_attempts', 3)
-#         time_limit = validated_data.pop('time_limit', 0)
-        
-#         # Get course and content_type from context
-#         course = self.context.get('course')
-#         content_type = self.context.get('content_type')
-        
-#         if not course or not content_type:
-#             raise serializers.ValidationError("Course and content type are required")
-        
-#         # Create the course content with objects from context
-#         course_content = CourseContent.objects.create(
-#             course=course,
-#             content_type=content_type,
-#             **validated_data
-#         )
-        
-#         # Create specific content based on type
-#         if content_type.name == 'Video' and video_file:
-#             VideoContent.objects.create(course_content=course_content, video_file=video_file)
-        
-#         elif content_type.name == 'PDF' and pdf_file:
-#             PDFContent.objects.create(course_content=course_content, pdf_file=pdf_file)
-        
-#         elif content_type.name == 'QCM' and qcm_question:
-#             qcm = QCM.objects.create(
-#                 course_content=course_content, 
-#                 question=qcm_question,
-#                 points=points,
-#                 passing_score=passing_score,
-#                 max_attempts=max_attempts,
-#                 time_limit=time_limit
-#             )
-#             for option_data in qcm_options:
-#                 QCMOption.objects.create(qcm=qcm, **option_data)
-        
-#         return course_content
-
-
-# # PDF-specific serializer
-# class PDFContentCreateSerializer(serializers.ModelSerializer):
-#     pdf_file = serializers.FileField(required=True)
-    
-#     class Meta:
-#         model = CourseContent
-#         fields = ['title', 'caption', 'order', 'pdf_file']
-    
-#     def create(self, validated_data):
-#         pdf_file = validated_data.pop('pdf_file')
-        
-#         course = self.context.get('course')
-#         content_type = self.context.get('content_type')
-        
-#         if not course or not content_type:
-#             raise serializers.ValidationError("Course and content type are required")
-        
-#         # Create the course content
-#         course_content = CourseContent.objects.create(
-#             course=course,
-#             content_type=content_type,
-#             **validated_data
-#         )
-        
-#         # Create the PDF content
-#         PDFContent.objects.create(course_content=course_content, pdf_file=pdf_file)
-#         return course_content
-
-# # Video-specific serializer
-# class VideoContentCreateSerializer(serializers.ModelSerializer):
-#     video_file = serializers.FileField(required=True)
-    
-#     class Meta:
-#         model = CourseContent
-#         fields = ['title', 'caption', 'order', 'video_file']
-    
-#     def create(self, validated_data):
-#         video_file = validated_data.pop('video_file')
-        
-#         course = self.context.get('course')
-#         content_type = self.context.get('content_type')
-        
-#         if not course or not content_type:
-#             raise serializers.ValidationError("Course and content type are required")
-        
-#         # Create the course content
-#         course_content = CourseContent.objects.create(
-#             course=course,
-#             content_type=content_type,
-#             **validated_data
-#         )
-        
-#         # Create the video content
-#         VideoContent.objects.create(course_content=course_content, video_file=video_file)
-#         return course_content
-
-# QCM-specific serializer
-# class QCMContentCreateSerializer(serializers.ModelSerializer):
-#     qcm_question = serializers.CharField(required=True)
-#     qcm_options = QCMOptionCreateSerializer(many=True, required=True)
-#     points = serializers.IntegerField(default=1)
-#     passing_score = serializers.IntegerField(default=80)
-#     max_attempts = serializers.IntegerField(default=3)
-#     time_limit = serializers.IntegerField(default=0)
-    
-#     class Meta:
-#         model = CourseContent
-#         fields = ['title', 'caption', 'order', 'qcm_question', 'qcm_options',
-#                  'points', 'passing_score', 'max_attempts', 'time_limit']
-    
-#     def validate(self, data):
-#         qcm_options = data.get('qcm_options', [])
-#         if len(qcm_options) < 2:
-#             raise serializers.ValidationError("At least 2 options are required for QCM content")
-#         return data
-    
-#     def create(self, validated_data):
-#         qcm_question = validated_data.pop('qcm_question')
-#         qcm_options = validated_data.pop('qcm_options')
-#         points = validated_data.pop('points', 1)
-#         passing_score = validated_data.pop('passing_score', 80)
-#         max_attempts = validated_data.pop('max_attempts', 3)
-#         time_limit = validated_data.pop('time_limit', 0)
-        
-#         course = self.context.get('course')
-#         content_type = self.context.get('content_type')
-        
-#         if not course or not content_type:
-#             raise serializers.ValidationError("Course and content type are required")
-        
-#         # Create the course content
-#         course_content = CourseContent.objects.create(
-#             course=course,
-#             content_type=content_type,
-#             **validated_data
-#         )
-        
-#         # Create the QCM
-#         qcm = QCM.objects.create(
-#             course_content=course_content,
-#             question=qcm_question,
-#             points=points,
-#             passing_score=passing_score,
-#             max_attempts=max_attempts,
-#             time_limit=time_limit
-#         )
-        
-#         # Create the options
-#         for option_data in qcm_options:
-#             QCMOption.objects.create(qcm=qcm, **option_data)
-        
-#         return course_content
-
-# CREATE Serializers (for POST requests)
+# Course Create Serializer
 class CourseCreateSerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='creator.username', read_only=True)
     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
@@ -373,6 +138,7 @@ class CourseCreateSerializer(serializers.ModelSerializer):
         fields = [
             'title_of_course', 
             'description', 
+            'department',
             'image',
             'creator_username',
             'creator_first_name',
@@ -401,12 +167,13 @@ class CourseCreateSerializer(serializers.ModelSerializer):
             print(f"Error creating course: {str(e)}")
             raise serializers.ValidationError(f"Failed to create course: {str(e)}")
 
+# QCM Option Create Serializer
 class QCMOptionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = QCMOption
         fields = ['text', 'is_correct']
 
-# PDF-specific serializer
+# PDF Content Create Serializer
 class PDFContentCreateSerializer(serializers.ModelSerializer):
     pdf_file = serializers.FileField(required=True)
     
@@ -434,7 +201,7 @@ class PDFContentCreateSerializer(serializers.ModelSerializer):
         PDFContent.objects.create(course_content=course_content, pdf_file=pdf_file)
         return course_content
 
-# Video-specific serializer
+# Video Content Create Serializer
 class VideoContentCreateSerializer(serializers.ModelSerializer):
     video_file = serializers.FileField(required=True)
     
@@ -462,7 +229,7 @@ class VideoContentCreateSerializer(serializers.ModelSerializer):
         VideoContent.objects.create(course_content=course_content, video_file=video_file)
         return course_content
 
-# QCM-specific serializer
+# QCM Content Create Serializer
 class QCMContentCreateSerializer(serializers.ModelSerializer):
     qcm_question = serializers.CharField(required=True)
     qcm_options = QCMOptionCreateSerializer(many=True, required=True)
@@ -518,18 +285,20 @@ class QCMContentCreateSerializer(serializers.ModelSerializer):
             QCMOption.objects.create(qcm=qcm, **option_data)
         
         return course_content
-from .models import Course, Subscription, CustomUser
 
+# Subscriber Serializer
 class SubscriberSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
+    department_display = serializers.CharField(source='get_department_display', read_only=True)
     
     class Meta:
         model = CustomUser
-        fields = ['id', 'FirstName', 'LastName', 'full_name', 'email']
+        fields = ['id', 'first_name', 'last_name', 'full_name', 'email', 'department', 'department_display']
     
     def get_full_name(self, obj):
-        return f"{obj.FirstName} {obj.LastName}"
+        return f"{obj.first_name} {obj.last_name}"
 
+# Subscription Serializer
 class SubscriptionSerializer(serializers.ModelSerializer):
     user = SubscriberSerializer(read_only=True)
     
@@ -537,18 +306,21 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         model = Subscription
         fields = ['id', 'user', 'subscribed_at', 'is_active']
 
+# Course with Subscribers Serializer
 class CourseWithSubscribersSerializer(serializers.ModelSerializer):
     subscribers = SubscriptionSerializer(many=True, read_only=True, source='course_subscriptions')
     subscribers_count = serializers.SerializerMethodField()
+    department_display = serializers.CharField(source='get_department_display', read_only=True)
     
     class Meta:
         model = Course
-        fields = ['id', 'title_of_course', 'description', 'image', 
+        fields = ['id', 'title_of_course', 'description', 'department', 'department_display', 'image', 
                  'subscribers_count', 'subscribers', 'created_at']
     
     def get_subscribers_count(self, obj):
         return obj.course_subscriptions.filter(is_active=True).count()
 
+# Subscription with Progress Serializer
 class SubscriptionWithProgressSerializer(serializers.ModelSerializer):
     user = SubscriberSerializer(read_only=True)
     user_full_name = serializers.SerializerMethodField()
@@ -563,6 +335,7 @@ class SubscriptionWithProgressSerializer(serializers.ModelSerializer):
     def get_user_full_name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
 
+# Course with Progress Serializer
 class CourseWithProgressSerializer(serializers.ModelSerializer):
     subscribers = SubscriptionWithProgressSerializer(
         many=True, 
@@ -571,11 +344,12 @@ class CourseWithProgressSerializer(serializers.ModelSerializer):
     )
     subscribers_count = serializers.SerializerMethodField()
     average_score = serializers.SerializerMethodField()
+    department_display = serializers.CharField(source='get_department_display', read_only=True)
     
     class Meta:
         model = Course
         fields = [
-            'id', 'title_of_course', 'description', 'image', 
+            'id', 'title_of_course', 'description', 'department', 'department_display', 'image', 
             'subscribers_count', 'subscribers', 'average_score', 'created_at'
         ]
     
@@ -587,11 +361,8 @@ class CourseWithProgressSerializer(serializers.ModelSerializer):
         if active_subscriptions.exists():
             return active_subscriptions.aggregate(avg_score=models.Avg('score'))['avg_score']
         return 0
-class QCMOptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = QCMOption
-        fields = ['id', 'text']
 
+# QCM Detail Serializer
 class QCMDetailSerializer(serializers.ModelSerializer):
     options = QCMOptionSerializer(many=True, read_only=True)
     
@@ -599,6 +370,7 @@ class QCMDetailSerializer(serializers.ModelSerializer):
         model = QCM
         fields = ['id', 'question', 'points', 'passing_score', 'max_attempts', 'time_limit', 'options']
 
+# QCM Attempt Serializer
 class QCMAttemptSerializer(serializers.ModelSerializer):
     selected_option_ids = serializers.ListField(
         child=serializers.IntegerField(),
@@ -611,6 +383,7 @@ class QCMAttemptSerializer(serializers.ModelSerializer):
         fields = ['id', 'selected_option_ids', 'score', 'points_earned', 'is_passed', 'attempt_number', 'time_taken']
         read_only_fields = ['score', 'points_earned', 'is_passed', 'attempt_number']
 
+# QCM Completion Serializer
 class QCMCompletionSerializer(serializers.ModelSerializer):
     qcm_title = serializers.CharField(source='qcm.question', read_only=True)
     
@@ -618,7 +391,7 @@ class QCMCompletionSerializer(serializers.ModelSerializer):
         model = QCMCompletion
         fields = ['qcm', 'qcm_title', 'best_score', 'points_earned', 'is_passed', 'attempts_count', 'last_attempt']
 
-# Add this to your serializers.py
+# QCM Create Serializer
 class QCMCreateSerializer(serializers.ModelSerializer):
     options = QCMOptionCreateSerializer(many=True)
     

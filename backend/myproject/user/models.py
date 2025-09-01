@@ -2,58 +2,55 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.conf import settings
+PRIVILEGE_CHOICES = [
+    ('A', 'Admin'),
+    ('AP', 'Apprenant'),
+    ('F', 'Formateur'),
+]
+
+DEPARTMENT_CHOICES = [
+    ('F', 'FINANCE'),
+    ('H', 'Human RESOURCES'),
+    ('M', 'MARKETING'),
+    ('O', 'OPERATIONS/PRODUCTION'),
+    ('S', 'Sales'),
+]
 
 class CustomUser(AbstractUser):
-    PRIVILEGE_CHOICES = [
-        ('A', 'Admin'),
-        ('AP', 'Apprenant'),
-        ('F', 'Formateur'),
-    ]
-    DEPARTMENT_CHOICES = [
-        ('F', 'FINANCE'),
-        ('H', 'Human RESOURCES'),
-        ('M', 'MARKETING'),
-        ('O', 'OPERATIONS/PRODUCTION'),
-        ('S', 'Sales'),
-    ]
-    Privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
-    departement = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
+    privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
+    department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
 
     def __str__(self):
-      return self.username
-
-
-# Use the CustomUser class defined above
+        return self.username
 
 class Course(models.Model):
-    DEPARTMENT_CHOICES = [
-        ('F', 'FINANCE'),
-        ('H', 'Human RESOURCES'),
-        ('M', 'MARKETING'),
-        ('O', 'OPERATIONS/PRODUCTION'),
-        ('S', 'Sales'),
-    ]
     title_of_course = models.CharField(max_length=100, blank=False, null=False)
     description = models.TextField(blank=True, null=True)
-    departement = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
+    department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
     image = models.ImageField(
         upload_to='course_images/',
         null=True, 
-        blank=True,  # Allow blank in forms
+        blank=True,
         max_length=100  
     )
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,  # Use CASCADE instead of SET_NULL if creator is required
+        on_delete=models.CASCADE,
         related_name='created_courses'
     )    
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    subscribers = models.ManyToManyField(CustomUser, through='Subscription', related_name='subscribed_courses',blank=True)
+    subscribers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, 
+        through='Subscription', 
+        related_name='subscribed_courses',
+        blank=True
+    )
 
     def __str__(self):
-        return f"{self.title_of_course} by {self.creator.first_name}"
-
+        # More robust string representation
+        creator_name = self.creator.get_full_name() or self.creator.username
+        return f"{self.title_of_course} by {creator_name}"
 class ContentType(models.Model):
     name = models.CharField(max_length=50)  # 'video' or 'qcm'
     

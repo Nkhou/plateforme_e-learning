@@ -255,7 +255,9 @@ class CheckAuthentificationView(APIView):
                 "firstname": UserById_.first_name,
                 "lastName": UserById_.last_name,
                 "email": UserById_.email,
-                "Privilege": UserById_.Privilege
+                "privilege": UserById_.privilege,  # Changed from Privilege to privilege
+                "department": UserById_.department,  # Added department field
+                "department_display": UserById_.get_department_display()  # Added display field
             }
             
             return Response({
@@ -272,7 +274,6 @@ class CheckAuthentificationView(APIView):
                 'debug': 'authenticated4', 
                 'message': 'Invalid token'
             }, status=status.HTTP_401_UNAUTHORIZED)
-
 
 class DashboardView(APIView):
     def get(self, request):
@@ -308,7 +309,9 @@ class RegisterwithoutFileView(APIView):
             email = request.data.get('email', '').strip().lower()
             first_name = request.data.get('firstName', '').strip()
             last_name = request.data.get('lastName', '').strip()
-            privilege = request.data.get('Privilege', 'AP').strip().upper()
+            privilege = request.data.get('privilege', 'AP').strip().upper()  # Changed from Privilege to privilege
+            department = request.data.get('department', 'F').strip().upper()  # Added department field
+            
             if not all([email, first_name, last_name]):
                 missing = [field for field in ['email', 'firstName', 'lastName'] 
                          if not request.data.get(field)]
@@ -328,15 +331,14 @@ class RegisterwithoutFileView(APIView):
             password = generate_random_password()
             username = f"{first_name.lower()}_{last_name.lower()}"[:150]
             username = ''.join(c for c in username if c.isalnum() or c in '._-')
-            print('bbbdbbdbdbbdbdb')
-            print(password)
-            print('nncnnfnfnnfn')
+            
             user_data = {
                 'username': username,
                 'email': email,
                 'first_name': first_name,
                 'last_name': last_name,
-                'Privilege': privilege,
+                'privilege': privilege,  # Changed from Privilege to privilege
+                'department': department,  # Added department field
                 'password': password
             }
             serializer = CustomUserSerializer(data=user_data)
@@ -347,7 +349,7 @@ class RegisterwithoutFileView(APIView):
                 html_message = render_to_string('register.html', {
                     'user': user,
                     'password': password,
-                    'login_link':login_link
+                    'login_link': login_link
                 })
                 msg = EmailMessage('Password', html_message, sender_email, [user.email])
                 msg.content_subtype = "html"
@@ -392,6 +394,7 @@ class CSVUploadView(APIView):
                     'email': row['email'],
                     'first_name': row['firstName'],
                     'last_name': row['lastName'],
+                    'department': row.get('department', 'F'),  # Added department field
                     'password': password
                 }
                 serializer = CustomUserSerializer(data=user_data)
@@ -403,8 +406,7 @@ class CSVUploadView(APIView):
             return Response({'message': 'CSV processed successfully'}, status=status.HTTP_200_OK)
             
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -459,6 +461,10 @@ class CourseList(APIView):
         else:
             print("No image file found in request")
         
+        # Ensure department is included
+        if 'department' not in data:
+            data['department'] = 'F'  # Default department
+        
         # Pass request context to serializer
         serializer = CourseCreateSerializer(
             data=data, 
@@ -484,7 +490,6 @@ class CourseList(APIView):
         else:
             print(f"Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class CourseDetail(APIView):
     permission_classes = [AllowAny]
@@ -1541,7 +1546,8 @@ class UserManagementView(APIView):
                 'username': user.username,
                 'email': user.email,
                 'full_name': f"{user.first_name} {user.last_name}",
-                'privilege': user.get_Privilege_display(),
+                'privilege': user.get_privilege_display(),  # Changed from get_Privilege_display
+                'department': user.get_department_display(),  # Added department display
                 'date_joined': user.date_joined,
                 'last_login': user.last_login,
                 'is_active': user.is_active,
@@ -1556,21 +1562,6 @@ class UserManagementView(APIView):
             'users': user_data,
             'user_growth': user_growth
         })
-    
-    def get_user_growth_stats(self):
-        # Monthly user growth
-        monthly_growth = (
-            CustomUser.objects
-            .annotate(month=TruncMonth('date_joined'))
-            .values('month')
-            .annotate(count=Count('id'))
-            .order_by('month')
-        )
-        
-        return {
-            'labels': [item['month'].strftime('%Y-%m') for item in monthly_growth],
-            'data': [item['count'] for item in monthly_growth]
-        }
 
 class CourseManagementView(APIView):
     permission_classes = [IsSuperUser]
@@ -1833,7 +1824,8 @@ class UserDetailView(APIView):
             'email': user.email,
             'first_name': user.first_name,
             'last_name': user.last_name,
-            'privilege': user.get_Privilege_display(),
+            'privilege': user.get_privilege_display(),  # Changed from get_Privilege_display
+            'department': user.get_department_display(),  # Added department display
             'date_joined': user.date_joined,
             'last_login': user.last_login,
             'is_active': user.is_active,

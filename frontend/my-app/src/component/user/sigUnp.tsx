@@ -9,6 +9,7 @@ function SignUp() {
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [selectedRole, setSelectedRole] = useState('');
+    const [selectedDepartment, setSelectedDepartment] = useState('F'); // Default department
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
@@ -108,7 +109,8 @@ function SignUp() {
                         email: email,
                         firstName: firstName,
                         lastName: lastName,
-                        Privilege: selectedRole,
+                        privilege: selectedRole, // Changed from Privilege to privilege
+                        department: selectedDepartment, // Added department field
                     },
                     {
                         withCredentials: true,
@@ -119,6 +121,13 @@ function SignUp() {
                     }
                 );
                 console.log("Registration success:", response.data);
+                alert('User registered successfully!');
+                // Reset form
+                setFirstName('');
+                setLastName('');
+                setEmail('');
+                setSelectedRole('');
+                setSelectedDepartment('F');
             } catch (error: unknown) {
                 let errorMessage: string;
 
@@ -134,6 +143,7 @@ function SignUp() {
 
                 console.error("Registration error:", errorMessage);
                 setError(errorMessage);
+                alert(`Registration failed: ${errorMessage}`);
             }
         } else {
             if (!file) {
@@ -148,10 +158,17 @@ function SignUp() {
 
                 const jsonData = await readCSVFile(file);
                 console.log('CSV data:', jsonData);
-                
+
+                // Add department to each user in CSV data if not present
+                const processedData = jsonData.map(user => ({
+                    ...user,
+                    department: user.department || 'F', // Default to Finance if not specified
+                    privilege: user.privilege || user.Privilege || 'AP', // Handle both field names
+                }));
+
                 const response = await axios.post(
                     'http://localhost:8000/api/CSVUpload/',
-                    { csv_file: jsonData },
+                    { csv_file: processedData },
                     {
                         withCredentials: true,
                         headers: {
@@ -162,6 +179,11 @@ function SignUp() {
                 );
 
                 console.log("CSV upload success:", response.data);
+                alert('Users registered successfully from CSV!');
+                setFile(null);
+                // Reset file input
+                const fileInput = document.getElementById('csvFile') as HTMLInputElement;
+                if (fileInput) fileInput.value = '';
             } catch (error: unknown) {
                 let errorMessage = "An unknown error occurred";
                 if (axios.isAxiosError(error)) {
@@ -174,6 +196,7 @@ function SignUp() {
 
                 console.error("CSV upload error:", errorMessage);
                 setError(errorMessage);
+                alert(`CSV upload failed: ${errorMessage}`);
             }
         }
     };
@@ -215,6 +238,11 @@ function SignUp() {
         borderRadius: '4px',
         fontSize: '14px',
         boxSizing: 'border-box'
+    };
+
+    const selectStyle: React.CSSProperties = {
+        ...inputStyle,
+        backgroundColor: 'white'
     };
 
     const radioContainerStyle: React.CSSProperties = {
@@ -270,7 +298,7 @@ function SignUp() {
         <div style={containerStyle}>
             <div style={cardStyle}>
                 <h2 style={titleStyle}>Register</h2>
-                
+
                 <form onSubmit={handleSubmit}>
                     <div style={formGroupStyle}>
                         <label style={labelStyle}>Registration Type:</label>
@@ -312,6 +340,9 @@ function SignUp() {
                                 required={toggle}
                             />
                             {error && <div style={errorStyle}>{error}</div>}
+                            <div style={{ fontSize: '12px', marginTop: '0.5rem', color: '#666' }}>
+                                CSV should include columns: firstName, lastName, email, privilege, department
+                            </div>
                         </div>
                     ) : (
                         <>
@@ -389,8 +420,49 @@ function SignUp() {
                         </div>
                     </div>
 
+                    <div style={formGroupStyle}>
+                        <label style={labelStyle} htmlFor="department">Department:</label>
+                        <select
+                            id="department"
+                            style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: '2px solid #e1e5e9',
+                                borderRadius: '8px',
+                                fontSize: '16px',
+                                backgroundColor: 'white',
+                                color: '#2d3748',
+                                transition: 'all 0.2s ease',
+                                outline: 'none',
+                                cursor: 'pointer',
+                                appearance: 'none',
+                                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'right 16px center',
+                                backgroundSize: '16px'
+                            }}
+                            value={selectedDepartment}
+                            onChange={(e) => setSelectedDepartment(e.target.value)}
+                            required
+                            onFocus={(e) => {
+                                e.target.style.borderColor = '#3b82f6';
+                                e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                            }}
+                            onBlur={(e) => {
+                                e.target.style.borderColor = '#e1e5e9';
+                                e.target.style.boxShadow = 'none';
+                            }}
+                        >
+                            <option value="F">FINANCE</option>
+                            <option value="H">Human RESOURCES</option>
+                            <option value="M">MARKETING</option>
+                            <option value="O">OPERATIONS/PRODUCTION</option>
+                            <option value="S">Sales</option>
+                        </select>
+                    </div>
+
                     <div style={{ textAlign: 'center' }}>
-                        <button 
+                        <button
                             type="submit"
                             style={buttonStyle}
                         >
