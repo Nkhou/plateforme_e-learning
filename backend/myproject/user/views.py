@@ -189,15 +189,16 @@ class LoginView(APIView):
                 )
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
-            print(refresh)
-            print(access_token)
+            # print(refresh)
+            # print(access_token)
             response = Response({
                 'refresh': str(refresh),
                 'access': access_token,
                 'user': {
                     'id': user.id,
                     'email': user.email,
-                    'username': user.username
+                    'username': user.username,
+                    'privilege':user.privilege
                 }
             }, status=status.HTTP_200_OK)
             
@@ -829,6 +830,7 @@ class CourseSubscribers(APIView):
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)
         subscriptions = course.course_subscriptions.filter(is_active=True)
+        # print(subscriptions)
         serializer = SubscriptionSerializer(subscriptions, many=True)
         return Response(serializer.data)
 
@@ -883,29 +885,55 @@ class CheckSubscription(APIView):
             course=course, 
             is_active=True
         ).exists()
+        if is_subscribed:
+            CourseDetailData = Subscription.objects.filter(
+            user=user, 
+            course=course, 
+            is_active=True
+        ).get()
+
         
         return Response({'is_subscribed': is_subscribed})
 
-
 class MySubscriptions(APIView):
     def get(self, request):
-        user = request.user
-        subscriptions = Subscription.objects.filter(user=user, is_active=True)
-        courses = [sub.course for sub in subscriptions]
-        serializer = CourseSerializer(courses, many=True)
-        return Response(serializer.data)
-
+        try:
+            user = request.user
+            # Use 'user' field instead of 'id' field to filter by the user object
+            subscriptions = Subscription.objects.filter(user=user, is_active=True)
+            courses = [sub.course for sub in subscriptions]
+            serializer = CourseSerializer(courses, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            print(f"Error retrieving subscriptions: {str(e)}")
+            return Response({"error": str(e)}, status=400)
 
 class SubscriptionStats(APIView):
+    permission_classes = [IsAuthenticated]  # Add authentication if needed
+    
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)
-        total = course.course_subscriptions.count()
-        active = course.course_subscriptions.filter(is_active=True).count()
+        subscriptions = course.course_subscriptions.all()
+        total = subscriptions.count()
+        active = subscriptions.filter(is_active=True).count()
+        
+        # Additional stats you could add:
+        recent_subscriptions = subscriptions.filter(
+            subscribed_at__gte=timezone.now() - timedelta(days=30)
+        ).count()
+        
+        # Average completion if you have that data
+        avg_completion = subscriptions.aggregate(
+            avg_completed=Avg('completed_qcms')
+        )['avg_completed'] or 0
 
         return Response({
             'total_subscriptions': total,
             'active_subscriptions': active,
-            'inactive_subscriptions': total - active
+            'inactive_subscriptions': total - active,
+            'recent_subscriptions_30d': recent_subscriptions,
+            'avg_completed_qcms': round(avg_completion, 2),
+            'completion_rate': round((active / total * 100) if total > 0 else 0, 2)
         })
 
 # Progress Tracking Views
@@ -1249,8 +1277,12 @@ class CourseStatisticsView(APIView):
             }
         })
 
-class CourseSubscribersListView(APIView):
+from rest_framework.generics import GenericAPIView
+from rest_framework.pagination import PageNumberPagination
+
+class CourseSubscribersListView(GenericAPIView):
     permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination  # Add this
     
     def get(self, request, pk):
         """Get detailed list of subscribers with their progress"""
@@ -1264,7 +1296,7 @@ class CourseSubscribersListView(APIView):
         
         subscribers = course.course_subscriptions.filter(is_active=True).select_related('user')
         
-        # Pagination
+        # Now paginate_queryset will work
         page = self.paginate_queryset(subscribers)
         if page is not None:
             serializer = SubscriptionWithProgressSerializer(page, many=True)
@@ -1272,7 +1304,33 @@ class CourseSubscribersListView(APIView):
         
         serializer = SubscriptionWithProgressSerializer(subscribers, many=True)
         return Response(serializer.data)
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
+class CourseSubscribersListViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    def list(self, request, pk=None):
+        """Get detailed list of subscribers with their progress"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        subscribers = course.course_subscriptions.filter(is_active=True).select_related('user')
+        
+        # ViewSet automatically handles pagination
+        page = self.paginate_queryset(subscribers)
+        if page is not None:
+            serializer = SubscriptionWithProgressSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = SubscriptionWithProgressSerializer(subscribers, many=True)
+        return Response(serializer.data)
 class CourseProgressOverviewView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1286,54 +1344,54 @@ class CourseProgressOverviewView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # Get all active subscriptions
+        active_subscriptions = course.course_subscriptions.filter(is_active=True)
+        
+        # Calculate progress for each subscription
+        progress_data = []
+        for subscription in active_subscriptions:
+            # Calculate progress percentage dynamically
+            total_qcms = course.qcms.count()
+            completed_qcms = subscription.completed_qcms.count()
+            progress_percentage = (completed_qcms / total_qcms * 100) if total_qcms > 0 else 0
+            
+            progress_data.append({
+                'subscription': subscription,
+                'progress_percentage': progress_percentage
+            })
+        
         # Get progress distribution
         progress_distribution = {
-            '0-20%': course.course_subscriptions.filter(
-                is_active=True, 
-                progress_percentage__range=(0, 20)
-            ).count(),
-            '21-40%': course.course_subscriptions.filter(
-                is_active=True, 
-                progress_percentage__range=(21, 40)
-            ).count(),
-            '41-60%': course.course_subscriptions.filter(
-                is_active=True, 
-                progress_percentage__range=(41, 60)
-            ).count(),
-            '61-80%': course.course_subscriptions.filter(
-                is_active=True, 
-                progress_percentage__range=(61, 80)
-            ).count(),
-            '81-99%': course.course_subscriptions.filter(
-                is_active=True, 
-                progress_percentage__range=(81, 99)
-            ).count(),
-            '100%': course.course_subscriptions.filter(
-                is_active=True, 
-                progress_percentage=100
-            ).count()
+            '0-20%': len([p for p in progress_data if 0 <= p['progress_percentage'] <= 20]),
+            '21-40%': len([p for p in progress_data if 21 <= p['progress_percentage'] <= 40]),
+            '41-60%': len([p for p in progress_data if 41 <= p['progress_percentage'] <= 60]),
+            '61-80%': len([p for p in progress_data if 61 <= p['progress_percentage'] <= 80]),
+            '81-99%': len([p for p in progress_data if 81 <= p['progress_percentage'] <= 99]),
+            '100%': len([p for p in progress_data if p['progress_percentage'] == 100])
         }
         
-        # Get average time to complete
-        completed_subscriptions = course.course_subscriptions.filter(
-            is_active=True, 
-            progress_percentage=100
-        )
+        # Get average time to complete (only for 100% completed)
+        completed_subscriptions = [p for p in progress_data if p['progress_percentage'] == 100]
         
-        avg_completion_time = completed_subscriptions.aggregate(
-            avg_time=Avg(F('last_activity') - F('subscribed_at'))
-        )['avg_time']
+        avg_completion_time = None
+        if completed_subscriptions:
+            total_time = timedelta()
+            for p in completed_subscriptions:
+                subscription = p['subscription']
+                if subscription.last_activity and subscription.subscribed_at:
+                    total_time += (subscription.last_activity - subscription.subscribed_at)
+            
+            if total_time:
+                avg_completion_time = total_time / len(completed_subscriptions)
         
         return Response({
             'progress_distribution': progress_distribution,
-            'average_completion_time': avg_completion_time.total_seconds() / 86400 if avg_completion_time else 0,  # Convert to days
-            'total_learners': course.course_subscriptions.filter(is_active=True).count(),
-            'active_this_week': course.course_subscriptions.filter(
-                is_active=True,
+            'average_completion_time': avg_completion_time.total_seconds() / 86400 if avg_completion_time else 0,
+            'total_learners': len(progress_data),
+            'active_this_week': active_subscriptions.filter(
                 last_activity__gte=datetime.now() - timedelta(days=7)
             ).count()
         })
-
 class QCMPerformanceView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1443,21 +1501,28 @@ class AdminDashboardView(APIView):
     def get(self, request):
         # Get statistics
         total_users = CustomUser.objects.count()
+        print('888888888888888888888888888888888*******')
         total_courses = Course.objects.count()
+        print('888888888888888888888888888888888------')
         total_subscriptions = Subscription.objects.filter(is_active=True).count()
         # Recent activity (last 7 days)
+        print('888888888888888888888888888888888ùùùùù')
         week_ago = timezone.now() - timedelta(days=7)
         recent_users = CustomUser.objects.filter(date_joined__gte=week_ago).count()
+        print('888888888888888888888888888888888=====')
         recent_courses = Course.objects.filter(created_at__gte=week_ago).count()
+        print('888888888888888888888888888888888_____')
         # User distribution by privilege
-        user_distribution = CustomUser.objects.values('Privilege').annotate(
+        user_distribution = CustomUser.objects.values('privilege').annotate(
             count=Count('id')
         )
+        print('888888888888888888888888888888888-----------')
         # Daily user registration chart data
         user_registration_data = self.get_user_registration_chart_data()
-
+        print('888888888888888888888888888888888############')
         # Course statistics
         course_stats = self.get_course_statistics()
+        print('888888888888888888888888888888888^^^^^^^^^^^^^^^^^^^^^')
         return Response({
             'overview': {
                 'total_users': total_users,
@@ -1493,32 +1558,51 @@ class AdminDashboardView(APIView):
     def get_course_statistics(self):
         courses = Course.objects.all()
         course_data = []
+
         for course in courses:
             subscriptions = course.course_subscriptions.filter(is_active=True)
             total_subscribers = subscriptions.count()
-            if total_subscribers > 0:
-                completed_count = subscriptions.filter(progress_percentage=100).count()
+
+            # Check what the actual relationship name is for QCMs
+            # Common possibilities: qcms, qcm_set, questions, quizzes, etc.
+
+            # Try these common relationship names:
+            if hasattr(course, 'qcms'):
+                total_qcms = course.qcms.count()
+            elif hasattr(course, 'qcm_set'):
+                total_qcms = course.qcm_set.count()
+            elif hasattr(course, 'questions'):
+                total_qcms = course.questions.count()
+            elif hasattr(course, 'quizzes'):
+                total_qcms = course.quizzes.count()
             else:
-                completed_count = 0
-            completion_rate = round((completed_count / total_subscribers * 100) if total_subscribers > 0 else 0.2)
+                # If none found, look at all related objects
+                total_qcms = 0
+                for attr in dir(course):
+                    if attr.endswith('_set') and 'qcm' in attr.lower():
+                        related_manager = getattr(course, attr)
+                        total_qcms = related_manager.count()
+                        break
+                    
+            completed_count = 0
+            for subscription in subscriptions:
+                # Calculate completed QCMs for this subscription
+                completed_qcms = subscription.completed_qcms.count()
+                progress_percentage = (completed_qcms / total_qcms * 100) if total_qcms > 0 else 0
+
+                if progress_percentage == 100:
+                    completed_count += 1
+
+            completion_rate = round((completed_count / total_subscribers * 100) if total_subscribers > 0 else 0)
+
             try:
-                # Try to get the average score
                 result = subscriptions.aggregate(avg=Avg('total_score'))
                 avg_value = result['avg']
-
-                # Handle None case
-                if avg_value is None:
-                    average_score = 0.2
-                else:
-                    average_score = round(avg_value)
-
-                print('average_score------', average_score)
-
+                average_score = round(avg_value) if avg_value is not None else 0
             except Exception as e:
-                # Handle any other errors
                 print('Error calculating average score:', e)
-                average_score = 0.2
-                print('average_score------', average_score)
+                average_score = 0
+
             course_data.append({
                 'id': course.id,
                 'title': course.title_of_course,
@@ -1527,11 +1611,17 @@ class AdminDashboardView(APIView):
                 'total_subscribers': total_subscribers,
                 'completed_count': completed_count,
                 'completion_rate': completion_rate,
-                'average_score': average_score
+                'average_score': average_score,
+                'total_qcms': total_qcms  # For debugging
             })
-            print("#################################################")
-        
+
         return course_data
+
+from django.utils import timezone
+from datetime import datetime, timedelta
+from django.db.models import Count
+from rest_framework.views import APIView
+from rest_framework.response import Response
 
 class UserManagementView(APIView):
     permission_classes = [IsSuperUser]
@@ -1539,6 +1629,7 @@ class UserManagementView(APIView):
     def get(self, request):
         users = CustomUser.objects.all().order_by('-date_joined')
         user_data = []
+        print('6666666666666666666666666666666666')
         
         for user in users:
             user_data.append({
@@ -1546,8 +1637,8 @@ class UserManagementView(APIView):
                 'username': user.username,
                 'email': user.email,
                 'full_name': f"{user.first_name} {user.last_name}",
-                'privilege': user.get_privilege_display(),  # Changed from get_Privilege_display
-                'department': user.get_department_display(),  # Added department display
+                'privilege': user.get_privilege_display(),
+                'department': user.get_department_display(),
                 'date_joined': user.date_joined,
                 'last_login': user.last_login,
                 'is_active': user.is_active,
@@ -1555,14 +1646,67 @@ class UserManagementView(APIView):
                 'subscription_count': user.course_subscriptions.filter(is_active=True).count()
             })
         
+        print('5555555555555555555555555555555555555555555555')
+        
         # User growth statistics
         user_growth = self.get_user_growth_stats()
+        print('èèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèè')
         
         return Response({
             'users': user_data,
             'user_growth': user_growth
         })
-
+    
+    def get_user_growth_stats(self):
+        """Calculate user growth statistics"""
+        now = timezone.now()
+        
+        # Get users registered in the last 30 days
+        thirty_days_ago = now - timedelta(days=30)
+        last_30_days = CustomUser.objects.filter(
+            date_joined__gte=thirty_days_ago
+        ).count()
+        
+        # Get users registered in the previous 30 days (for comparison)
+        sixty_days_ago = now - timedelta(days=60)
+        previous_30_days = CustomUser.objects.filter(
+            date_joined__gte=sixty_days_ago,
+            date_joined__lt=thirty_days_ago
+        ).count()
+        
+        # Calculate growth percentage
+        if previous_30_days > 0:
+            growth_percentage = ((last_30_days - previous_30_days) / previous_30_days) * 100
+        else:
+            growth_percentage = 100 if last_30_days > 0 else 0
+        
+        # Get daily user registrations for the last 7 days
+        daily_growth = []
+        for i in range(7):
+            day = now - timedelta(days=i)
+            day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            
+            daily_count = CustomUser.objects.filter(
+                date_joined__gte=day_start,
+                date_joined__lt=day_end
+            ).count()
+            
+            daily_growth.append({
+                'date': day_start.strftime('%Y-%m-%d'),
+                'count': daily_count
+            })
+        
+        # Reverse to get chronological order
+        daily_growth.reverse()
+        
+        return {
+            'total_users': CustomUser.objects.count(),
+            'new_users_last_30_days': last_30_days,
+            'growth_percentage': round(growth_percentage, 2),
+            'daily_growth': daily_growth,
+            'active_users': CustomUser.objects.filter(is_active=True).count(),
+        }
 class CourseManagementView(APIView):
     permission_classes = [IsSuperUser]
     
@@ -1598,105 +1742,109 @@ class SystemAnalyticsView(APIView):
     permission_classes = [IsSuperUser]
     
     def get(self, request):
-        # Course completion rates
-        print('*********************************************')
-        course_stats = []
-        for course in Course.objects.all():
-            subscriptions = course.course_subscriptions.filter(is_active=True)
-            print('++++++++++++++++++++++++++++*********************************************')
-            total_subscribers = subscriptions.count()
-            if total_subscribers > 0:
-                completed_count = subscriptions.filter(progress_percentage=100).count()
-            else:
-                completed_count = 0
-            completion_rate = round((completed_count / total_subscribers * 100) if total_subscribers > 0 else 0.2)
-            print('22222222222222222222*********************************************')
-            try:
-                # Try to get the average score
-                result = subscriptions.aggregate(avg=Avg('total_score'))
-                avg_value = result['avg']
-                
-                # Handle None case
-                if avg_value is None:
-                    average_score = 0.2
-                else:
-                    average_score = round(avg_value)
-                    
-
-                
-            except Exception as e:
-                # Handle any other errors
-                print('Error calculating average score:', e)
-                average_score = 0.2
-            course_stats.append({
-                'course_id': course.id,
-                'course_title': course.title_of_course,
-                'total_subscribers': total_subscribers,
-                'completed_count': completed_count,
-                'completion_rate': completion_rate,
-                'average_score': average_score
-            })
-        
-        # QCM performance
-        qcm_stats = QCMCompletion.objects.values('qcm__course_content__course__title_of_course').annotate(
-    total_attempts=Count('id'),
-    avg_score=Avg('best_score'),
-    pass_rate=ExpressionWrapper(
-        Avg(
-            Case(
-                When(is_passed=True, then=Value(1.0)),
-                default=Value(0.0),
-                output_field=FloatField()
-            )
-        ) * 100.0,
-        output_field=FloatField()
-    )
-)
-        # User engagement
-        active_users = CustomUser.objects.filter(
-            last_login__gte=timezone.now() - timedelta(days=30)
-        ).count()
-        
-        # Learning progress distribution
-        progress_distribution = self.get_progress_distribution()
-        
-        # Weekly activity data
-        weekly_activity = self.get_weekly_activity()
-        print('-sssss--------------------------------------------------------')
-        engagement_rate = (active_users / CustomUser.objects.count() * 100) if CustomUser.objects.count() > 0 else 0.2
-        print(round(engagement_rate))
         try:
-            print(list(qcm_stats))
-            print(CustomUser.objects.count())
-            print('engagement_rate', engagement_rate)
+            print("Starting analytics view...")
+            
+            # Course completion rates
+            course_stats = []
+            for course in Course.objects.all():
+                subscriptions = course.course_subscriptions.filter(is_active=True)
+                total_subscribers = subscriptions.count()
+                
+                # Calculate completion based on completed_qcms vs total_qcms
+                if total_subscribers > 0 and hasattr(course, 'total_qcms') and course.total_qcms > 0:
+                    completed_count = subscriptions.filter(completed_qcms=course.total_qcms).count()
+                else:
+                    completed_count = 0
+                
+                completion_rate = round((completed_count / total_subscribers * 100) if total_subscribers > 0 else 0)
+                
+                # Calculate average score
+                try:
+                    result = subscriptions.aggregate(avg=Avg('total_score'))
+                    avg_value = result['avg']
+                    average_score = round(avg_value) if avg_value is not None else 0
+                except Exception as e:
+                    print(f'Error calculating average score for course {course.id}: {e}')
+                    average_score = 0
+                
+                course_stats.append({
+                    'course_id': course.id,
+                    'course_title': course.title_of_course,
+                    'total_subscribers': total_subscribers,
+                    'completed_count': completed_count,
+                    'completion_rate': completion_rate,
+                    'average_score': average_score
+                })
+            
+            print("Course stats completed")
+            
+            # QCM performance - simplified
+            try:
+                qcm_stats = QCMCompletion.objects.values(
+                    'qcm__course_content__course__title_of_course'
+                ).annotate(
+                    total_attempts=Count('id'),
+                    avg_score=Avg('best_score'),
+                    pass_count=Count('id', filter=Q(is_passed=True))
+                )
+                
+                # Calculate pass rate manually
+                qcm_stats_list = []
+                for stat in qcm_stats:
+                    total = stat['total_attempts']
+                    passed = stat['pass_count']
+                    pass_rate = round((passed / total * 100) if total > 0 else 0, 2)
+                    
+                    qcm_stats_list.append({
+                        'course_title': stat['qcm__course_content__course__title_of_course'],
+                        'total_attempts': total,
+                        'avg_score': round(stat['avg_score'] or 0, 2),
+                        'pass_rate': pass_rate
+                    })
+                
+                print("QCM stats completed")
+            except Exception as e:
+                print(f"Error in QCM stats: {e}")
+                qcm_stats_list = []
+            
+            # User engagement
+            total_users = CustomUser.objects.count()
+            active_users = CustomUser.objects.filter(
+                last_login__gte=timezone.now() - timedelta(days=30)
+            ).count()
+            engagement_rate = round((active_users / total_users * 100) if total_users > 0 else 0)
+            
+            print("User engagement completed")
+            
+            # Learning progress distribution
+            progress_distribution = self.get_progress_distribution()
+            print("Progress distribution completed")
+            
+            # Weekly activity data
+            weekly_activity = self.get_weekly_activity()
+            print("Weekly activity completed")
+            
             return Response({
-            'course_statistics': course_stats,
-            'qcm_performance': list(qcm_stats),
-            'user_engagement': {
-                'active_users_30d': active_users,
-                'total_users': CustomUser.objects.count(),
-                'engagement_rate': round(engagement_rate)
-            },
-            'progress_distribution': progress_distribution,
-            'weekly_activity': weekly_activity
-        })
+                'course_statistics': course_stats,
+                'qcm_performance': qcm_stats_list,
+                'user_engagement': {
+                    'active_users_30d': active_users,
+                    'total_users': total_users,
+                    'engagement_rate': engagement_rate
+                },
+                'progress_distribution': progress_distribution,
+                'weekly_activity': weekly_activity
+            })
+            
         except Exception as e:
-            print(f"Database error: {e}")
-            # print('+++++++++++++++++++++++++')
-            # count = 0
-            # print(count)
-            # distribution.append({'range': label, 'count': count})
-        # return Response({
-        #     'course_statistics': course_stats,
-        #     'qcm_performance': list(qcm_stats),
-        #     'user_engagement': {
-        #         'active_users_30d': active_users,
-        #         'total_users': CustomUser.objects.count(),
-        #         'engagement_rate': engagement_rate
-        #     },
-        #     'progress_distribution': progress_distribution,
-        #     'weekly_activity': weekly_activity
-        # })
+            print(f"Error in SystemAnalyticsView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'error': f'Internal server error: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def get_progress_distribution(self):
         progress_ranges = [
@@ -1710,50 +1858,39 @@ class SystemAnalyticsView(APIView):
         
         distribution = []
         for label, (min_val, max_val) in progress_ranges:
-            print('----------------------++++++')
-        try:
-            count = Subscription.objects.filter(
-                is_active=True,
-                completed_qcms__gte=min_val,
-                completed_qcms__lte=max_val
-            ).count()
-            print('+++++++++++++++++++++++++')
-            print(count)
-        except Exception as e:
-            print(f"Database error: {e}")
-            print('+++++++++++++++++++++++++')
-            count = 0
-            print(count)
-            distribution.append({'range': label, 'count': count})
+            try:
+                count = Subscription.objects.filter(
+                    is_active=True,
+                    completed_qcms__gte=min_val,
+                    completed_qcms__lte=max_val
+                ).count()
+                distribution.append({'range': label, 'count': count})
+            except Exception as e:
+                print(f"Error in progress distribution for range {label}: {e}")
+                distribution.append({'range': label, 'count': 0})
         
         return distribution
     
     def get_weekly_activity(self):
-        # Last 12 weeks of activity
         twelve_weeks_ago = timezone.now() - timedelta(weeks=12)
-        try:
-
-            weekly_activity = (
-    QCMCompletion.objects  # Query the QCMCompletion model instead
-    .filter(last_attempt__gte=twelve_weeks_ago)
-    .annotate(week=TruncWeek('last_attempt'))
-    .values('week')
-    .annotate(active_users=Count('subscription__user', distinct=True))  # Count unique users through subscription
-    .order_by('week')
-)
-            # print(count)
-        except Exception as e:
-            print(f"Database error: {e}")
-            # print('+++++++++++++++++++++++++')
-            # count = 0
-            # print(count)
-            # distribution.append({'range': label, 'count': count})
         
-        return {
-            'labels': [item['week'].strftime('%Y-%m-%d') for item in weekly_activity],
-            'data': [item['active_users'] for item in weekly_activity]
-        }
-
+        try:
+            weekly_activity = (
+                QCMCompletion.objects
+                .filter(last_attempt__gte=twelve_weeks_ago)
+                .annotate(week=TruncWeek('last_attempt'))
+                .values('week')
+                .annotate(active_users=Count('user', distinct=True))
+                .order_by('week')
+            )
+            
+            return {
+                'labels': [item['week'].strftime('%Y-%m-%d') for item in weekly_activity],
+                'data': [item['active_users'] for item in weekly_activity]
+            }
+        except Exception as e:
+            print(f"Error in weekly activity: {e}")
+            return {'labels': [], 'data': []}
 class ContentManagementView(APIView):
     permission_classes = [IsSuperUser]
     
@@ -1808,15 +1945,54 @@ class ContentManagementView(APIView):
             'labels': [f"{item['title']} ({item['course__title_of_course']})" for item in popular_content],
             'data': [item['attempts_count'] for item in popular_content]
         }
-
+from django.db.models import Count, DateField
+from django.db.models.functions import TruncDate
 class UserDetailView(APIView):
     permission_classes = [IsSuperUser]
+    
+    def get_user_growth_stats(self):
+        """Calculate user growth statistics over time"""
+        
+        print('hello++++++++')
+        # Get user registration counts by date
+        growth_data = (
+            CustomUser.objects
+            .annotate(registration_date=TruncDate('date_joined', output_field=DateField()))
+            .values('registration_date')
+            .annotate(user_count=Count('id'))
+            .order_by('registration_date')
+        )
+        print('bay--------------------')
+        # Format the data
+        growth_stats = [
+            {
+                'date': item['registration_date'].isoformat() if item['registration_date'] else None,
+                'user_count': item['user_count']
+            }
+            for item in growth_data
+        ]
+        
+        return growth_stats
+    
+    def get_user_learning_stats(self, user):
+        """Calculate user learning statistics"""
+        # Implement your learning stats logic here
+        # This is just a placeholder - replace with your actual logic
+        return {
+            'total_courses_enrolled': user.course_subscriptions.filter(is_active=True).count(),
+            'total_courses_completed': user.course_subscriptions.filter(is_active=True, progress_percentage=100).count(),
+            'average_score': user.course_subscriptions.filter(is_active=True).aggregate(
+                avg_score=Avg('score')
+            )['avg_score'] or 0,
+            'total_learning_time': 0  # Add your logic for calculating learning time
+        }
     
     def get(self, request, user_id):
         user = get_object_or_404(CustomUser, id=user_id)
         
         # User learning statistics
         learning_stats = self.get_user_learning_stats(user)
+        user_growth = self.get_user_growth_stats()  # This will now work
         
         user_data = {
             'id': user.id,
@@ -1824,8 +2000,10 @@ class UserDetailView(APIView):
             'email': user.email,
             'first_name': user.first_name,
             'last_name': user.last_name,
-            'privilege': user.get_privilege_display(),  # Changed from get_Privilege_display
-            'department': user.get_department_display(),  # Added department display
+            'privilege': user.privilege,
+            'privilege_display': user.get_privilege_display(),
+            'department': user.department,
+            'department_display': user.get_department_display(),
             'date_joined': user.date_joined,
             'last_login': user.last_login,
             'is_active': user.is_active,
@@ -1860,7 +2038,8 @@ class UserDetailView(APIView):
                 }
                 for comp in user.qcmcompletion_set.all()
             ],
-            'learning_stats': learning_stats
+            'learning_stats': learning_stats,
+            'user_growth_stats': user_growth  # Add growth stats to response
         }
         
         return Response({'user': user_data})
@@ -1922,3 +2101,205 @@ class SystemHealthView(APIView):
             'labels': ['Auth', 'Courses', 'Content', 'QCM'],
             'data': [120, 250, 180, 300]  # response times in ms
         }
+    
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q
+from .models import Course, Subscription
+from .serializers import CourseSerializer
+
+class CourseViewSet(viewsets.ModelViewSet):
+    queryset = Course.objects.all()
+    serializer_class = CourseSerializer
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['get'], url_path='my-courses')
+    def my_courses(self, request):
+        """Get courses the user is subscribed to"""
+        try:
+            # Get all active subscriptions for the user
+            subscribed_course_ids = Subscription.objects.filter(
+                user=request.user,
+                is_active=True
+            ).values_list('course_id', flat=True)
+            
+            # Get the actual course objects
+            courses = Course.objects.filter(
+                id__in=subscribed_course_ids
+            ).select_related('creator').order_by('-created_at')
+            
+            # Serialize the courses
+            serializer = self.get_serializer(courses, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch subscribed courses: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'], url_path='recommended')
+    def recommended_courses(self, request):
+        """Get recommended courses based on user's department"""
+        try:
+            user_department = request.user.department
+            
+            if not user_department:
+                # If user has no department, return all courses
+                courses = Course.objects.select_related('creator').order_by('-created_at')
+            else:
+                # Get courses from users in the same department or courses targeted to this department
+                courses = Course.objects.select_related('creator').filter(
+                    Q(creator__department=user_department) | 
+                    Q(target_departments__icontains=user_department) |
+                    Q(target_departments__isnull=True) |
+                    Q(target_departments='')
+                ).distinct().order_by('-created_at')
+            
+            # Get user's subscribed course IDs to mark them
+            subscribed_course_ids = set(
+                Subscription.objects.filter(
+                    user=request.user,
+                    is_active=True
+                ).values_list('course_id', flat=True)
+            )
+            
+            # Serialize the courses and add subscription status
+            serializer = self.get_serializer(courses, many=True)
+            
+            # Add is_subscribed field to each course
+            for course_data in serializer.data:
+                course_data['is_subscribed'] = course_data['id'] in subscribed_course_ids
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch recommended courses: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'], url_path='by-department')
+    def courses_by_department(self, request):
+        """Get all courses organized by department"""
+        try:
+            # Get the department parameter from query string
+            department = request.query_params.get('department', None)
+            
+            if department:
+                # Filter courses by specific department
+                courses = Course.objects.select_related('creator').filter(
+                    Q(creator__department=department) |
+                    Q(target_departments__icontains=department)
+                ).distinct().order_by('-created_at')
+            else:
+                # Return all courses organized by creator's department
+                courses = Course.objects.select_related('creator').order_by(
+                    'creator__department', '-created_at'
+                )
+            
+            # Get user's subscribed course IDs
+            subscribed_course_ids = set(
+                Subscription.objects.filter(
+                    user=request.user,
+                    is_active=True
+                ).values_list('course_id', flat=True)
+            )
+            
+            # Serialize and add subscription status
+            serializer = self.get_serializer(courses, many=True)
+            
+            for course_data in serializer.data:
+                course_data['is_subscribed'] = course_data['id'] in subscribed_course_ids
+            
+            # If no specific department requested, group by department
+            if not department:
+                courses_by_dept = {}
+                for course in serializer.data:
+                    dept = course.get('creator_department', 'Unknown')
+                    if dept not in courses_by_dept:
+                        courses_by_dept[dept] = []
+                    courses_by_dept[dept].append(course)
+                
+                return Response(courses_by_dept, status=status.HTTP_200_OK)
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch courses by department: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+# Alternative class-based views if you prefer
+from rest_framework.views import APIView
+
+class MyCoursesView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get courses the user is subscribed to"""
+        try:
+            # Get all active subscriptions for the user
+            subscriptions = Subscription.objects.select_related('course', 'course__creator').filter(
+                user=request.user,
+                is_active=True
+            ).order_by('-course__created_at')
+            
+            # Extract courses from subscriptions
+            courses = [subscription.course for subscription in subscriptions]
+            
+            # Serialize the courses
+            serializer = CourseSerializer(courses, many=True, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch subscribed courses: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class RecommendedCoursesView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get recommended courses based on user's department"""
+        try:
+            user_department = request.user.department
+            
+            if not user_department:
+                # If user has no department, return recent courses
+                courses = Course.objects.select_related('creator').order_by('-created_at')[:20]
+            else:
+                # Get courses from users in the same department
+                courses = Course.objects.select_related('creator').filter(
+                    creator__department=user_department
+                ).order_by('-created_at')
+                
+                # If no courses in user's department, get all recent courses
+                if not courses.exists():
+                    courses = Course.objects.select_related('creator').order_by('-created_at')[:20]
+            
+            # Get user's subscribed course IDs
+            subscribed_course_ids = set(
+                Subscription.objects.filter(
+                    user=request.user,
+                    is_active=True
+                ).values_list('course_id', flat=True)
+            )
+            
+            # Serialize the courses
+            serializer = CourseSerializer(courses, many=True, context={'request': request})
+            
+            # Add is_subscribed field to each course
+            for course_data in serializer.data:
+                course_data['is_subscribed'] = course_data['id'] in subscribed_course_ids
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch recommended courses: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

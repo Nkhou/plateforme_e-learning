@@ -3,8 +3,11 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
-from .models import Course, Subscription, CourseContent, QCM, QCMCompletion, QCMAttempt
+from django.utils import timezone
+from django.core.exceptions import ObjectDoesNotExist
+from .models import Course, Subscription, CourseContent, QCM, QCMCompletion, QCMAttempt, QCMOption
 from .serializers import CourseSerializer, SubscriptionWithProgressSerializer, QCMCompletionSerializer
+
 
 class CourseConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -14,13 +17,13 @@ class CourseConsumer(AsyncWebsocketConsumer):
         # Authenticate user
         user = self.scope["user"]
         if isinstance(user, AnonymousUser):
-            await self.close()
+            await self.close(code=4001)  # Custom close code for unauthorized
             return
         
         # Check if user has access to this course
         has_access = await self.check_course_access(user, self.course_id)
         if not has_access:
-            await self.close()
+            await self.close(code=4003)  # Custom close code for access denied
             return
         
         # Join course group
@@ -40,40 +43,71 @@ class CourseConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         # Leave course group
-        await self.channel_layer.group_discard(
-            self.course_group_name,
-            self.channel_name
-        )
+        if hasattr(self, 'course_group_name'):
+            await self.channel_layer.group_discard(
+                self.course_group_name,
+                self.channel_name
+            )
 
-    # Receive message from WebSocket
     async def receive(self, text_data):
-        text_data_json = json.loads(text_data)
-        message_type = text_data_json['type']
-        user = self.scope["user"]
-        
-        if message_type == 'content_completed':
-            content_id = text_data_json['content_id']
-            await self.handle_content_completed(user, content_id)
+        try:
+            text_data_json = json.loads(text_data)
+            message_type = text_data_json['type']
+            user = self.scope["user"]
             
-        elif message_type == 'qcm_submission':
-            content_id = text_data_json['content_id']
-            selected_options = text_data_json['selected_options']
-            time_taken = text_data_json.get('time_taken', 0)
-            await self.handle_qcm_submission(user, content_id, selected_options, time_taken)
-            
-        elif message_type == 'progress_request':
-            progress_data = await self.get_user_progress(user, self.course_id)
+            if message_type == 'content_completed':
+                content_id = text_data_json['content_id']
+                await self.handle_content_completed(user, content_id)
+                
+            elif message_type == 'qcm_submission':
+                content_id = text_data_json['content_id']
+                selected_options = text_data_json['selected_options']
+                time_taken = text_data_json.get('time_taken', 0)
+                await self.handle_qcm_submission(user, content_id, selected_options, time_taken)
+                
+            elif message_type == 'progress_request':
+                progress_data = await self.get_user_progress(user, self.course_id)
+                await self.send(text_data=json.dumps({
+                    'type': 'progress_update',
+                    'data': progress_data
+                }))
+            elif message_type == 'content_created':
+                # Only allow creators to send content creation notifications
+                if await self.is_course_creator(user, self.course_id):
+                    content_data = text_data_json['content']
+                    await self.handle_content_created(content_data)
+                else:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Permission denied'
+                    }))
+                    
+        except json.JSONDecodeError:
             await self.send(text_data=json.dumps({
-                'type': 'progress_update',
-                'data': progress_data
+                'type': 'error',
+                'message': 'Invalid JSON format'
             }))
-        elif message_type == 'content_created':
-            # Handle notification when new content is created
-            content_data = text_data_json['content']
-            await self.handle_content_created(content_data)
+        except KeyError as e:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': f'Missing required field: {str(e)}'
+            }))
+        except Exception as e:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Internal server error'
+            }))
 
-    # Handle content completion
     async def handle_content_completed(self, user, content_id):
+        # Validate that content belongs to the course
+        content_belongs = await self.validate_content_belongs_to_course(content_id, self.course_id)
+        if not content_belongs:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Content does not belong to this course'
+            }))
+            return
+            
         result = await self.mark_content_completed(user, self.course_id, content_id)
         
         if 'error' in result:
@@ -99,8 +133,16 @@ class CourseConsumer(AsyncWebsocketConsumer):
                 }
             )
 
-    # Handle QCM submission
     async def handle_qcm_submission(self, user, content_id, selected_option_ids, time_taken):
+        # Validate that content belongs to the course
+        content_belongs = await self.validate_content_belongs_to_course(content_id, self.course_id)
+        if not content_belongs:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Content does not belong to this course'
+            }))
+            return
+            
         result = await self.submit_qcm_answer(
             user, self.course_id, content_id, selected_option_ids, time_taken
         )
@@ -126,7 +168,7 @@ class CourseConsumer(AsyncWebsocketConsumer):
                     'data': leaderboard_data
                 }
             )
-    # Handle content creation notification
+
     async def handle_content_created(self, content_data):
         # Broadcast new content to all users in the course
         await self.channel_layer.group_send(
@@ -136,7 +178,7 @@ class CourseConsumer(AsyncWebsocketConsumer):
                 'data': content_data
             }
         )
-    # Handler for group messages
+
     async def leaderboard_update(self, event):
         # Send leaderboard update to WebSocket
         await self.send(text_data=json.dumps({
@@ -144,65 +186,103 @@ class CourseConsumer(AsyncWebsocketConsumer):
             'data': event['data']
         }))
 
+    async def content_created(self, event):
+        # Send content created notification to WebSocket
+        await self.send(text_data=json.dumps({
+            'type': 'content_created',
+            'data': event['data']
+        }))
+
     # Database operations
     @database_sync_to_async
     def check_course_access(self, user, course_id):
         try:
-            course = Course.objects.get(id=course_id)
-            subscription = Subscription.objects.filter(
+            return Subscription.objects.filter(
                 user=user, 
-                course=course, 
+                course_id=course_id, 
                 is_active=True
             ).exists()
-            return subscription
-        except Course.DoesNotExist:
+        except Exception:
+            return False
+
+    @database_sync_to_async
+    def is_course_creator(self, user, course_id):
+        try:
+            course = Course.objects.get(id=course_id)
+            return course.creator == user
+        except ObjectDoesNotExist:
+            return False
+
+    @database_sync_to_async
+    def validate_content_belongs_to_course(self, content_id, course_id):
+        try:
+            return CourseContent.objects.filter(
+                id=content_id, 
+                course_id=course_id
+            ).exists()
+        except Exception:
             return False
 
     @database_sync_to_async
     def get_user_progress(self, user, course_id):
         try:
-            course = Course.objects.get(id=course_id)
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            subscription = Subscription.objects.select_related('course').get(
+                user=user, 
+                course_id=course_id, 
+                is_active=True
+            )
             serializer = SubscriptionWithProgressSerializer(subscription)
             return serializer.data
-        except (Course.DoesNotExist, Subscription.DoesNotExist):
+        except ObjectDoesNotExist:
             return {'error': 'Subscription not found'}
 
     @database_sync_to_async
     def mark_content_completed(self, user, course_id, content_id):
         try:
-            course = Course.objects.get(id=course_id)
-            content = CourseContent.objects.get(id=content_id, course=course)
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            subscription = Subscription.objects.select_related('course').get(
+                user=user, 
+                course_id=course_id, 
+                is_active=True
+            )
             
-            # Add content to completed contents
-            subscription.completed_contents.add(content)
+            content = CourseContent.objects.get(id=content_id, course_id=course_id)
             
-            # Update progress percentage
-            total_contents = course.contents.count()
-            completed_count = subscription.completed_contents.count()
-            if total_contents > 0:
-                subscription.progress_percentage = (completed_count / total_contents) * 100
-            
-            subscription.save()
+            # Add content to completed contents if not already
+            if not subscription.completed_contents.filter(id=content_id).exists():
+                subscription.completed_contents.add(content)
+                
+                # Update progress percentage
+                total_contents = subscription.course.contents.count()
+                completed_count = subscription.completed_contents.count()
+                if total_contents > 0:
+                    subscription.progress_percentage = (completed_count / total_contents) * 100
+                
+                subscription.save()
             
             return {
                 'progress': subscription.progress_percentage
             }
-        except (Course.DoesNotExist, CourseContent.DoesNotExist, Subscription.DoesNotExist):
+        except ObjectDoesNotExist:
             return {'error': 'Content or subscription not found'}
 
     @database_sync_to_async
     def submit_qcm_answer(self, user, course_id, content_id, selected_option_ids, time_taken):
         try:
-            course = Course.objects.get(id=course_id)
-            content = CourseContent.objects.get(id=content_id, course=course)
+            subscription = Subscription.objects.select_related('course').get(
+                user=user, 
+                course_id=course_id, 
+                is_active=True
+            )
             
-            if content.content_type.name != 'QCM':
+            content = CourseContent.objects.select_related('qcm').get(
+                id=content_id, 
+                course_id=course_id
+            )
+            
+            if not hasattr(content, 'qcm') or content.qcm is None:
                 return {'error': 'Content is not a QCM'}
             
             qcm = content.qcm
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
             
             # Check if user can attempt
             completion, created = QCMCompletion.objects.get_or_create(
@@ -215,7 +295,6 @@ class CourseConsumer(AsyncWebsocketConsumer):
             
             # Create new attempt
             attempt_number = completion.attempts_count + 1
-            from django.utils import timezone
             attempt = QCMAttempt.objects.create(
                 user=user,
                 qcm=qcm,
@@ -224,8 +303,10 @@ class CourseConsumer(AsyncWebsocketConsumer):
             )
             
             # Add selected options
-            from .models import QCMOption
-            selected_options = QCMOption.objects.filter(id__in=selected_option_ids, qcm=qcm)
+            selected_options = QCMOption.objects.filter(
+                id__in=selected_option_ids, 
+                qcm=qcm
+            )
             attempt.selected_options.set(selected_options)
             
             # Calculate score
@@ -253,7 +334,7 @@ class CourseConsumer(AsyncWebsocketConsumer):
                 'remaining_attempts': qcm.max_attempts - attempt_number,
                 'total_score': subscription.total_score
             }
-        except (Course.DoesNotExist, CourseContent.DoesNotExist, Subscription.DoesNotExist):
+        except ObjectDoesNotExist:
             return {'error': 'Not found'}
 
     @database_sync_to_async
@@ -262,9 +343,9 @@ class CourseConsumer(AsyncWebsocketConsumer):
             course = Course.objects.get(id=course_id)
             
             # Get top subscribers by score
-            leaderboard = course.course_subscriptions.filter(
+            leaderboard = course.course_subscriptions.select_related('user').filter(
                 is_active=True
-            ).order_by('-score', '-progress_percentage')[:10]
+            ).order_by('-total_score', '-progress_percentage')[:10]
             
             serializer = SubscriptionWithProgressSerializer(leaderboard, many=True)
             
@@ -272,5 +353,5 @@ class CourseConsumer(AsyncWebsocketConsumer):
                 'course': course.title_of_course,
                 'leaderboard': serializer.data
             }
-        except Course.DoesNotExist:
+        except ObjectDoesNotExist:
             return {'error': 'Course not found'}

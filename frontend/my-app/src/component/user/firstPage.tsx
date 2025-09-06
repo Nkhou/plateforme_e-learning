@@ -1,20 +1,38 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useState } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { useNavigate } from 'react-router-dom';
-import  type {User} from '../../layout';
+// import  type {User} from '../../layout';
 import api from '../../api/api';
+export interface User {
+  id:number
+  email: string;
+  username: string;
+  privilege: string;
+}
+// type Props = {
+//   user: User;
+// };
 
-type Props = {
-  user: User;
-};
-const FirstPage: React.FC<Props> = ({ user }) => {
+const FirstPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [user, setUser] = useState<User | null>(null);
   
   const navigate = useNavigate();
-
+useEffect(() => {
+    if (user) {
+      console.log("User state updated:", user);
+      console.log("Privilege:", user.privilege);
+      
+      if (user.privilege === 'A') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+    }
+  }, [user, navigate]);
   const handleEmail = (event: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(event.target.value);
   };
@@ -35,20 +53,22 @@ const FirstPage: React.FC<Props> = ({ user }) => {
       
       console.log("Login successful - Full response:", response);
       console.log("Response data:", response.data);
-      
+      setUser(response.data.user);
+      console.log('userrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr', user);
+      console.log('user', response.data.user);
       // Store tokens
-      if (response.data.access) {
-        localStorage.setItem('accessToken', response.data.access);
-        api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access}`;
-        console.log("Access token stored");
-      }
-      if (response.data.refresh) {
-        localStorage.setItem('refreshToken', response.data.refresh);
-        console.log("Refresh token stored");
-      }
+      // if (response.data.access) {
+      //   // localStorage.setItem('accessToken', response.data.access);
+      //   // api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access}`;
+      //   console.log("Access token stored");
+      // }
+      // if (response.data.refresh) {
+      //   // localStorage.setItem('refreshToken', response.data.refresh);
+      //   console.log("Refresh token stored");
+      // }
       
-      console.log("Navigating to dashboard...");
-      if ((user?.Privilege === 'A'  ||  user?.Privilege ===	'Admin'))
+      console.log("Navigating to dashboard...", user?.privilege);
+      if ((user?.privilege === 'A'  ||  user?.privilege ===	'Admin'))
       {
         navigate('/admin/');
       }

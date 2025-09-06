@@ -6,16 +6,18 @@ from .views import  CourseContentsView
 from . import views
 from .views import (
     AdminDashboardView, UserManagementView, CourseManagementView,
-    SystemAnalyticsView, ContentManagementView, UserDetailView
+    SystemAnalyticsView, ContentManagementView, UserDetailView, CourseSubscribersListViewSet, MySubscriptions
 )
 # from .admin_dashboard.views import FinancialReportsView, SystemHealthView
 from .views import (
     AdminDashboardView, UserManagementView, CourseManagementView,
     SystemAnalyticsView, ContentManagementView, UserDetailView,
-     SystemHealthView
+     SystemHealthView,RecommendedCoursesView
 )
 # Create router for CourseViewSet
 router = DefaultRouter()
+router.register(r'courses/(?P<pk>\d+)/subscribers', CourseSubscribersListViewSet, basename='course-subscribers')
+# router.register(r'courses', views.CourseViewSet, basename='courses')
 urlpatterns = [
     path('user/<int:pk>/', UserView.as_view(), name='user-detail'),
     # AUTH
@@ -34,7 +36,7 @@ urlpatterns = [
     path('courses/<int:pk>/update-image/', views.CourseImageUpdate.as_view(), name='update-course-image'),
      # Course statistics
     path('courses/<int:pk>/statistics/', views.CourseStatisticsView.as_view(), name='course-statistics'),
-    path('courses/<int:pk>/subscribers/', views.CourseSubscribersListView.as_view(), name='course-subscribers'),
+    path('courses/mysubscriptions/', views.MySubscriptions.as_view(), name='course-subscribers'),
     path('courses/<int:pk>/progress-overview/', views.CourseProgressOverviewView.as_view(), name='course-progress-overview'),
     path('courses/<int:pk>/qcm-performance/', views.QCMPerformanceView.as_view(), name='qcm-performance'),
     path('courses/<int:pk>/enrollment-trend/', views.EnrollmentTrendView.as_view(), name='enrollment-trend'),
@@ -45,15 +47,7 @@ urlpatterns = [
     path('courses/<int:pk>/contents/video/', views.CreateVideoContentView.as_view(), name='create-video-content'),
     path('courses/<int:pk>/contents/qcm/', views.CreateQCMContentView.as_view(), name='create-qcm-content'),
     
-    # My courses
-    # path('courses/my-courses/', views.MyCourses.as_view(), name='my-courses'),
-    # Content endpoints
-    # path('courses/<int:pk>/contents/', views.CourseContents.as_view(), name='course-contents'),
-    # path('courses/<int:pk>/add-content/', views.AddCourseContent.as_view(), name='add-content'),
-    # path('courses/<int:pk>/add-video/', views.AddVideoContent.as_view(), name='add-video'),
-    # path('courses/<int:pk>/add-pdf/', views.AddPDFContent.as_view(), name='add-pdf'),
-    # path('courses/<int:pk>/add-qcm/', views.AddQCMContent.as_view(), name='add-qcm'),
-    
+    path('courses/recommended/', RecommendedCoursesView.as_view(), name='recommended-courses'),    
     # Subscription endpoints
     path('courses/<int:pk>/subscribers/', views.CourseSubscribers.as_view(), name='course-subscribers'),
     path('courses/<int:pk>/subscribe/', views.SubscribeToCourse.as_view(), name='subscribe'),
@@ -61,13 +55,11 @@ urlpatterns = [
     path('courses/<int:pk>/is-subscribed/', views.CheckSubscription.as_view(), name='is-subscribed'),
     path('courses/my-subscriptions/', views.MySubscriptions.as_view(), name='my-subscriptions'),
     path('courses/<int:pk>/subscription-stats/', views.SubscriptionStats.as_view(), name='subscription-stats'),
-    
     # Progress endpoints
     path('courses/<int:pk>/update-progress/', views.UpdateProgress.as_view(), name='update-progress'),
     path('courses/<int:pk>/mark-completed/', views.MarkContentCompleted.as_view(), name='mark-completed'),
     path('courses/<int:pk>/leaderboard/', views.CourseLeaderboard.as_view(), name='leaderboard'),
     path('courses/<int:pk>/my-progress/', views.MyProgress.as_view(), name='my-progress'),
-    
     # QCM endpoints
     path('courses/<int:pk>/submit-qcm/', views.SubmitQCM.as_view(), name='submit-qcm'),
     path('courses/<int:pk>/qcm-progress/', views.QCMProgress.as_view(), name='qcm-progress'),

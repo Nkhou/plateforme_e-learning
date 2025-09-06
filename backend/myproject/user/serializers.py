@@ -92,39 +92,25 @@ class CourseContentSerializer(serializers.ModelSerializer):
                  'video_content', 'pdf_content', 'qcm']
 
 # Course Serializer
+from rest_framework import serializers
+from django.urls import reverse
+from django.conf import settings
+
 class CourseSerializer(serializers.ModelSerializer):
-    creator_username = serializers.CharField(source='creator.username', read_only=True)
-    creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
-    creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
-    department_display = serializers.CharField(source='get_department_display', read_only=True)
-    
-    # Add absolute image URL field
     image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Course
-        fields = [
-            'id',
-            'title_of_course', 
-            'description', 
-            'department',
-            'department_display',
-            'image',  # Original image field
-            'image_url',  # Absolute URL field
-            'creator_username',
-            'creator_first_name', 
-            'creator_last_name',
-            'created_at',
-            'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        fields = ['id', 'title_of_course', 'description', 'image_url', 'department', 'created_at']
     
     def get_image_url(self, obj):
         if obj.image:
             request = self.context.get('request')
             if request:
+                # This will return absolute URLs like http://localhost:8000/media/...
                 return request.build_absolute_uri(obj.image.url)
-            return obj.image.url
+            # Fallback for when request is not available
+            return f"{settings.BASE_URL}{obj.image.url}" if hasattr(settings, 'BASE_URL') else obj.image.url
         return None
 
 # Course Create Serializer

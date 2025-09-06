@@ -1,8 +1,6 @@
-// AuthGuard.tsx
+
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
-// import api from './api/api';
 import api from './api/api';
 
 interface AuthGuardProps {
@@ -14,7 +12,7 @@ export interface User {
   firstname: string;
   lastName: string;
   email: string;
-  Privilege: string;
+  privilege: string;
 }
 
 const AuthGuard = ({ children }: AuthGuardProps) => {
@@ -32,14 +30,14 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
       .then(res => {
         const auth = res.data.authenticated;
         setIsAuthenticated(auth);
-        // console.log('data: ', res.data.user);
+        console.log('data: ', res.data.user);
         setUser(res.data.user);
         setLoading(false);
-        // console.log("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", user?.username)
+        console.log("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", user?.username, user?.privilege)
         if (!auth && location.pathname !== '/') {
           navigate('/');
         } 
-        else if (auth && location.pathname === '/' && (user?.Privilege === 'A'  ||  user?.Privilege ===	'Admin')) {
+        else if (auth && location.pathname === '/' && (user?.privilege === 'A'  ||  user?.privilege ===	'Admin')) {
           navigate('/admin');
         }
         else if (auth && location.pathname === '/') {
@@ -68,7 +66,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           <div className="p-3">
             <h5 className="text-white">platform</h5>
             <ul className="nav flex-column">
-              {user?.Privilege != 'A' && (
+              {user?.privilege != 'A' && (
                 <>
                   <li className="nav-item">
                     <a href="/dashboard" className="nav-link text-white">
@@ -83,7 +81,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 </>
               )
               }
-              {(user?.Privilege === 'A'  ||  user?.Privilege ===	'Admin')&& (
+              {(user?.privilege === 'A'  ||  user?.privilege ===	'Admin')&& (
                 <>
                   <li className="nav-item">
                     <a href="/admin" className="nav-link text-white">

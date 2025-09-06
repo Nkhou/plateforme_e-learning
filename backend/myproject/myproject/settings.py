@@ -114,7 +114,7 @@ if DEBUG:
         "http://frontend:3000",
     ]
 
-
+BASE_URL = 'http://localhost:8000'  # For development
 
 
 
@@ -224,12 +224,23 @@ else:
         }
     }
 
+REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')  # Get password from environment
+REDIS_DB = int(os.environ.get('REDIS_DB', 0))
+
+# Build Redis connection URL with authentication
+if REDIS_PASSWORD:
+    REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+else:
+    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 # Channels Configuration
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [(os.environ.get('REDIS_HOST', 'redis'), 6379)], 
+            "hosts": [REDIS_URL],  # Use the properly formatted URL with auth
+            "prefix": "course_app",
         },
     },
 }
@@ -400,27 +411,20 @@ MEDIA_SUBFOLDERS = {
     'pdfs': 'pdfs/%y/%m/%d/',
 }
 
-# Redis Configuration
-REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
-REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
-REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')  # Get password from environment
-REDIS_DB = int(os.environ.get('REDIS_DB', 0))
-
-# Build Redis connection URL
-if REDIS_PASSWORD:
-    REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
-else:
-    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 
 # Channels Configuration
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [REDIS_URL],
-        },
-    },
-}
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             "hosts": [{
+#                 "address": f"redis://:{REDIS_PASSWORD}@redis:6379/0",
+#                 "timeout": 30,
+#             }],
+#             "prefix": "course_app",
+#         },
+#     },
+# }
 
 # Celery Configuration
 CELERY_BROKER_URL = REDIS_URL
