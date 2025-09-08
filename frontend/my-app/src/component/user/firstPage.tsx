@@ -28,7 +28,10 @@ useEffect(() => {
       
       if (user.privilege === 'A') {
         navigate('/admin');
-      } else {
+      }else if (user.privilege === 'F'){
+          navigate('/cours');
+      }
+       else {
         navigate('/dashboard');
       }
     }

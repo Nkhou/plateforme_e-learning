@@ -1,5 +1,5 @@
 // CourseDetail.tsx
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState} from 'react';
 import api from '../../api/api';
 
 interface CourseDetailProps {
@@ -10,7 +10,7 @@ interface CourseDetailProps {
 
 interface CourseDetailData {
   id: number;
-  title_of_course: string;
+  title: string;
   description: string;
   image: string;
   creator_username: string;
@@ -113,7 +113,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
         setCourse(courseResponse.data);
         setContents(contentsResponse.data);
-        console.log('courseResponse', courseResponse)
+        console.log('courseResponse', courseResponse.data)
         setSubscription(subscriptionResponse.data);
         // console.log(s)
 
@@ -253,7 +253,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     if (!activeContent) return null;
 
     return (
-      <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="modale show d-block" tabIndex={-1}>
         <div className="modal-dialog modal-lg">
           <div className="modal-content">
             <div className="modal-header">
@@ -380,36 +380,41 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
   return (
     <div className="container mt-4">
-      <div className="row align-items-start">
-        {/* Left: Image + Course Details */}
-        <div className="col-md-4 mb-4 text-center text-md-start">
-          <div className="mx-auto" style={{ maxWidth: '250px' }}>
-            <img
-              src={getImageUrl(course.image)}
-              alt={course.title_of_course}
-              style={{
-                width: '100%',
-                height: 'auto',
-                objectFit: 'cover',
-                borderRadius: '8px',
-                marginBottom: '1rem'
-              }}
-            />
+            <div className="row align-items-start">
+                {/* Left: Image + Course Details */}
 
-            <div className="card">
-              <div className="card-body text-start">
-                <h5 className="card-title">Course Details</h5>
-                <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
-                <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
-                <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
+                {/* Center: Title + Description + Course Contents */}
+                <div className="col-md-12">
+                    <div className="text-center mb-4">
+                        <h1 className="mb-3">{course.title}</h1>
+                        <p className="lead">{course.description}</p>
+                    </div>
 
-                {/* Subscription Status */}
-                <div className="mb-3">
-                  <strong>Status: </strong>
-                  <span className={`badge ${course.is_subscribed ? 'bg-success' : 'bg-secondary'}`}>
-                    {course.is_subscribed ? 'Subscribed' : 'Not Subscribed'}
-                  </span>
-                </div>
+                    <div className="col-md-4 mb-4 text-center text-md-start">
+
+                        <div className="card">
+                            <div className="mx-auto" style={{ maxWidth: '250px' }}>
+                                <img
+                                    src={getImageUrl(course.image)}
+                                    alt={course.title}
+                                    // onError={handleImageError}
+                                    style={{
+                                        width: '100%',
+                                        height: 'auto',
+                                        objectFit: 'cover',
+                                        borderRadius: '8px',
+                                        marginBottom: '1rem'
+                                    }}
+                                />
+                                <div className="card-body text-start">
+                                    <h5 className="card-title">Course Details</h5>
+                                    <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
+                                    <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
+                                    <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
+                                </div>
+                            {/* </div>
+                        </div>
+                    </div> */}
 
                 {/* Progress Bar */}
                 {course.is_subscribed && (
@@ -442,6 +447,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   ) : (
                     <button
                       className="btn btn-primary"
+                      style={{ background: 'rgba(5, 44, 101, 0.9)' }}
                       onClick={handleSubscribe}
                     >
                       Subscribe to Course
@@ -454,11 +460,11 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         </div>
 
         {/* Center: Title + Description + Course Contents */}
-        <div className="col-md-8">
-          <div className="text-center mb-4">
-            <h1 className="mb-3">{course.title_of_course}</h1>
+        <div className="col-md-12">
+          {/* <div className="text-center mb-12">
+            <h2 className="mb-3">{course.title}</h2>
             <p className="lead">{course.description}</p>
-          </div>
+          </div> */}
 
           {/* Course Contents Section */}
           <div className="card">

@@ -9,7 +9,7 @@ interface AdminStats {
     recent_users: number;
     recent_courses: number;
   };
-  user_distribution: Array<{ Privilege: string; count: number }>;
+  user_distribution: Array<{ privilege: string; count: number }>;
   user_registration_chart: {
     labels: string[];
     data: number[];
@@ -99,7 +99,7 @@ const OverviewStatistics: React.FC<OverviewStatisticsProps> = ({ stats }) => {
             <div className="card-body" style={{ height: '300px' }}>
               <Doughnut
                 data={{
-                  labels: stats.user_distribution.map(item => item.Privilege),
+                  labels: stats.user_distribution.map(item => item.privilege),
                   datasets: [
                     {
                       data: stats.user_distribution.map(item => item.count),

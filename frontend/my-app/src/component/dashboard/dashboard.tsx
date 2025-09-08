@@ -45,7 +45,7 @@ const Dashboard = () => {
             // Fetch recommended courses by department
             console.log('Fetching recommended courses from:', `${api.defaults.baseURL}/courses/recommended/`);
             const recommendedRes = await api.get('courses/recommended/');
-            console.log('Recommended courses response:', recommendedRes.data);
+            console.log('++++++++++++++++++++++++++++++Recommended courses response:', recommendedRes.data);
 
             setMyCourses(myCoursesRes.data);
             setRecommendedCourses(recommendedRes.data);

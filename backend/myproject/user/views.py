@@ -874,7 +874,6 @@ class UnsubscribeFromCourse(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-
 class CheckSubscription(APIView):
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)
@@ -885,16 +884,73 @@ class CheckSubscription(APIView):
             course=course, 
             is_active=True
         ).exists()
-        if is_subscribed:
-            CourseDetailData = Subscription.objects.filter(
-            user=user, 
-            course=course, 
-            is_active=True
-        ).get()
-
         
-        return Response({'is_subscribed': is_subscribed})
+        # Initialize response data with basic course info
+        response_data = {
+            'is_subscribed': is_subscribed,
+            'id': course.id,
+            'title': course.title_of_course,  # Changed from CourseDetailData.title
+            'description': '',  # Default empty since course doesn't have caption
+            'order': 0,  # Default order
+            'content_type_name': '',  # Default empty
+            'is_completed': False,
+            'is_locked': not is_subscribed,  # Locked if not subscribed
+            'pdf_content': None,
+            'video_content': None,
+            'qcm': None,
+            'created_at': course.created_at.isoformat()
+        }
+        
+        # Only add subscription-specific data if user is subscribed
+        if is_subscribed:
+            subscription = Subscription.objects.get(
+                user=user, 
+                course=course, 
+                is_active=True
+            )
 
+
+            print('here+++++++++++++++++++++++++++++++++++++++++++')
+            # You might want to get the first course content or specific content
+            # For now, I'm keeping the structure but you need to adjust this part
+            # based on what CourseDetailData should actually represent
+            
+            # If you want to return the first course content:
+            first_content = course.contents.first()
+            if first_content:
+                print('oppp++++++++++++++++++++++++++')
+                response_data.update({
+                    'id': first_content.id,
+                    'title': first_content.title,
+                    'description': first_content.caption,
+                    'order': first_content.order,
+                    'content_type_name': first_content.content_type.name,
+                })
+                
+                # Add content-specific data
+                if hasattr(first_content, 'pdf_content') and first_content.pdf_content:
+                    response_data['pdf_content'] = {
+                        'pdf_file': first_content.pdf_content.pdf_file.url
+                    }
+                
+                if hasattr(first_content, 'video_content') and first_content.video_content:
+                    response_data['video_content'] = {
+                        'video_file': first_content.video_content.video_file.url
+                    }
+                
+                if hasattr(first_content, 'qcm') and first_content.qcm:
+                    response_data['qcm'] = {
+                        'question': first_content.qcm.question,
+                        'options': [
+                            {
+                                'id': option.id,
+                                'text': option.text,
+                                'is_correct': option.is_correct
+                            } for option in first_content.qcm.options.all()
+                        ]
+                    }
+        
+        return Response(response_data)
 class MySubscriptions(APIView):
     def get(self, request):
         try:
@@ -2264,37 +2320,41 @@ class RecommendedCoursesView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get recommended courses based on user's department"""
+        """Get recommended courses based on user's department, excluding subscribed courses"""
         try:
             user_department = request.user.department
             
+            # Get user's subscribed course IDs first
+            subscribed_course_ids = Subscription.objects.filter(
+                user=request.user,
+                is_active=True
+            ).values_list('course_id', flat=True)
+            
             if not user_department:
-                # If user has no department, return recent courses
-                courses = Course.objects.select_related('creator').order_by('-created_at')[:20]
+                # If user has no department, return recent courses excluding subscribed ones
+                courses = Course.objects.select_related('creator').exclude(
+                    id__in=subscribed_course_ids
+                ).order_by('-created_at')[:20]
             else:
-                # Get courses from users in the same department
+                # Get courses from users in the same department, excluding subscribed ones
                 courses = Course.objects.select_related('creator').filter(
                     creator__department=user_department
+                ).exclude(
+                    id__in=subscribed_course_ids
                 ).order_by('-created_at')
                 
-                # If no courses in user's department, get all recent courses
+                # If no courses in user's department (excluding subscribed), get all recent courses excluding subscribed
                 if not courses.exists():
-                    courses = Course.objects.select_related('creator').order_by('-created_at')[:20]
-            
-            # Get user's subscribed course IDs
-            subscribed_course_ids = set(
-                Subscription.objects.filter(
-                    user=request.user,
-                    is_active=True
-                ).values_list('course_id', flat=True)
-            )
+                    courses = Course.objects.select_related('creator').exclude(
+                        id__in=subscribed_course_ids
+                    ).order_by('-created_at')[:20]
             
             # Serialize the courses
             serializer = CourseSerializer(courses, many=True, context={'request': request})
             
-            # Add is_subscribed field to each course
+            # Since we already excluded subscribed courses, all should be is_subscribed: false
             for course_data in serializer.data:
-                course_data['is_subscribed'] = course_data['id'] in subscribed_course_ids
+                course_data['is_subscribed'] = False
             
             return Response(serializer.data, status=status.HTTP_200_OK)
             

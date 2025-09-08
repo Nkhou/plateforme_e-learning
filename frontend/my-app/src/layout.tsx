@@ -33,15 +33,18 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         console.log('data: ', res.data.user);
         setUser(res.data.user);
         setLoading(false);
-        console.log("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", user?.username, user?.privilege)
+        console.log("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++", user?.username, user?.privilege, location.pathname)
         if (!auth && location.pathname !== '/') {
           navigate('/');
-        } 
-        else if (auth && location.pathname === '/' && (user?.privilege === 'A'  ||  user?.privilege ===	'Admin')) {
+        }
+        else if (auth && location.pathname === '/' && (user?.privilege === 'A' || user?.privilege === 'Admin')) {
           navigate('/admin');
         }
+        else if (auth && location.pathname === '/' && (user?.privilege === 'F' )) {
+          navigate('/cours');
+        }
         else if (auth && location.pathname === '/') {
-          
+
           navigate('/dashboard');
         }
       })
@@ -66,22 +69,26 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           <div className="p-3">
             <h5 className="text-white">platform</h5>
             <ul className="nav flex-column">
-              {user?.privilege != 'A' && (
+              {user?.privilege !== 'A' && (
                 <>
+                {user?.privilege !== 'F' && (
                   <li className="nav-item">
                     <a href="/dashboard" className="nav-link text-white">
                       <img src="/dashboard.svg" alt="Dashboard" width="16" height="16" /> Dashboard
                     </a>
                   </li>
-                  <li className="nav-item">
-                    <a href="/cours" className="nav-link text-white">
-                      <img src="/save-icon.svg" alt="register" width="16" height="16" /> save Courses
-                    </a>
-                  </li>
+                )}
+                  {user?.privilege === 'F' && (
+                    <li className="nav-item">
+                      <a href="/cours" className="nav-link text-white">
+                        <img src="/save-icon.svg" alt="Register" width="16" height="16" /> Save Courses
+                      </a>
+                    </li>
+                  )}
                 </>
-              )
-              }
-              {(user?.privilege === 'A'  ||  user?.privilege ===	'Admin')&& (
+              )}
+
+              {(user?.privilege === 'A' || user?.privilege === 'Admin') && (
                 <>
                   <li className="nav-item">
                     <a href="/admin" className="nav-link text-white">

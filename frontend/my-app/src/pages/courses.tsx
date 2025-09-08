@@ -37,7 +37,7 @@ const Cours = () => {
         try {
             setLoading(true);
             const response = await api.get('courses/my-courses/');
-            console.log('Courses data:', response.data);
+            console.log('__________________________________________________________________________Courses data:', response.data);
             setMyCourses(response.data);
             setError(''); // Clear any previous errors
         } catch (error: any) {
@@ -139,7 +139,9 @@ const Cours = () => {
 
     // Handle card click to show course detail component
     const handleCardClick = (courseId: number) => {
+        console.log('---------------------------',selectedCourseId);
         setSelectedCourseId(courseId);
+        console.log('+++++++++++++++++++++++++++++',selectedCourseId);
         setShowCourseDetail(true);
     };
 
@@ -206,7 +208,7 @@ const Cours = () => {
                                         src={course.image_url || course.image}  // Use image_url if available, fallback to image
                                         alt={course.title_of_course}
                                         className="card-img-top"
-                                        fallbackSrc="/group.avif"
+                                        fallback="/group.avif"
                                         style={{ height: '200px', objectFit: 'cover' }}
                                       />
                                             <div className="card-body">

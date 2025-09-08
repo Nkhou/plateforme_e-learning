@@ -92,7 +92,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
     useEffect(() => {
         const fetchCourseData = async () => {
             if (!courseId) return;
-
+            console.log('cours id', courseId);
             try {
                 setLoading(true);
                 const [courseResponse, contentsResponse] = await Promise.all([
@@ -368,374 +368,374 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
 
     return (
         <div className="container mt-4">
-  <div className="row align-items-start">
-    {/* Left: Image + Course Details */}
-    <div className="col-md-4 mb-4 text-center text-md-start">
-      <div className="mx-auto" style={{ maxWidth: '250px' }}>
-        <img
-          src={getImageUrl(course.image)}
-          alt={course.title_of_course}
-          onError={handleImageError}
-          style={{
-            width: '100%',
-            height: 'auto',
-            objectFit: 'cover',
-            borderRadius: '8px',
-            marginBottom: '1rem'
-          }}
-        />
+            <div className="row align-items-start">
+                {/* Left: Image + Course Details */}
 
-        <div className="card">
-          <div className="card-body text-start">
-            <h5 className="card-title">Course Details</h5>
-            <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
-            <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
-            <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {/* Center: Title + Description + Course Contents */}
-    <div className="col-md-8">
-      <div className="text-center mb-4">
-        <h1 className="mb-3">{course.title_of_course}</h1>
-        <p className="lead">{course.description}</p>
-      </div>
-
-      {/* Course Contents Section goes here */}
-      <div className="card">
-        <div className="card-header d-flex justify-content-between align-items-center">
-          <h5 className="mb-0">Course Contents</h5>
-          <button
-            className="btn btn-primary"
-            style={{ background: 'rgba(5, 44, 101, 0.9)' }}
-            onClick={() => setShowNewContentModal(true)}
-          >
-            + New Content
-          </button>
-        </div>
-        <div className="card-body">
-          {contentLoading ? (
-            <div className="text-center">
-              <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading...</span>
-              </div>
-            </div>
-          ) : contents.length === 0 ? (
-            <p className="text-muted">No content available yet. Add some content to get started!</p>
-          ) : (
-            <div className="list-group">
-              {contents.sort((a, b) => a.order - b.order).map((content, index) => (
-                <div key={content.id} className="list-group-item">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <h6 className="mb-1">
-                        {index + 1}. {content.title}
-                        <span className="badge bg-secondary ms-2">
-                          {content.content_type_name?.toUpperCase()}
-                        </span>
-                      </h6>
-                      {content.caption && (
-                        <p className="text-muted mb-2">{content.caption}</p>
-                      )}
-
-                      {/* PDF Content */}
-                      {content.content_type_name === 'PDF' && content.pdf_content && (
-                        <a
-                          href={getFileUrl(content.pdf_content.pdf_file)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-outline-primary me-2"
-                        >
-                          📄 View PDF
-                        </a>
-                      )}
-
-                      {/* Video Content */}
-                      {content.content_type_name === 'Video' && content.video_content && (
-                        <a
-                          href={getFileUrl(content.video_content.video_file)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-outline-primary me-2"
-                        >
-                          📹 Watch Video
-                        </a>
-                      )}
-
-                      {/* QCM Content */}
-                      {content.content_type_name === 'QCM' && content.qcm && (
-                        <button className="btn btn-sm btn-outline-primary me-2">
-                          ❓ Take Quiz ({content.qcm.options?.length || 0} questions)
-                        </button>
-                      )}
-
-                      {/* <small className="text-muted">
-                        Added: {new Date(content.created_at).toLocaleDateString()}
-                      </small> */}
+                {/* Center: Title + Description + Course Contents */}
+                <div className="col-md-12">
+                    <div className="text-center mb-4">
+                        <h1 className="mb-3">{course.title_of_course}</h1>
+                        <p className="lead">{course.description}</p>
                     </div>
-                    <div>
-                      <button className="btn btn-sm btn-outline-secondary me-2">
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => handleDeleteContent(content.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Modal stays outside layout for best behavior */}
-      {showNewContentModal && (
-        <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">Add New Content</h5>
-                                <button
-                                    type="button"
-                                    className="btn-close"
-                                    onClick={() => {
-                                        setShowNewContentModal(false);
-                                        setSelectedContentType(null);
-                                        setNewContentData({
-                                            title: '',
-                                            file: null,
-                                            video_url: '',
-                                            questions: [],
-                                        });
+                    <div className="col-md-4 mb-4 text-center text-md-start">
+
+                        <div className="card">
+                            <div className="mx-auto" style={{ maxWidth: '250px' }}>
+                                <img
+                                    src={getImageUrl(course.image)}
+                                    alt={course.title_of_course}
+                                    onError={handleImageError}
+                                    style={{
+                                        width: '100%',
+                                        height: 'auto',
+                                        objectFit: 'cover',
+                                        borderRadius: '8px',
+                                        marginBottom: '1rem'
                                     }}
-                                ></button>
-                            </div>
-                            <div className="modal-body">
-                                {!selectedContentType ? (
-                                    <div className="text-center">
-                                        <h6>Choose Content Type</h6>
-                                        <div className="d-flex justify-content-center gap-3 mt-3">
-                                            <button
-                                                className="btn btn-outline-primary"
-                                                onClick={() => setSelectedContentType('pdf')}
-                                            >
-                                                📄 PDF
-                                            </button>
-                                            <button
-                                                className="btn btn-outline-primary"
-                                                onClick={() => setSelectedContentType('video')}
-                                            >
-                                                📹 Video
-                                            </button>
-                                            <button
-                                                className="btn btn-outline-primary"
-                                                onClick={() => setSelectedContentType('qcm')}
-                                            >
-                                                ❓ QCM Quiz
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <div className="mb-3">
-                                            <label className="form-label">Content Title *</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={newContentData.title}
-                                                onChange={(e) => setNewContentData(prev => ({
-                                                    ...prev,
-                                                    title: e.target.value
-                                                }))}
-                                                placeholder="Enter content title"
-                                                required
-                                            />
-                                        </div>
-
-                                        {selectedContentType === 'pdf' && (
-                                            <div className="mb-3">
-                                                <label className="form-label">Upload PDF File *</label>
-                                                <input
-                                                    type="file"
-                                                    className="form-control"
-                                                    accept=".pdf"
-                                                    onChange={(e) => setNewContentData(prev => ({
-                                                        ...prev,
-                                                        file: e.target.files?.[0] || null
-                                                    }))}
-                                                    required
-                                                />
-                                                <small className="text-muted">Only PDF files are accepted</small>
-                                            </div>
-                                        )}
-
-                                        {selectedContentType === 'video' && (
-                                            <div className="mb-3">
-                                                <label className="form-label">Upload Video File *</label>
-                                                <input
-                                                    type="file"
-                                                    className="form-control"
-                                                    accept="video/*"
-                                                    onChange={(e) => setNewContentData(prev => ({
-                                                        ...prev,
-                                                        file: e.target.files?.[0] || null
-                                                    }))}
-                                                    required
-                                                />
-                                                <small className="text-muted">Supported formats: MP4, AVI, MOV</small>
-                                            </div>
-                                        )}
-
-                                        {selectedContentType === 'qcm' && (
-                                            <div>
-                                                <div className="d-flex justify-content-between align-items-center mb-3">
-                                                    <h6>Questions</h6>
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-sm btn-primary"
-                                                        onClick={addQuestion}
-                                                    >
-                                                        + Add Question
-                                                    </button>
-                                                </div>
-
-                                                {newContentData.questions.map((question, qIndex) => (
-                                                    <div key={qIndex} className="card mb-3">
-                                                        <div className="card-body">
-                                                            <div className="mb-3">
-                                                                <label className="form-label">Question {qIndex + 1} *</label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="form-control"
-                                                                    value={question.question}
-                                                                    onChange={(e) => {
-                                                                        const newQuestions = [...newContentData.questions];
-                                                                        newQuestions[qIndex].question = e.target.value;
-                                                                        setNewContentData(prev => ({ ...prev, questions: newQuestions }));
-                                                                    }}
-                                                                    placeholder="Enter question"
-                                                                    required
-                                                                />
-                                                            </div>
-
-                                                            <div className="mb-3">
-                                                                <label className="form-label">Question Type</label>
-                                                                <select
-                                                                    className="form-select"
-                                                                    value={question.question_type}
-                                                                    onChange={(e) => {
-                                                                        const newQuestions = [...newContentData.questions];
-                                                                        newQuestions[qIndex].question_type = e.target.value;
-                                                                        setNewContentData(prev => ({ ...prev, questions: newQuestions }));
-                                                                    }}
-                                                                >
-                                                                    <option value="single">Single Choice</option>
-                                                                    <option value="multiple">Multiple Choice</option>
-                                                                </select>
-                                                            </div>
-
-                                                            <div className="mb-3">
-                                                                <div className="d-flex justify-content-between align-items-center">
-                                                                    <label className="form-label">Options *</label>
-                                                                    <button
-                                                                        type="button"
-                                                                        className="btn btn-sm btn-outline-primary"
-                                                                        onClick={() => addOption(qIndex)}
-                                                                    >
-                                                                        + Add Option
-                                                                    </button>
-                                                                </div>
-
-                                                                {question.options.map((option: any, oIndex: any) => (
-                                                                    <div key={oIndex} className="input-group mb-2">
-                                                                        <input
-                                                                            type="text"
-                                                                            className="form-control"
-                                                                            value={option.text}
-                                                                            onChange={(e) => {
-                                                                                const newQuestions = [...newContentData.questions];
-                                                                                newQuestions[qIndex].options[oIndex].text = e.target.value;
-                                                                                setNewContentData(prev => ({ ...prev, questions: newQuestions }));
-                                                                            }}
-                                                                            placeholder="Option text"
-                                                                            required
-                                                                        />
-                                                                        <div className="input-group-text">
-                                                                            <input
-                                                                                type={question.question_type === 'single' ? 'radio' : 'checkbox'}
-                                                                                name={`question-${qIndex}`}
-                                                                                checked={option.is_correct}
-                                                                                onChange={(e) => {
-                                                                                    const newQuestions = [...newContentData.questions];
-                                                                                    if (question.question_type === 'single') {
-                                                                                        newQuestions[qIndex].options.forEach((opt: any, idx: any) => {
-                                                                                            opt.is_correct = idx === oIndex;
-                                                                                        });
-                                                                                    } else {
-                                                                                        newQuestions[qIndex].options[oIndex].is_correct = e.target.checked;
-                                                                                    }
-                                                                                    setNewContentData(prev => ({ ...prev, questions: newQuestions }));
-                                                                                }}
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    onClick={() => {
-                                        if (selectedContentType) {
-                                            setSelectedContentType(null);
-                                        } else {
-                                            setShowNewContentModal(false);
-                                        }
-                                    }}
-                                >
-                                    {selectedContentType ? 'Back' : 'Cancel'}
-                                </button>
-                                {selectedContentType && (
-                                    <button
-                                        type="button"
-                                        className="btn btn-primary"
-                                        style={{ background: 'rgba(5, 44, 101, 0.9)' }}
-                                        onClick={handleCreateContent}
-                                        disabled={
-                                            !newContentData.title ||
-                                            (selectedContentType === 'pdf' && !newContentData.file) ||
-                                            (selectedContentType === 'video' && !newContentData.file) ||
-                                            (selectedContentType === 'qcm' &&
-                                                (newContentData.questions.length === 0 ||
-                                                    !newContentData.questions[0]?.question ||
-                                                    newContentData.questions[0]?.options.length < 2))
-                                        }
-                                    >
-                                        Create Content
-                                    </button>
-                                )}
+                                />
+                                <div className="card-body text-start">
+                                    <h5 className="card-title">Course Details</h5>
+                                    <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
+                                    <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
+                                    <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    {/* Course Contents Section goes here */}
+                    <div className="card ">
+                        <div className="card-header d-flex justify-content-between align-items-center">
+                            <h5 className="mb-0">Course Contents</h5>
+                            <button
+                                className="btn btn-primary"
+                                style={{ background: 'rgba(5, 44, 101, 0.9)' }}
+                                onClick={() => setShowNewContentModal(true)}
+                            >
+                                + New Content
+                            </button>
+                        </div>
+                        <div className="card-body">
+                            {contentLoading ? (
+                                <div className="text-center">
+                                    <div className="spinner-border text-primary" role="status">
+                                        <span className="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            ) : contents.length === 0 ? (
+                                <p className="text-muted">No content available yet. Add some content to get started!</p>
+                            ) : (
+                                <div className="list-group">
+                                    {contents.sort((a, b) => a.order - b.order).map((content, index) => (
+                                        <div key={content.id} className="list-group-item">
+                                            <div className="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h6 className="mb-1">
+                                                        {index + 1}. {content.title}
+                                                        <span className="badge bg-secondary ms-2">
+                                                            {content.content_type_name?.toUpperCase()}
+                                                        </span>
+                                                    </h6>
+                                                    {content.caption && (
+                                                        <p className="text-muted mb-2">{content.caption}</p>
+                                                    )}
+
+                                                    {/* PDF Content */}
+                                                    {content.content_type_name === 'PDF' && content.pdf_content && (
+                                                        <a
+                                                            href={getFileUrl(content.pdf_content.pdf_file)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="btn btn-sm btn-outline-primary me-2"
+                                                        >
+                                                            📄 View PDF
+                                                        </a>
+                                                    )}
+
+                                                    {/* Video Content */}
+                                                    {content.content_type_name === 'Video' && content.video_content && (
+                                                        <a
+                                                            href={getFileUrl(content.video_content.video_file)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="btn btn-sm btn-outline-primary me-2"
+                                                        >
+                                                            📹 Watch Video
+                                                        </a>
+                                                    )}
+
+                                                    {/* QCM Content */}
+                                                    {content.content_type_name === 'QCM' && content.qcm && (
+                                                        <button className="btn btn-sm btn-outline-primary me-2">
+                                                            ❓ Take Quiz ({content.qcm.options?.length || 0} questions)
+                                                        </button>
+                                                    )}
+
+                                                    {/* <small className="text-muted">
+                        Added: {new Date(content.created_at).toLocaleDateString()}
+                      </small> */}
+                                                </div>
+                                                <div>
+                                                    <button className="btn btn-sm btn-outline-secondary me-2">
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-sm btn-outline-danger"
+                                                        onClick={() => handleDeleteContent(content.id)}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Modal stays outside layout for best behavior */}
+                    {showNewContentModal && (
+                        <div className="modale show d-block" tabIndex={-1}>
+                            <div className="modal-dialog modal-lg">
+                                <div className="modal-content">
+                                    <div className="modal-header">
+                                        <h5 className="modal-title" style={{ color: "white" }}>Add New Content</h5>
+                                        <button
+                                            type="button"
+                                            className="btn-close"
+                                            onClick={() => {
+                                                setShowNewContentModal(false);
+                                                setSelectedContentType(null);
+                                                setNewContentData({
+                                                    title: '',
+                                                    file: null,
+                                                    video_url: '',
+                                                    questions: [],
+                                                });
+                                            }}
+                                        ></button>
+                                    </div>
+                                    <div className="modal-body">
+                                        {!selectedContentType ? (
+                                            <div className="text-center">
+                                                <h6>Choose Content Type</h6>
+                                                <div className="d-flex justify-content-center gap-3 mt-3">
+                                                    <button
+                                                        className="btn btn-outline-primary"
+                                                        onClick={() => setSelectedContentType('pdf')}
+                                                    >
+                                                        📄 PDF
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-outline-primary"
+                                                        onClick={() => setSelectedContentType('video')}
+                                                    >
+                                                        📹 Video
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-outline-primary"
+                                                        onClick={() => setSelectedContentType('qcm')}
+                                                    >
+                                                        ❓ QCM Quiz
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <div className="mb-3">
+                                                    <label className="form-label">Content Title *</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-control"
+                                                        value={newContentData.title}
+                                                        onChange={(e) => setNewContentData(prev => ({
+                                                            ...prev,
+                                                            title: e.target.value
+                                                        }))}
+                                                        placeholder="Enter content title"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                {selectedContentType === 'pdf' && (
+                                                    <div className="mb-3">
+                                                        <label className="form-label">Upload PDF File *</label>
+                                                        <input
+                                                            type="file"
+                                                            className="form-control"
+                                                            accept=".pdf"
+                                                            onChange={(e) => setNewContentData(prev => ({
+                                                                ...prev,
+                                                                file: e.target.files?.[0] || null
+                                                            }))}
+                                                            required
+                                                        />
+                                                        <small className="text-muted">Only PDF files are accepted</small>
+                                                    </div>
+                                                )}
+
+                                                {selectedContentType === 'video' && (
+                                                    <div className="mb-3">
+                                                        <label className="form-label">Upload Video File *</label>
+                                                        <input
+                                                            type="file"
+                                                            className="form-control"
+                                                            accept="video/*"
+                                                            onChange={(e) => setNewContentData(prev => ({
+                                                                ...prev,
+                                                                file: e.target.files?.[0] || null
+                                                            }))}
+                                                            required
+                                                        />
+                                                        <small className="text-muted">Supported formats: MP4, AVI, MOV</small>
+                                                    </div>
+                                                )}
+
+                                                {selectedContentType === 'qcm' && (
+                                                    <div>
+                                                        <div className="d-flex justify-content-between align-items-center mb-3">
+                                                            <h6>Questions</h6>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-sm btn-primary"
+                                                                onClick={addQuestion}
+                                                            >
+                                                                + Add Question
+                                                            </button>
+                                                        </div>
+
+                                                        {newContentData.questions.map((question, qIndex) => (
+                                                            <div key={qIndex} className="card mb-3">
+                                                                <div className="card-body">
+                                                                    <div className="mb-3">
+                                                                        <label className="form-label">Question {qIndex + 1} *</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            className="form-control"
+                                                                            value={question.question}
+                                                                            onChange={(e) => {
+                                                                                const newQuestions = [...newContentData.questions];
+                                                                                newQuestions[qIndex].question = e.target.value;
+                                                                                setNewContentData(prev => ({ ...prev, questions: newQuestions }));
+                                                                            }}
+                                                                            placeholder="Enter question"
+                                                                            required
+                                                                        />
+                                                                    </div>
+
+                                                                    <div className="mb-3">
+                                                                        <label className="form-label">Question Type</label>
+                                                                        <select
+                                                                            className="form-select"
+                                                                            value={question.question_type}
+                                                                            onChange={(e) => {
+                                                                                const newQuestions = [...newContentData.questions];
+                                                                                newQuestions[qIndex].question_type = e.target.value;
+                                                                                setNewContentData(prev => ({ ...prev, questions: newQuestions }));
+                                                                            }}
+                                                                        >
+                                                                            <option value="single">Single Choice</option>
+                                                                            <option value="multiple">Multiple Choice</option>
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div className="mb-3">
+                                                                        <div className="d-flex justify-content-between align-items-center">
+                                                                            <label className="form-label">Options *</label>
+                                                                            <button
+                                                                                type="button"
+                                                                                className="btn btn-sm btn-outline-primary"
+                                                                                onClick={() => addOption(qIndex)}
+                                                                            >
+                                                                                + Add Option
+                                                                            </button>
+                                                                        </div>
+
+                                                                        {question.options.map((option: any, oIndex: any) => (
+                                                                            <div key={oIndex} className="input-group mb-2">
+                                                                                <input
+                                                                                    type="text"
+                                                                                    className="form-control"
+                                                                                    value={option.text}
+                                                                                    onChange={(e) => {
+                                                                                        const newQuestions = [...newContentData.questions];
+                                                                                        newQuestions[qIndex].options[oIndex].text = e.target.value;
+                                                                                        setNewContentData(prev => ({ ...prev, questions: newQuestions }));
+                                                                                    }}
+                                                                                    placeholder="Option text"
+                                                                                    required
+                                                                                />
+                                                                                <div className="input-group-text">
+                                                                                    <input
+                                                                                        type={question.question_type === 'single' ? 'radio' : 'checkbox'}
+                                                                                        name={`question-${qIndex}`}
+                                                                                        checked={option.is_correct}
+                                                                                        onChange={(e) => {
+                                                                                            const newQuestions = [...newContentData.questions];
+                                                                                            if (question.question_type === 'single') {
+                                                                                                newQuestions[qIndex].options.forEach((opt: any, idx: any) => {
+                                                                                                    opt.is_correct = idx === oIndex;
+                                                                                                });
+                                                                                            } else {
+                                                                                                newQuestions[qIndex].options[oIndex].is_correct = e.target.checked;
+                                                                                            }
+                                                                                            setNewContentData(prev => ({ ...prev, questions: newQuestions }));
+                                                                                        }}
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="modal-footer">
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={() => {
+                                                if (selectedContentType) {
+                                                    setSelectedContentType(null);
+                                                } else {
+                                                    setShowNewContentModal(false);
+                                                }
+                                            }}
+                                        >
+                                            {selectedContentType ? 'Back' : 'Cancel'}
+                                        </button>
+                                        {selectedContentType && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-primary"
+                                                style={{ background: 'rgba(5, 44, 101, 0.9)' }}
+                                                onClick={handleCreateContent}
+                                                disabled={
+                                                    !newContentData.title ||
+                                                    (selectedContentType === 'pdf' && !newContentData.file) ||
+                                                    (selectedContentType === 'video' && !newContentData.file) ||
+                                                    (selectedContentType === 'qcm' &&
+                                                        (newContentData.questions.length === 0 ||
+                                                            !newContentData.questions[0]?.question ||
+                                                            newContentData.questions[0]?.options.length < 2))
+                                                }
+                                            >
+                                                Create Content
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
-      )}
-    </div>
-  </div>
-</div>
 
     );
 };
