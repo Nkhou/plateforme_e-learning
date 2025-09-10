@@ -1,5 +1,5 @@
 // CourseDetail.tsx
-import React, { useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../api/api';
 
 interface CourseDetailProps {
@@ -39,6 +39,8 @@ interface CourseContent {
   qcm?: {
     question: string;
     options: QCMOption[];
+    is_multiple_choice: boolean;
+    passing_score?: number;
   };
   created_at: string;
 }
@@ -59,17 +61,17 @@ interface SubscriptionData {
 
 // Helper function to get correct image URL
 const getImageUrl = (imageUrl: string) => {
-  if (!imageUrl) return '/group.avif';
+    if (!imageUrl) return '/group.avif';
 
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl;
-  }
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        return imageUrl;
+    }
 
-  if (imageUrl.startsWith('/media/')) {
-    return `http://localhost:8000${imageUrl}`;
-  }
+    if (imageUrl.startsWith('/media/')) {
+        return `http://localhost:8000${imageUrl}`;
+    }
 
-  return `http://localhost:8000/media/${imageUrl}`;
+    return `http://localhost:8000/media/${imageUrl}`;
 };
 
 // Helper function to get file URL
@@ -96,49 +98,64 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
   const [error, setError] = useState('');
   const [activeContent, setActiveContent] = useState<CourseContent | null>(null);
   const [showContentModal, setShowContentModal] = useState(false);
+  const [selectedQCMOptions, setSelectedQCMOptions] = useState<number[]>([]);
+
 
   useEffect(() => {
-    const fetchCourseData = async () => {
-      if (!courseId) return;
+  const fetchCourseData = async () => {
+    if (!courseId) 
+      return;
 
+    try {
+      setLoading(true);
+
+      // Fetch course and contents
+      const [courseResponse, contentsResponse] = await Promise.all([
+        api.get(`courses/${courseId}/is-subscribed/`),
+        api.get(`courses/${courseId}/contents/`)
+      ]);
+
+      const rawContents = contentsResponse.data;
+      setCourse(courseResponse.data);
+      console.log('Fetched contents (raw):', rawContents);
+      let subscriptionData: any = null;
       try {
-        setLoading(true);
-        const [courseResponse, contentsResponse, subscriptionResponse] = await Promise.all([
-          api.get(`courses/${courseId}/is-subscribed/`),
-          api.get(`courses/${courseId}/contents/`),
-          
-          api.get(`courses/${courseId}/subscribers/`)
-
-        ]);
-
-        setCourse(courseResponse.data);
-        setContents(contentsResponse.data);
-        console.log('courseResponse', courseResponse.data)
-        setSubscription(subscriptionResponse.data);
-        // console.log(s)
-
-        // Update content completion status based on subscription
-        const updatedContents = contentsResponse.data.map((content: CourseContent) => ({
-          ...content,
-          is_completed: subscriptionResponse.data.completed_contents.includes(content.id),
-          is_locked: !subscriptionResponse.data.is_active ||
-            (content.order > 1 &&
-              !contentsResponse.data
-                .find((c: CourseContent) => c.order === content.order - 1)
-                ?.is_completed)
-        }));
-
-        setContents(updatedContents);
-      } catch (error: any) {
-        console.error('Failed to fetch course data:', error);
-        setError('Failed to load course details');
-      } finally {
-        setLoading(false);
+        const subscriptionResponse = await api.get(`courses/${courseId}/subscribers/`);
+        const subArray = subscriptionResponse.data;
+        subscriptionData = subArray.length > 0 ? subArray[0] : null;
+        setSubscription(subscriptionData);
+      } catch (subErr) {
+        console.warn('Subscription fetch failed:', subErr);
       }
-    };
+      // Process contents with lock/completion logic
+      const completed = subscriptionData?.completed_contents || [];
+      const isActive = subscriptionData?.is_active || false;
+      const minOrder = Math.min(...rawContents.map((c: CourseContent) => c.order));
 
-    fetchCourseData();
-  }, [courseId]);
+      const updated = rawContents.map((content: CourseContent) => {
+        const isFirst = content.order === minOrder;
+        const prev = rawContents.find((c: CourseContent) => c.order === content.order - 1);
+        const isPrevDone = prev ? completed.includes(prev.id) : true;
+
+        return {
+          ...content,
+          is_completed: completed.includes(content.id),
+          is_locked: !isActive || (!isFirst && !isPrevDone)
+        };
+      });
+
+      setContents(updated);
+    } catch (err: any) {
+      console.error('Failed to fetch course data:', err);
+      setError('Failed to load course details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchCourseData();
+}, [courseId]);
+
 
   const handleSubscribe = async () => {
     try {
@@ -152,7 +169,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           is_subscribed: true
         });
       }
-
+      console.log('999999999999999999', course);
       alert('Successfully subscribed to the course!');
     } catch (error: any) {
       console.error('Failed to subscribe:', error);
@@ -188,64 +205,89 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       alert('Failed to unsubscribe from the course');
     }
   };
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+          console.error('Failed to load image:', e.currentTarget.src);
+          e.currentTarget.src = '/group.avif';
+      };
 
   const handleContentComplete = async (contentId: number) => {
-    try {
-      const response = await api.post(`courses/${courseId}/mark-content-completed/`, {
-        content_id: contentId
-      });
-
-      // Update subscription progress
-      setSubscription(response.data);
-
-      // Update course progress
-      if (course) {
-        setCourse({
-          ...course,
-          progress_percentage: response.data.progress_percentage
-        });
+  try {
+    let response;
+    
+    if (activeContent?.content_type_name === 'QCM') {
+      if (selectedQCMOptions.length === 0) {
+        alert('Please select at least one answer before submitting.');
+        return;
       }
 
-      // Update content completion status and unlock next content
-      const updatedContents = contents.map(content => {
-        if (content.id === contentId) {
-          return {
-            ...content,
-            is_completed: true,
-            is_locked: false
-          };
-        }
-
-        // Find the completed content once
-        const completedContent = contents.find(c => c.id === contentId);
-
-        // Unlock next content if this one was completed
-        if (completedContent && content.order === completedContent.order + 1) {
-          return {
-            ...content,
-            is_locked: false
-          };
-        }
-
-        return content;
+      response = await api.post(`courses/${courseId}/submit-qcm/`, {
+        content_id: contentId,
+        selected_option_ids: selectedQCMOptions,
       });
-      setContents(updatedContents);
-      setShowContentModal(false);
-      setActiveContent(null);
 
-    } catch (error: any) {
-      console.error('Failed to mark content as completed:', error);
-      alert('Failed to update progress');
+      // Check if QCM was passed
+      if (!response.data.is_passed) {
+        alert(`Your score: ${response.data.score}%. You need ${activeContent.qcm?.passing_score || 80}% to pass.`);
+        return; // Don't mark as completed if not passed
+      }
+    } else {
+      response = await api.post(`courses/${courseId}/mark-completed/`, {
+        content_id: contentId
+      });
     }
-  };
 
+    // Update subscription progress
+    setSubscription(response.data);
+
+    // Update course progress
+    if (course) {
+      setCourse({
+        ...course,
+        progress_percentage: response.data.progress_percentage
+      });
+    }
+
+    // Update content completion status
+    const updatedContents = contents.map(content => {
+      if (content.id === contentId) {
+        return {
+          ...content,
+          is_completed: true,
+          is_locked: false
+        };
+      }
+
+      // Unlock next content if this one was completed
+      const completedContent = contents.find(c => c.id === contentId);
+      if (completedContent && content.order === completedContent.order + 1) {
+        return {
+          ...content,
+          is_locked: false
+        };
+      }
+
+      return content;
+    });
+    
+    setContents(updatedContents);
+    setShowContentModal(false);
+    setActiveContent(null);
+
+  } catch (error: any) {
+    console.error('Failed to mark content as completed:', error);
+    alert('Failed to update progress');
+  }
+};
   const handleContentClick = (content: CourseContent) => {
     if (content.is_locked) {
       alert('Please complete the previous content first!');
       return;
     }
-
     setActiveContent(content);
+    setSelectedQCMOptions([]); // Reset previous answers
+    setShowContentModal(true);
+    setActiveContent(content);
+    console.log("**********************++++++++++222222222222222", activeContent)
     setShowContentModal(true);
   };
 
@@ -257,7 +299,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         <div className="modal-dialog modal-lg">
           <div className="modal-content">
             <div className="modal-header">
-              <h5 className="modal-title">{activeContent.title}</h5>
+              <h5 className="modal-title" style={{ color: 'white' }}>{activeContent.title}</h5>
               <button
                 type="button"
                 className="btn-close"
@@ -268,23 +310,39 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               ></button>
             </div>
             <div className="modal-body">
-              {activeContent.content_type_name === 'PDF' && activeContent.pdf_content && (
-                <div>
-                  <iframe
-                    src={getFileUrl(activeContent.pdf_content.pdf_file)}
-                    width="100%"
-                    height="500px"
-                    frameBorder="0"
-                    title={activeContent.title}
-                  />
+              {activeContent.content_type_name === 'pdf' && activeContent.pdf_content && (
+                <div className="text-center py-4">
+                  <div className="mb-3">
+                    <i className="bi bi-file-earmark-pdf" style={{ fontSize: '3rem', color: '#dc3545' }}></i>
+                  </div>
+                  <h5>PDF Document</h5>
+                  <p className="text-muted">Click below to view or download the PDF file</p>
+
+                  <div className="d-flex gap-2 justify-content-center">
+                    <a
+                      href={getFileUrl(activeContent.pdf_content.pdf_file)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-primary"
+                    >
+                      <i className="bi bi-eye me-2"></i>View PDF
+                    </a>
+                  </div>
+
+                  <div className="mt-3 small text-muted">
+                    <i className="bi bi-info-circle me-1"></i>
+                    File: {activeContent.pdf_content.pdf_file.split('/').pop()}
+                  </div>
                 </div>
               )}
+
 
               {activeContent.content_type_name === 'Video' && activeContent.video_content && (
                 <div>
                   <video
                     controls
                     width="100%"
+
                     src={getFileUrl(activeContent.video_content.video_file)}
                   >
                     Your browser does not support the video tag.
@@ -293,27 +351,44 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               )}
 
               {activeContent.content_type_name === 'QCM' && activeContent.qcm && (
-                <div>
-                  <h6>{activeContent.qcm.question}</h6>
-                  <div className="list-group mt-3">
-                    {activeContent.qcm.options.map((option, index) => (
-                      <div key={option.id} className="list-group-item">
-                        <div className="form-check">
-                          <input
-                            className="form-check-input"
-                            type="radio"
-                            name="qcmOption"
-                            id={`option-${index}`}
-                          />
-                          <label className="form-check-label" htmlFor={`option-${index}`}>
-                            {option.text}
-                          </label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+  <div>
+    <h6 style={{ color: 'white' }}>{activeContent.qcm.question}</h6>
+    <div className="list-group mt-3">
+      {activeContent.qcm.options.map((option, index) => {
+        const isChecked = selectedQCMOptions.includes(option.id);
+
+        return (
+          <div key={option.id} className="list-group-item">
+            <div className="form-check">
+              <input
+                className="form-check-input"
+                type={activeContent.qcm?.is_multiple_choice ? 'checkbox' : 'radio'}
+                name="qcmOption"
+                id={`option-${index}`}
+                checked={isChecked}
+                onChange={() => {
+                  if (activeContent.qcm?.is_multiple_choice) {
+                    // Toggle in/out of selected list
+                    setSelectedQCMOptions((prev) =>
+                      isChecked ? prev.filter(id => id !== option.id) : [...prev, option.id]
+                    );
+                  } else {
+                    // Single choice
+                    setSelectedQCMOptions([option.id]);
+                  }
+                }}
+              />
+              <label className="form-check-label" htmlFor={`option-${index}`}>
+                {option.text}
+              </label>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
+
             </div>
             <div className="modal-footer">
               <button
@@ -380,42 +455,39 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
   return (
     <div className="container mt-4">
-            <div className="row align-items-start">
-                {/* Left: Image + Course Details */}
+      <div className="row align-items-start">
+        {/* Left: Image + Course Details */}
 
-                {/* Center: Title + Description + Course Contents */}
-                <div className="col-md-12">
-                    <div className="text-center mb-4">
-                        <h1 className="mb-3">{course.title}</h1>
-                        <p className="lead">{course.description}</p>
-                    </div>
+        {/* Center: Title + Description + Course Contents */}
+        <div className="col-md-12">
+          <div className="text-center mb-4">
+            <h1 className="mb-3">{course.title}</h1>
+            <p className="lead">{course.description}</p>
+          </div>
 
-                    <div className="col-md-4 mb-4 text-center text-md-start">
+          <div className="col-md-4 mb-4 text-center text-md-start">
 
-                        <div className="card">
-                            <div className="mx-auto" style={{ maxWidth: '250px' }}>
-                                <img
-                                    src={getImageUrl(course.image)}
-                                    alt={course.title}
-                                    // onError={handleImageError}
-                                    style={{
-                                        width: '100%',
-                                        height: 'auto',
-                                        objectFit: 'cover',
-                                        borderRadius: '8px',
-                                        marginBottom: '1rem'
-                                    }}
-                                />
-                                <div className="card-body text-start">
-                                    <h5 className="card-title">Course Details</h5>
-                                    <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
-                                    <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
-                                    <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
-                                </div>
-                            {/* </div>
-                        </div>
-                    </div> */}
-
+            <div className="card">
+              <div className="mx-auto" style={{ maxWidth: '250px' }}>
+                <img
+                  src={getImageUrl(course.image)}
+                  alt={course.title}
+                  onError={handleImageError}
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    objectFit: 'cover',
+                    borderRadius: '8px',
+                    marginBottom: '1rem'
+                  }}
+                />
+                
+                <div className="card-body text-start">
+                  <h5 className="card-title">Course Details</h5>
+                  <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
+                  <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
+                  <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
+                </div>
                 {/* Progress Bar */}
                 {course.is_subscribed && (
                   <div className="mb-3">
@@ -461,11 +533,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
         {/* Center: Title + Description + Course Contents */}
         <div className="col-md-12">
-          {/* <div className="text-center mb-12">
-            <h2 className="mb-3">{course.title}</h2>
-            <p className="lead">{course.description}</p>
-          </div> */}
-
           {/* Course Contents Section */}
           <div className="card">
             <div className="card-header">
@@ -493,7 +560,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                         <div>
                           <h6 className="mb-1">
                             {index + 1}. {content.title}
-                            <span className="badge bg-secondary ms-2">
+                            <span className="badge bg-secondary ms-2" style={{ color: 'white' }}>
                               {content.content_type_name?.toUpperCase()}
                             </span>
                             {content.is_completed && (
@@ -526,13 +593,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Back Button */}
-          <div className="text-center mt-4">
-            <button className="btn btn-secondary" onClick={onClose}>
-              ← Back to Courses
-            </button>
           </div>
         </div>
       </div>

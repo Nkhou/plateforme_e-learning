@@ -61,17 +61,25 @@ const getImageUrl = (imageUrl: string) => {
 
 // Helper function to get file URL
 const getFileUrl = (fileUrl: string) => {
-    if (!fileUrl) return '';
+    if (!fileUrl) {
+        console.log('No file URL provided');
+        return '';
+    }
 
     if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+        console.log('Full URL detected:', fileUrl);
         return fileUrl;
     }
 
     if (fileUrl.startsWith('/media/')) {
-        return `http://localhost:8000${fileUrl}`;
+        const url = `http://localhost:8000${fileUrl}`;
+        console.log('Media URL constructed:', url);
+        return url;
     }
 
-    return `http://localhost:8000/media/${fileUrl}`;
+    const url = `http://localhost:8000/media/${fileUrl}`;
+    console.log('Default URL constructed:', url);
+    return url;
 };
 
 const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
@@ -441,16 +449,21 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
                                                     )}
 
                                                     {/* PDF Content */}
-                                                    {content.content_type_name === 'PDF' && content.pdf_content && (
-                                                        <a
-                                                            href={getFileUrl(content.pdf_content.pdf_file)}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="btn btn-sm btn-outline-primary me-2"
-                                                        >
-                                                            📄 View PDF
-                                                        </a>
+                                                    {content.content_type_name === 'pdf' && content.pdf_content && (
+                                                        <div>
+                                                            <div className="mb-3">
+                                                                <a
+                                                                    href={getFileUrl(content.pdf_content.pdf_file)}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="btn btn-sm btn-outline-primary me-2"
+                                                                >
+                                                                    📄 Open PDF in New Tab
+                                                                </a>
+                                                            </div>
+                                                        </div>
                                                     )}
+
 
                                                     {/* Video Content */}
                                                     {content.content_type_name === 'Video' && content.video_content && (

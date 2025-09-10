@@ -136,7 +136,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                   <i className="fa fa-search search-icon"></i>
                 </form>
 
-                <span className="text-muted">Hello, {user?.username}</span>
+                <span style={{ color: 'white' }}>Hello, {user?.username}</span>
               </div>
             )}
           </nav>

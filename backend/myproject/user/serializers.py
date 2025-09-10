@@ -3,6 +3,7 @@ from .models import CustomUser, QCMAttempt, QCMCompletion, Course, CourseContent
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 
@@ -62,22 +63,35 @@ class QCMOptionSerializer(serializers.ModelSerializer):
 # QCM Serializer
 class QCMSerializer(serializers.ModelSerializer):
     options = QCMOptionSerializer(many=True, read_only=True)
+    is_completed = serializers.SerializerMethodField()
     
     class Meta:
         model = QCM
-        fields = ['id', 'question', 'options']
+        fields = ['id', 'question', 'options', 'points', 'passing_score', 'max_attempts', 'time_limit', 'is_completed']
+    
+    def get_is_completed(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            qcm_completion = QCMCompletion.objects.filter(
+                subscription__user=request.user,
+                subscription__course=obj.course_content.course,
+                qcm=obj,
+                is_passed=True
+            ).exists()
+            return qcm_completion
+        return False
 
 # Video Content Serializer
 class VideoContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = VideoContent
-        fields = ['id', 'video_file']
+        fields = ['id', 'video_file', 'is_completed']  # Include is_completed
 
 # PDF Content Serializer
 class PDFContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = PDFContent
-        fields = ['id', 'pdf_file']
+        fields = ['id', 'pdf_file', 'is_completed']  # Include is_completed
 
 # Course Content Serializer
 class CourseContentSerializer(serializers.ModelSerializer):
@@ -85,11 +99,41 @@ class CourseContentSerializer(serializers.ModelSerializer):
     pdf_content = PDFContentSerializer(read_only=True)
     qcm = QCMSerializer(read_only=True)
     content_type_name = serializers.CharField(source='content_type.name', read_only=True)
+    is_completed = serializers.SerializerMethodField()
     
     class Meta:
         model = CourseContent
         fields = ['id', 'title', 'caption', 'order', 'content_type_name', 
-                 'video_content', 'pdf_content', 'qcm']
+                 'video_content', 'pdf_content', 'qcm', 'is_completed']
+    
+    def get_is_completed(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if obj.content_type.name.lower() == 'qcm' and obj.qcm:
+            return QCMCompletion.objects.filter(
+                subscription__user=user,
+                subscription__course=obj.course,
+                qcm=obj.qcm,
+                is_passed=True
+            ).exists()
+
+        # For video or PDF
+        subscription = self.context.get('subscription')
+        if not subscription:
+            subscription = Subscription.objects.filter(
+                user=user,
+                course=obj.course,
+                is_active=True
+            ).first()
+
+        if subscription:
+            return subscription.completed_contents.filter(id=obj.id).exists()
+
+        return False
 
 # Course Serializer
 from rest_framework import serializers
@@ -393,3 +437,84 @@ class QCMCreateSerializer(serializers.ModelSerializer):
             QCMOption.objects.create(qcm=qcm, **option_data)
         
         return qcm
+
+# Course Content Create Serializer (for handling all content types)
+class CourseContentCreateSerializer(serializers.ModelSerializer):
+    content_type = serializers.CharField(write_only=True)  # Accept string instead of ID
+    pdf_file = serializers.FileField(required=False, allow_null=True)
+    video_file = serializers.FileField(required=False, allow_null=True)
+    qcm_question = serializers.CharField(required=False, allow_null=True)
+    qcm_options = QCMOptionCreateSerializer(many=True, required=False, allow_null=True)
+    points = serializers.IntegerField(required=False, default=1)
+    passing_score = serializers.IntegerField(required=False, default=80)
+    max_attempts = serializers.IntegerField(required=False, default=3)
+    time_limit = serializers.IntegerField(required=False, default=0)
+
+    class Meta:
+        model = CourseContent
+        fields = [
+            'title', 'caption', 'order', 'content_type',
+            'pdf_file', 'video_file', 'qcm_question', 'qcm_options',
+            'points', 'passing_score', 'max_attempts', 'time_limit'
+        ]
+
+    def validate(self, data):
+        content_type_name = data.get('content_type')
+        
+        if content_type_name == 'pdf' and not data.get('pdf_file'):
+            raise serializers.ValidationError("PDF file is required for PDF content")
+        
+        if content_type_name == 'video' and not data.get('video_file'):
+            raise serializers.ValidationError("Video file is required for video content")
+        
+        if content_type_name == 'qcm':
+            if not data.get('qcm_question'):
+                raise serializers.ValidationError("QCM question is required")
+            if not data.get('qcm_options') or len(data.get('qcm_options', [])) < 2:
+                raise serializers.ValidationError("At least 2 QCM options are required")
+        
+        return data
+
+    def create(self, validated_data):
+        content_type_name = validated_data.pop('content_type')
+        content_type = get_object_or_404(ContentType, name=content_type_name)
+        course = self.context.get('course')
+        
+        # Extract content-specific data
+        pdf_file = validated_data.pop('pdf_file', None)
+        video_file = validated_data.pop('video_file', None)
+        qcm_question = validated_data.pop('qcm_question', None)
+        qcm_options = validated_data.pop('qcm_options', [])
+        points = validated_data.pop('points', 1)
+        passing_score = validated_data.pop('passing_score', 80)
+        max_attempts = validated_data.pop('max_attempts', 3)
+        time_limit = validated_data.pop('time_limit', 0)
+
+        # Create the base course content
+        course_content = CourseContent.objects.create(
+            course=course,
+            content_type=content_type,
+            **validated_data
+        )
+
+        # Create specific content based on type
+        if content_type_name == 'pdf' and pdf_file:
+            PDFContent.objects.create(course_content=course_content, pdf_file=pdf_file)
+        
+        elif content_type_name == 'video' and video_file:
+            VideoContent.objects.create(course_content=course_content, video_file=video_file)
+        
+        elif content_type_name == 'qcm' and qcm_question:
+            qcm = QCM.objects.create(
+                course_content=course_content,
+                question=qcm_question,
+                points=points,
+                passing_score=passing_score,
+                max_attempts=max_attempts,
+                time_limit=time_limit
+            )
+            
+            for option_data in qcm_options:
+                QCMOption.objects.create(qcm=qcm, **option_data)
+
+        return course_content

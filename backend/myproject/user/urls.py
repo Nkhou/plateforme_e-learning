@@ -46,7 +46,8 @@ urlpatterns = [
     path('courses/<int:pk>/contents/pdf/', views.CreatePDFContentView.as_view(), name='create-pdf-content'),
     path('courses/<int:pk>/contents/video/', views.CreateVideoContentView.as_view(), name='create-video-content'),
     path('courses/<int:pk>/contents/qcm/', views.CreateQCMContentView.as_view(), name='create-qcm-content'),
-    
+    path('video/<int:video_id>/complete/', views.MarkVideoCompletedView.as_view(), name='mark_video_completed'),
+    path('pdf/<int:pdf_id>/complete/', views.MarkPDFCompletedView.as_view(), name='mark_pdf_completed'),
     path('courses/recommended/', RecommendedCoursesView.as_view(), name='recommended-courses'),    
     # Subscription endpoints
     path('courses/<int:pk>/subscribers/', views.CourseSubscribers.as_view(), name='course-subscribers'),
@@ -57,13 +58,14 @@ urlpatterns = [
     path('courses/<int:pk>/subscription-stats/', views.SubscriptionStats.as_view(), name='subscription-stats'),
     # Progress endpoints
     path('courses/<int:pk>/update-progress/', views.UpdateProgress.as_view(), name='update-progress'),
-    path('courses/<int:pk>/mark-completed/', views.MarkContentCompleted.as_view(), name='mark-completed'),
+    # path('courses/<int:pk>/mark-completed/', views.MarkContentCompleted.as_view(), name='mark-completed'),
     path('courses/<int:pk>/leaderboard/', views.CourseLeaderboard.as_view(), name='leaderboard'),
     path('courses/<int:pk>/my-progress/', views.MyProgress.as_view(), name='my-progress'),
     # QCM endpoints
     path('courses/<int:pk>/submit-qcm/', views.SubmitQCM.as_view(), name='submit-qcm'),
     path('courses/<int:pk>/qcm-progress/', views.QCMProgress.as_view(), name='qcm-progress'),
     path('courses/<int:pk>/check-access/', views.CheckContentAccess.as_view(), name='check-access'),
+    # path('courses/<int:pk>/mark-content-completed/', views.MarkContentCompleted.as_view(), name='mark-content-completed'),
     # path('health/', HealthCheckView.as_view(), name='health'),
     #admin 
 # urls.py

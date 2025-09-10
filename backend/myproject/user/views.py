@@ -564,22 +564,73 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Course, CourseContent, ContentType, QCM, QCMOption, VideoContent, PDFContent
 from .serializers import (
     CourseContentSerializer,
-    QCMOptionCreateSerializer, QCMCreateSerializer
+    QCMOptionCreateSerializer, QCMCreateSerializer,
+    CourseContentCreateSerializer
 )
 
+# Add these views to your views.py
+
+class MarkVideoCompletedView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, video_id):
+        try:
+            video = VideoContent.objects.get(id=video_id)
+            video.is_completed = True
+            video.save()
+            
+            # Also add to subscription completed_contents for progress tracking
+            subscription = Subscription.objects.get(
+                user=request.user,
+                course=video.course_content.course,
+                is_active=True
+            )
+            subscription.completed_contents.add(video.course_content)
+            
+            return Response({'status': 'video marked as completed'})
+        except VideoContent.DoesNotExist:
+            return Response({'error': 'Video not found'}, status=404)
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Subscription not found'}, status=404)
+
+class MarkPDFCompletedView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pdf_id):
+        try:
+            pdf = PDFContent.objects.get(id=pdf_id)
+            pdf.is_completed = True
+            pdf.save()
+            
+            # Also add to subscription completed_contents for progress tracking
+            subscription = Subscription.objects.get(
+                user=request.user,
+                course=pdf.course_content.course,
+                is_active=True
+            )
+            subscription.completed_contents.add(pdf.course_content)
+            
+            return Response({'status': 'PDF marked as completed'})
+        except PDFContent.DoesNotExist:
+            return Response({'error': 'PDF not found'}, status=404)
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Subscription not found'}, status=404)
 class CourseContentsView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def get(self, request, pk):
         """Get all contents for a course"""
+        print('************************************')
         course = get_object_or_404(Course, pk=pk)
         contents = course.contents.all().order_by('order')
         serializer = CourseContentSerializer(contents, many=True)
+        print('44444444444444444444', serializer.data)
         return Response(serializer.data)
     
     def post(self, request, pk):
         """Create new course content"""
+        print('+++++++++++++++++++++++++++++-----')
         course = get_object_or_404(Course, pk=pk)
         
         # Check if user is the course creator
@@ -603,6 +654,7 @@ class CourseContentsView(APIView):
         if serializer.is_valid():
             try:
                 content = serializer.save()
+                # print('#############################', CourseContentSerializer(content).data )
                 return Response(
                     CourseContentSerializer(content).data,
                     status=status.HTTP_201_CREATED
@@ -631,6 +683,7 @@ class CourseContentDetailView(APIView):
     
     def put(self, request, course_pk, content_pk):
         """Update content"""
+        print('++++++++++++++++++++++++++++++++++++!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         content = self.get_object(course_pk, content_pk)
         
         # Check permission
@@ -734,8 +787,10 @@ class CreatePDFContentView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Get PDF content type
-        content_type = get_object_or_404(ContentType, name='PDF')
+        # Use get_or_create to handle missing content type
+        content_type, created = ContentType.objects.get_or_create(name='pdf')
+        if created:
+            print(f"Created new content type: {content_type.name}")
         
         serializer = PDFContentCreateSerializer(
             data=request.data, 
@@ -754,14 +809,15 @@ class CreatePDFContentView(APIView):
             )
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class CreateVideoContentView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser]
     
     def post(self, request, pk):
         """Create Video content"""
+        
         course = get_object_or_404(Course, pk=pk)
+        
         
         if course.creator != request.user:
             return Response(
@@ -770,7 +826,10 @@ class CreateVideoContentView(APIView):
             )
         
         # Get Video content type
-        content_type = get_object_or_404(ContentType, name='Video')
+        content_type, created = ContentType.objects.get_or_create(name='Video')
+        if created:
+            print(f"Created new content type: {content_type.name}")
+        # content_type = get_object_or_404(ContentType, name='Video')
         
         serializer = VideoContentCreateSerializer(
             data=request.data, 
@@ -805,7 +864,10 @@ class CreateQCMContentView(APIView):
             )
         
         # Get QCM content type
-        content_type = get_object_or_404(ContentType, name='QCM')
+        content_type, created = ContentType.objects.get_or_create(name='QCM')
+        if created:
+            print(f"Created new content type: {content_type.name}")
+        # content_type = get_object_or_404(ContentType, name='QCM')
         
         serializer = QCMContentCreateSerializer(
             data=request.data, 
@@ -908,9 +970,6 @@ class CheckSubscription(APIView):
                 course=course, 
                 is_active=True
             )
-
-
-            print('here+++++++++++++++++++++++++++++++++++++++++++')
             # You might want to get the first course content or specific content
             # For now, I'm keeping the structure but you need to adjust this part
             # based on what CourseDetailData should actually represent
@@ -918,7 +977,6 @@ class CheckSubscription(APIView):
             # If you want to return the first course content:
             first_content = course.contents.first()
             if first_content:
-                print('oppp++++++++++++++++++++++++++')
                 response_data.update({
                     'id': first_content.id,
                     'title': first_content.title,
@@ -1025,37 +1083,47 @@ class UpdateProgress(APIView):
             )
 
 
-class MarkContentCompleted(APIView):
-    def post(self, request, pk):
+class CourseContentCompletionView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get completion status for all contents in a course"""
         course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        content_id = request.data.get('content_id')
         
         try:
-            content = CourseContent.objects.get(id=content_id, course=course)
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-            
-            # Add content to completed contents
-            subscription.completed_contents.add(content)
-            
-            # Update progress percentage (simple calculation)
-            total_contents = course.contents.count()
-            completed_count = subscription.completed_contents.count()
-            if total_contents > 0:
-                subscription.progress_percentage = (completed_count / total_contents) * 100
-            
-            subscription.save()
-            
-            return Response({
-                'message': 'Content marked as completed',
-                'progress': subscription.progress_percentage
-            })
-            
-        except (CourseContent.DoesNotExist, Subscription.DoesNotExist):
-            return Response(
-                {'error': 'Content or subscription not found'},
-                status=status.HTTP_400_BAD_REQUEST
+            subscription = Subscription.objects.get(
+                user=request.user,
+                course=course,
+                is_active=True
             )
+            
+            contents = course.contents.all().order_by('order')
+            completion_data = []
+            
+            for content in contents:
+                is_completed = False
+                
+                if content.content_type.name == 'qcm':
+                    is_completed = QCMCompletion.objects.filter(
+                        subscription=subscription,
+                        qcm=content.qcm,
+                        is_passed=True
+                    ).exists()
+                else:
+                    is_completed = subscription.completed_contents.filter(id=content.id).exists()
+                
+                completion_data.append({
+                    'content_id': content.id,
+                    'title': content.title,
+                    'content_type': content.content_type.name,
+                    'order': content.order,
+                    'is_completed': is_completed
+                })
+            
+            return Response(completion_data)
+            
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Not subscribed to this course'}, status=404)
 
 
 class CourseLeaderboard(APIView):
@@ -1098,9 +1166,8 @@ class SubmitQCM(APIView):
         course = get_object_or_404(Course, pk=pk)
         user = request.user
         content_id = request.data.get('content_id')
-        selected_option_ids = request.data.get('selected_options', [])
-        time_taken = request.data.get('time_taken', 0)
-        
+        selected_option_ids = request.data.get('selected_option_ids', [])
+        time_taken = request.data.get('time_taken', 0)   
         try:
             # Get content and QCM
             content = CourseContent.objects.get(id=content_id, course=course)
@@ -1130,9 +1197,11 @@ class SubmitQCM(APIView):
             )
             
             # Add selected options
-            from .models import QCMOption
+            
             selected_options = QCMOption.objects.filter(id__in=selected_option_ids, qcm=qcm)
+
             attempt.selected_options.set(selected_options)
+            print('5555555555555555555555555555555555555', attempt, selected_options)
             
             # Calculate score
             attempt.calculate_score()
@@ -1163,7 +1232,7 @@ class SubmitQCM(APIView):
         except (CourseContent.DoesNotExist, Subscription.DoesNotExist):
             return Response({'error': 'Not found'}, status=404)
 
-
+from .models import QCMOption
 class QCMProgress(APIView):
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)

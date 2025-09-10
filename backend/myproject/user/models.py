@@ -78,6 +78,7 @@ class QCM(models.Model):
 
     def __str__(self):
         return f"QCM: {self.question} ({self.points} points)"
+# In your models.py
 class Subscription(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='course_subscriptions')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='course_subscriptions')
@@ -86,8 +87,12 @@ class Subscription(models.Model):
     
     # Progress tracking
     total_score = models.IntegerField(default=0)  # Total points earned
+    completed_contents = models.ManyToManyField('CourseContent', blank=True, related_name='completed_by_users')  # Add this line
     completed_qcms = models.ManyToManyField(QCM, through='QCMCompletion', blank=True)
     locked_contents = models.ManyToManyField('CourseContent', blank=True, related_name='locked_for_users')
+    
+    # Add progress percentage field
+    progress_percentage = models.FloatField(default=0.0)
     
     def update_total_score(self):
         completed_qcms = QCMCompletion.objects.filter(subscription=self, is_passed=True)
@@ -116,7 +121,6 @@ class Subscription(models.Model):
             return completion
         
         return True
-
 class QCMCompletion(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
     qcm = models.ForeignKey(QCM, on_delete=models.CASCADE)
@@ -134,6 +138,7 @@ class QCMCompletion(models.Model):
 class VideoContent(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='video_content')
     video_file = models.FileField(upload_to='videos/%y')
+    is_completed = models.BooleanField(default=False)  # Fixed: default=False
     
     def __str__(self):
         return self.course_content.title
@@ -141,6 +146,7 @@ class VideoContent(models.Model):
 class PDFContent(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='pdf_content')
     pdf_file = models.FileField(upload_to='pdfs/')
+    is_completed = models.BooleanField(default=False)  # Fixed: default=False
     
     def __str__(self):
         return self.course_content.title
