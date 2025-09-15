@@ -3,7 +3,9 @@ from .models import CustomUser, QCMAttempt, QCMCompletion, Course, CourseContent
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
+from django.conf import settings
 
 User = get_user_model()
 
@@ -165,9 +167,9 @@ class CourseContentSerializer(serializers.ModelSerializer):
         return False
 
 # Course Serializer
-from rest_framework import serializers
-from django.urls import reverse
-from django.conf import settings
+# from rest_framework import serializers
+# from django.urls import reverse
+# from django.conf import settings
 
 class CourseSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
@@ -353,7 +355,7 @@ class SubscriberSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = CustomUser
-        fields = ['id', 'first_name', 'last_name', 'full_name', 'email', 'department', 'department_display']
+        fields = ['id', 'first_name', 'last_name', 'full_name', 'email', 'department_display', 'privilege']
     
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}"
@@ -361,10 +363,38 @@ class SubscriberSerializer(serializers.ModelSerializer):
 # Subscription Serializer
 class SubscriptionSerializer(serializers.ModelSerializer):
     user = SubscriberSerializer(read_only=True)
+    progress_percentage = serializers.SerializerMethodField()
+    total_score = serializers.SerializerMethodField()
+    completed_contents = serializers.SerializerMethodField()
     
     class Meta:
         model = Subscription
-        fields = ['id', 'user', 'subscribed_at', 'is_active']
+        fields = ['id', 'user', 'subscribed_at', 'is_active', 'progress_percentage', 'total_score', 'completed_contents']
+    
+    def get_progress_percentage(self, obj):
+        # Calculate progress percentage based on completed contents
+        total_contents = obj.course.contents.count()
+        completed_count = obj.completed_contents.count()
+        
+        if total_contents > 0:
+            return (completed_count / total_contents) * 100
+        return 0
+    
+    def get_total_score(self, obj):
+        # Calculate total score from all QCM attempts
+        # from your_app.models import QCMAttempt  # Import your QCMAttempt model
+        
+        total_score = QCMAttempt.objects.filter(
+            user=obj.user,
+            qcm__course_content__course=obj.course,
+            is_passed=True
+        ).aggregate(Sum('score'))['score__sum'] or 0
+        
+        return total_score
+    
+    def get_completed_contents(self, obj):
+        # Return list of completed content IDs
+        return list(obj.completed_contents.values_list('id', flat=True))
 
 # Course with Subscribers Serializer
 class CourseWithSubscribersSerializer(serializers.ModelSerializer):

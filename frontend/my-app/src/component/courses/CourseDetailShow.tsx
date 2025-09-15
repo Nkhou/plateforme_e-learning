@@ -56,8 +56,8 @@ interface SubscriptionData {
   id: number;
   is_active: boolean;
   progress_percentage: number;
-  total_score: number;
-  completed_contents: number[];
+  // total_score: number;
+  // completed_contents: number[];
 }
 
 // Helper function to get correct image URL
@@ -109,11 +109,12 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         setLoading(true);
 
         // Fetch course and contents
-        const [courseResponse, contentsResponse] = await Promise.all([
-          api.get(`courses/${courseId}/is-subscribed/`),
-          api.get(`courses/${courseId}/contents/`)
-        ]);
-
+        // const [courseResponse, contentsResponse] = await Promise.all([
+        //   api.get(`courses/${courseId}/is-subscribed/`),
+        //   api.get(`courses/${courseId}/contents/`)
+        // ]);
+        const courseResponse = await api.get(`courses/${courseId}/is-subscribed/`);
+        const contentsResponse = await api.get(`courses/${courseId}/contents/`);
         const rawContents = contentsResponse.data;
         setCourse(courseResponse.data);
         console.log('Fetched contents (raw):', rawContents);
@@ -121,6 +122,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         let subscriptionData: SubscriptionData | null = null;
         try {
           const subscriptionResponse = await api.get(`courses/${courseId}/subscribers/`);
+          console.log('subscriptionResponse.data', subscriptionResponse.data)
           const subArray = subscriptionResponse.data;
           subscriptionData = subArray.length > 0 ? subArray[0] : null;
           console.log('99999999999999999999', subscriptionData)
@@ -130,7 +132,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         }
         
         // Process contents with lock/completion logic
-        const completed = subscriptionData?.completed_contents || [];
+        // const completed = subscriptionData?.completed_contents || [];
         const isActive = subscriptionData?.is_active || false;
         const minOrder = Math.min(...rawContents.map((c: CourseContent) => c.order));
 

@@ -867,10 +867,14 @@ class CreateQCMContentView(APIView):
 
 class CourseSubscribers(APIView):
     def get(self, request, pk):
+        print("+++++++++++++++++++++++++++++++++++hello")
         course = get_object_or_404(Course, pk=pk)
+        print('9988888888888888888888888888')
         subscriptions = course.course_subscriptions.filter(is_active=True)
-        # print(subscriptions)
+        print('444444444444444444444444444255')
+        print(subscriptions)
         serializer = SubscriptionSerializer(subscriptions, many=True)
+        print('-----------------------------CourseSubscribers', serializer.data)
         return Response(serializer.data)
 
 
@@ -917,74 +921,41 @@ class CheckSubscription(APIView):
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)
         user = request.user
-        
-        is_subscribed = Subscription.objects.filter(
+        print('66666666666666666666666666666666666666')
+        # Check if user is subscribed
+        subscription = Subscription.objects.filter(
             user=user, 
-            course=course, 
+            course=course,
             is_active=True
-        ).exists()
-        
-        # Initialize response data with basic course info
-        response_data = {
-            'is_subscribed': is_subscribed,
-            'id': course.id,
-            'title': course.title_of_course,  # Changed from CourseDetailData.title
-            'description': '',  # Default empty since course doesn't have caption
-            'order': 0,  # Default order
-            'content_type_name': '',  # Default empty
-            'is_completed': False,
-            'is_locked': not is_subscribed,  # Locked if not subscribed
-            'pdf_content': None,
-            'video_content': None,
-            'qcm': None,
-            'created_at': course.created_at.isoformat()
-        }
-        
-        # Only add subscription-specific data if user is subscribed
+        ).first()
+        print('88888888888888888888888888888')
+        is_subscribed = subscription is not None
+        print('111111111111111111111111111111111111')
+        # Calculate progress percentage if subscribed
+        progress_percentage = 0
+        print('444444444444444444444444444444444444444')
         if is_subscribed:
-            subscription = Subscription.objects.get(
-                user=user, 
-                course=course, 
-                is_active=True
-            )
-            # You might want to get the first course content or specific content
-            # For now, I'm keeping the structure but you need to adjust this part
-            # based on what CourseDetailData should actually represent
-            
-            # If you want to return the first course content:
-            first_content = course.contents.first()
-            if first_content:
-                response_data.update({
-                    'id': first_content.id,
-                    'title': first_content.title,
-                    'description': first_content.caption,
-                    'order': first_content.order,
-                    'content_type_name': first_content.content_type.name,
-                })
-                
-                # Add content-specific data
-                if hasattr(first_content, 'pdf_content') and first_content.pdf_content:
-                    response_data['pdf_content'] = {
-                        'pdf_file': first_content.pdf_content.pdf_file.url
-                    }
-                
-                if hasattr(first_content, 'video_content') and first_content.video_content:
-                    response_data['video_content'] = {
-                        'video_file': first_content.video_content.video_file.url
-                    }
-                
-                if hasattr(first_content, 'qcm') and first_content.qcm:
-                    response_data['qcm'] = {
-                        'question': first_content.qcm.question,
-                        'options': [
-                            {
-                                'id': option.id,
-                                'text': option.text,
-                                'is_correct': option.is_correct
-                            } for option in first_content.qcm.options.all()
-                        ]
-                    }
+            total_contents = course.contents.count()
+            completed_count = subscription.completed_contents.count()
+            if total_contents > 0:
+                progress_percentage = (completed_count / total_contents) * 100
+        print('0000000000000000000000000000000000000000')
+        # Build response data according to CourseDetailData interface
         
+        response_data = {
+        'id': course.id,
+        'title': course.title_of_course,  # Make sure this matches your Course model field
+        'description': course.description,  # Make sure this matches your Course model field
+        'image': course.image.url if course.image else '',  # Make sure this matches your Course model field
+        'creator_username': course.creator.username,
+        # 'creator_first_name': course.creator.first_name if course.creator else '')
+        # 'creator_last_name': course.creator.last_name if course.creator else '')
+        'created_at': course.created_at.isoformat() if course.created_at else '',
+        'updated_at': course.updated_at.isoformat() if course.updated_at else '',
+        'is_subscribed': is_subscribed,
+        'progress_percentage': progress_percentage,
+        }
+        # print('response_data', response_data)
         return Response(response_data)
 class MySubscriptions(APIView):
     def get(self, request):
