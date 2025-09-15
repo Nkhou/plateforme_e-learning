@@ -62,6 +62,8 @@ class CourseContent(models.Model):
     title = models.CharField(max_length=100)
     caption = models.CharField(max_length=200, blank=True)
     order = models.PositiveIntegerField(default=0)  # for ordering content
+    is_completed = models.BooleanField(default=False)
+    
     
     class Meta:
         ordering = ['order']
@@ -138,7 +140,7 @@ class QCMCompletion(models.Model):
 class VideoContent(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='video_content')
     video_file = models.FileField(upload_to='videos/%y')
-    is_completed = models.BooleanField(default=False)  # Fixed: default=False
+    # is_completed = models.BooleanField(default=False)  # Fixed: default=False
     
     def __str__(self):
         return self.course_content.title
@@ -146,7 +148,7 @@ class VideoContent(models.Model):
 class PDFContent(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='pdf_content')
     pdf_file = models.FileField(upload_to='pdfs/')
-    is_completed = models.BooleanField(default=False)  # Fixed: default=False
+    # is_completed = models.BooleanField(default=False)  # Fixed: default=False
     
     def __str__(self):
         return self.course_content.title

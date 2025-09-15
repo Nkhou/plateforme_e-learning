@@ -63,35 +63,64 @@ class QCMOptionSerializer(serializers.ModelSerializer):
 # QCM Serializer
 class QCMSerializer(serializers.ModelSerializer):
     options = QCMOptionSerializer(many=True, read_only=True)
-    is_completed = serializers.SerializerMethodField()
+    # is_completed = serializers.SerializerMethodField()
     
     class Meta:
         model = QCM
-        fields = ['id', 'question', 'options', 'points', 'passing_score', 'max_attempts', 'time_limit', 'is_completed']
+        fields = ['id', 'question', 'options', 'points', 'passing_score', 'max_attempts', 'time_limit']
     
-    def get_is_completed(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            qcm_completion = QCMCompletion.objects.filter(
-                subscription__user=request.user,
-                subscription__course=obj.course_content.course,
-                qcm=obj,
-                is_passed=True
-            ).exists()
-            return qcm_completion
-        return False
+    # def get_is_completed(self, obj):
+    #     request = self.context.get('request')
+    #     if request and request.user.is_authenticated:
+    #         qcm_completion = QCMCompletion.objects.filter(
+    #             subscription__user=request.user,
+    #             subscription__course=obj.course_content.course,
+    #             qcm=obj,
+    #             is_passed=True
+    #         ).exists()
+    #         return qcm_completion
+    #     return False
 
 # Video Content Serializer
 class VideoContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = VideoContent
-        fields = ['id', 'video_file', 'is_completed']  # Include is_completed
+        fields = ['id', 'video_file']  # Include is_completed
 
 # PDF Content Serializer
 class PDFContentSerializer(serializers.ModelSerializer):
+    # is_completed = serializers.SerializerMethodField()
+    
     class Meta:
         model = PDFContent
-        fields = ['id', 'pdf_file', 'is_completed']  # Include is_completed
+        fields = ['id', 'pdf_file']
+        read_only_fields = ['id', 'pdf_file']  # All fields are read-only
+    
+    # def get_is_completed(self, obj):
+    #     # Get the request from context
+    #     request = self.context.get('request')
+    #     if not request or not request.user.is_authenticated:
+    #         return False
+        
+    #     # Get the course content associated with this PDF
+    #     try:
+    #         course_content = obj.course_content
+    #         if not course_content:
+    #             return False
+            
+    #         # Check if user has completed this content
+    #         subscription = Subscription.objects.filter(
+    #             user=request.user,
+    #             course=course_content.course,
+    #             is_active=True
+    #         ).first()
+    #         if subscription:
+    #             print('---------------------------------------subscription', subscription.completed_contents.filter(id=course_content.id).exists())
+    #             return subscription.completed_contents.filter(id=course_content.id).exists()
+            
+    #         return False
+    #     except:
+    #         return False
 
 # Course Content Serializer
 class CourseContentSerializer(serializers.ModelSerializer):
@@ -267,6 +296,7 @@ class QCMContentCreateSerializer(serializers.ModelSerializer):
     passing_score = serializers.IntegerField(default=80)
     max_attempts = serializers.IntegerField(default=3)
     time_limit = serializers.IntegerField(default=0)
+
     
     class Meta:
         model = CourseContent
@@ -404,15 +434,14 @@ class QCMDetailSerializer(serializers.ModelSerializer):
 class QCMAttemptSerializer(serializers.ModelSerializer):
     selected_option_ids = serializers.ListField(
         child=serializers.IntegerField(),
-        write_only=True,
-        required=True
+        write_only=True
     )
     
     class Meta:
         model = QCMAttempt
-        fields = ['id', 'selected_option_ids', 'score', 'points_earned', 'is_passed', 'attempt_number', 'time_taken']
-        read_only_fields = ['score', 'points_earned', 'is_passed', 'attempt_number']
-
+        fields = ['id', 'user', 'qcm', 'selected_option_ids', 'time_taken', 
+                 'attempt_number', 'score', 'is_passed', 'completed_at']
+        read_only_fields = ['id', 'user', 'qcm', 'score', 'is_passed', 'completed_at']
 # QCM Completion Serializer
 class QCMCompletionSerializer(serializers.ModelSerializer):
     qcm_title = serializers.CharField(source='qcm.question', read_only=True)

@@ -8,7 +8,7 @@ from .models import CustomUser
 from .serializers import CustomUserSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from .serializers import SubscriptionWithProgressSerializer  # Fixed import
+from .serializers import SubscriptionWithProgressSerializer, QCMAttemptSerializer,PDFContentSerializer
 import logging
 import jwt
 from django.contrib.auth.hashers import make_password
@@ -573,22 +573,32 @@ from .serializers import (
 class MarkVideoCompletedView(APIView):
     permission_classes = [IsAuthenticated]
     
-    def post(self, request, video_id):
+    def post(self, request, pk):
         try:
-            video = VideoContent.objects.get(id=video_id)
-            video.is_completed = True
-            video.save()
-            
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            print('====================================================')
+            content_id = request.data.get('content_id')
+            print('====================================================')
+            # Get content and QCM
+            content = CourseContent.objects.get(id=content_id, course=course)
+            print('====================================================')
+            if content.content_type.name != 'Video':
+                return Response({'error': 'Content is not a Video'}, status=400)
+            print('====================================================')
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+
             # Also add to subscription completed_contents for progress tracking
-            subscription = Subscription.objects.get(
-                user=request.user,
-                course=video.course_content.course,
-                is_active=True
-            )
-            subscription.completed_contents.add(video.course_content)
-            
-            return Response({'status': 'video marked as completed'})
-        except VideoContent.DoesNotExist:
+            # subscription = Subscription.objects.get(
+            #     user=request.user,
+            #     course=pdf.course_content.course,
+            #     is_active=True
+            # )
+            print('hello111')
+            subscription.completed_contents.add(content)
+            print('====================================================')
+            return Response({'status': 'Video marked as completed'})
+        except PDFContent.DoesNotExist:
             return Response({'error': 'Video not found'}, status=404)
         except Subscription.DoesNotExist:
             return Response({'error': 'Subscription not found'}, status=404)
@@ -596,77 +606,85 @@ class MarkVideoCompletedView(APIView):
 class MarkPDFCompletedView(APIView):
     permission_classes = [IsAuthenticated]
     
-    def post(self, request, pdf_id):
+    def post(self, request, pk):
         try:
-            pdf = PDFContent.objects.get(id=pdf_id)
-            pdf.is_completed = True
-            pdf.save()
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            content_id = request.data.get('content_id')
             
-            # Also add to subscription completed_contents for progress tracking
-            subscription = Subscription.objects.get(
-                user=request.user,
-                course=pdf.course_content.course,
-                is_active=True
-            )
-            subscription.completed_contents.add(pdf.course_content)
+            # Get the course content
+            content = CourseContent.objects.get(id=content_id, course=course)
             
-            return Response({'status': 'PDF marked as completed'})
-        except PDFContent.DoesNotExist:
-            return Response({'error': 'PDF not found'}, status=404)
+            if content.content_type.name.lower() != 'pdf':  # Use lower() for case-insensitive comparison
+                return Response({'error': 'Content is not a pdf'}, status=400)
+            
+            # Get the PDF content object
+            pdf_content = content.pdf_content
+            if not pdf_content:
+                return Response({'error': 'PDF content not found'}, status=404)
+            
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+
+            # Mark as completed in subscription
+            if not subscription.completed_contents.filter(id=content.id).exists():
+                subscription.completed_contents.add(content)
+            
+            # Update progress percentage
+            total_contents = course.contents.count()
+            completed_count = subscription.completed_contents.count()
+            progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+            
+            subscription.progress_percentage = progress_percentage
+            subscription.save()
+            
+            # Serialize the PDF content to include the updated is_completed status
+            serializer = PDFContentSerializer(pdf_content, context={'request': request})
+            
+            return Response({
+                'status': 'PDF marked as completed',
+                'progress_percentage': progress_percentage,
+                'completed_contents': list(subscription.completed_contents.values_list('id', flat=True)),
+                'pdf_content': serializer.data
+            })
+            
+        except CourseContent.DoesNotExist:
+            return Response({'error': 'Content not found'}, status=404)
         except Subscription.DoesNotExist:
-            return Response({'error': 'Subscription not found'}, status=404)
+            return Response({'error': 'Subscription not found. Please subscribe to the course first.'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
 class CourseContentsView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def get(self, request, pk):
-        """Get all contents for a course"""
-        print('************************************')
-        course = get_object_or_404(Course, pk=pk)
-        contents = course.contents.all().order_by('order')
-        serializer = CourseContentSerializer(contents, many=True)
-        print('44444444444444444444', serializer.data)
-        return Response(serializer.data)
-    
-    def post(self, request, pk):
-        """Create new course content"""
-        print('+++++++++++++++++++++++++++++-----')
-        course = get_object_or_404(Course, pk=pk)
-        
-        # Check if user is the course creator
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
+        try:
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            
+            # Get user's subscription for this course
+            subscription = Subscription.objects.filter(
+                user=user,
+                course=course,
+                is_active=True
+            ).first()
+            
+            contents = CourseContent.objects.filter(course=course).order_by('order')
+            
+            # Pass subscription to serializer context
+            serializer = CourseContentSerializer(
+                contents, 
+                many=True, 
+                context={
+                    'request': request,
+                    'subscription': subscription
+                }
             )
-        
-        data = request.data.copy()
-        data['course'] = course.id
-        
-        # Get content type
-        content_type_name = data.get('content_type')
-        if content_type_name:
-            content_type = get_object_or_404(ContentType, name=content_type_name)
-            data['content_type'] = content_type.id
-        
-        serializer = CourseContentCreateSerializer(data=data, context={'request': request})
-        
-        if serializer.is_valid():
-            try:
-                content = serializer.save()
-                # print('#############################', CourseContentSerializer(content).data )
-                return Response(
-                    CourseContentSerializer(content).data,
-                    status=status.HTTP_201_CREATED
-                )
-            except Exception as e:
-                return Response(
-                    {'error': f'Failed to create content: {str(e)}'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+            
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 class CourseContentDetailView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -677,9 +695,13 @@ class CourseContentDetailView(APIView):
     
     def get(self, request, course_pk, content_pk):
         """Get specific content"""
-        content = self.get_object(course_pk, content_pk)
-        serializer = CourseContentSerializer(content)
-        return Response(serializer.data)
+        try:
+            content = self.get_object(course_pk, content_pk)
+            serializer = CourseContentSerializer(content, context={'request': request})
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     
     def put(self, request, course_pk, content_pk):
         """Update content"""
@@ -714,52 +736,7 @@ class CourseContentDetailView(APIView):
         
         content.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-# views.py - Fix the CreatePDFContentView
-# views.py
-from rest_framework.parsers import MultiPartParser, JSONParser
-from rest_framework.parsers import MultiPartParser, JSONParser
-from .serializers import (
-    PDFContentCreateSerializer, 
-    VideoContentCreateSerializer, 
-    QCMContentCreateSerializer,
-    CourseContentSerializer
-)
-# In your views.py
-# class CreatePDFContentView(APIView):
-#     permission_classes = [IsAuthenticated]
-#     parser_classes = [MultiPartParser]
-    
-#     def post(self, request, pk):
-#         """Create PDF content"""
-#         course = get_object_or_404(Course, pk=pk)
-        
-#         if course.creator != request.user:
-#             return Response(
-#                 {'error': 'You are not the creator of this course'},
-#                 status=status.HTTP_403_FORBIDDEN
-#             )
-        
-#         # Get PDF content type
-#         content_type = get_object_or_404(ContentType, name='PDF')
-        
-#         # Use the specific PDF serializer
-#         serializer = PDFContentCreateSerializer(
-#             data=request.data, 
-#             context={
-#                 'request': request,
-#                 'course': course,
-#                 'content_type': content_type
-#             }
-#         )
-        
-#         if serializer.is_valid():
-#             content = serializer.save()
-#             return Response(
-#                 CourseContentSerializer(content).data,
-#                 status=status.HTTP_201_CREATED
-#             )
-        
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 from rest_framework.parsers import MultiPartParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 
@@ -1160,78 +1137,98 @@ class MyProgress(APIView):
             )
 
 # QCM Views
-
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from .models import Course, CourseContent, Subscription, QCMCompletion, QCMAttempt, QCMOption
 class SubmitQCM(APIView):
-    def post(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        content_id = request.data.get('content_id')
-        selected_option_ids = request.data.get('selected_option_ids', [])
-        time_taken = request.data.get('time_taken', 0)   
+    def post(self, request, pk):  # pk is course ID
+        print('Received data:', request.data)
+        
         try:
-            # Get content and QCM
-            content = CourseContent.objects.get(id=content_id, course=course)
-            if content.content_type.name != 'QCM':
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            content_id = request.data.get('content_id')
+            
+            print(f'Course: {course.id}, Content ID: {content_id}, User: {user.id}')
+            
+            # Get the QCM content
+            content = get_object_or_404(CourseContent, id=content_id, course=course)
+            
+            print(f'Content type: {content.content_type.name}')
+            print(f'Content object: {content}')
+            
+            if content.content_type.name.lower() != 'qcm':  # Use lower() for case insensitivity
+                print(f'Expected QCM but got: {content.content_type.name}')
                 return Response({'error': 'Content is not a QCM'}, status=400)
             
             qcm = content.qcm
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            if not qcm:
+                print('QCM object not found for this content')
+                return Response({'error': 'QCM not found for this content'}, status=404)
             
-            # Check if user can attempt
-            completion, created = QCMCompletion.objects.get_or_create(
-                subscription=subscription,
-                qcm=qcm
-            )
+            print(f'QCM found: {qcm.id}')
             
-            if completion.attempts_count >= qcm.max_attempts:
-                return Response({'error': 'Maximum attempts reached'}, status=400)
+            serializer = QCMAttemptSerializer(data=request.data)
+            print('Serializer created')
             
-            # Create new attempt
+            if serializer.is_valid():
+                print('Serializer is valid')
+                attempt = QCMAttempt.objects.create(
+                    user=user,
+                    qcm=qcm,
+                    time_taken=request.data.get('time_taken', 0),
+                    attempt_number=self.get_next_attempt_number(user, qcm)
+                )
+                print('Attempt created')
+                
+                # Assign selected options manually
+                selected_option_ids = serializer.validated_data['selected_option_ids']
+                selected_options = QCMOption.objects.filter(id__in=selected_option_ids, qcm=qcm)
+                attempt.selected_options.set(selected_options)
 
-            attempt_number = completion.attempts_count + 1
-            attempt = QCMAttempt.objects.create(
-                user=user,
-                qcm=qcm,
-                attempt_number=attempt_number,
-                time_taken=time_taken
-            )
-            
-            # Add selected options
-            
-            selected_options = QCMOption.objects.filter(id__in=selected_option_ids, qcm=qcm)
+                # Calculate score and finalize
+                attempt.completed_at = timezone.now()
+                attempt.calculate_score()
+                
+                # Update subscription progress if passed
+                if attempt.is_passed:
+                    try:
+                        subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+                        subscription.completed_contents.add(content)
+                        
+                        # Update progress percentage
+                        total_contents = course.contents.count()
+                        completed_count = subscription.completed_contents.count()
+                        progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+                        
+                        subscription.progress_percentage = progress_percentage
+                        subscription.save()
+                        
+                        response_data = QCMAttemptSerializer(attempt).data
+                        response_data['progress_percentage'] = progress_percentage
+                        response_data['completed_contents'] = list(subscription.completed_contents.values_list('id', flat=True))
+                        
+                        return Response(response_data, status=201)
+                    except Subscription.DoesNotExist:
+                        # Return attempt data but without subscription info
+                        return Response(QCMAttemptSerializer(attempt).data, status=201)
+                else:
+                    return Response(QCMAttemptSerializer(attempt).data, status=201)
+            else:
+                print('Serializer errors:', serializer.errors)
+                return Response(serializer.errors, status=400)
+                
+        except Exception as e:
+            print('Error in SubmitQCM:', str(e))
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
 
-            attempt.selected_options.set(selected_options)
-            print('5555555555555555555555555555555555555', attempt, selected_options)
-            
-            # Calculate score
-            attempt.calculate_score()
-            attempt.completed_at = timezone.now()
-            attempt.save()
-            
-            # Update completion record
-            completion.attempts_count = attempt_number
-            if attempt.score > completion.best_score:
-                completion.best_score = attempt.score
-                completion.points_earned = attempt.points_earned
-                completion.is_passed = attempt.is_passed
-            completion.save()
-            
-            # Update total score
-            subscription.update_total_score()
-            
-            return Response({
-                'score': attempt.score,
-                'points_earned': attempt.points_earned,
-                'is_passed': attempt.is_passed,
-                'attempt_number': attempt_number,
-                'total_attempts': qcm.max_attempts,
-                'remaining_attempts': qcm.max_attempts - attempt_number,
-                'total_score': subscription.total_score
-            })
-            
-        except (CourseContent.DoesNotExist, Subscription.DoesNotExist):
-            return Response({'error': 'Not found'}, status=404)
-
+    def get_next_attempt_number(self, user, qcm):
+        last_attempt = QCMAttempt.objects.filter(user=user, qcm=qcm).order_by('-attempt_number').first()
+        return last_attempt.attempt_number + 1 if last_attempt else 1
 from .models import QCMOption
 class QCMProgress(APIView):
     def get(self, request, pk):
