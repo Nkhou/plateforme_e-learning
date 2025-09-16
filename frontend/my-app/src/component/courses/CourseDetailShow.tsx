@@ -90,6 +90,7 @@ const getFileUrl = (fileUrl: string) => {
   return `http://localhost:8000/media/${fileUrl}`;
 };
 
+
 const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
   const [course, setCourse] = useState<CourseDetailData | null>(null);
   const [contents, setContents] = useState<CourseContent[]>([]);
@@ -107,14 +108,10 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
       try {
         setLoading(true);
-
-        // Fetch course and contents
-        // const [courseResponse, contentsResponse] = await Promise.all([
-        //   api.get(`courses/${courseId}/is-subscribed/`),
-        //   api.get(`courses/${courseId}/contents/`)
-        // ]);
-        const courseResponse = await api.get(`courses/${courseId}/is-subscribed/`);
-        const contentsResponse = await api.get(`courses/${courseId}/contents/`);
+        const [courseResponse, contentsResponse] = await Promise.all([
+          api.get(`courses/${courseId}/is-subscribed/`),
+          api.get(`courses/${courseId}/contents/`)
+        ]);
         const rawContents = contentsResponse.data;
         setCourse(courseResponse.data);
         console.log('Fetched contents (raw):', rawContents);
@@ -482,7 +479,8 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   height: 'auto',
                   objectFit: 'cover',
                   borderRadius: '8px',
-                  marginBottom: '1rem'
+                  marginBottom: '1rem',
+                  marginTop: '1rem'
                 }}
               />
               

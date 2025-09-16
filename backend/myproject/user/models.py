@@ -73,27 +73,24 @@ class CourseContent(models.Model):
 class QCM(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='qcm')
     question = models.TextField()
-    points = models.IntegerField(default=1)  # Points for this QCM
-    passing_score = models.IntegerField(default=80)  # Minimum percentage to pass
-    max_attempts = models.IntegerField(default=3)  # Maximum attempts allowed
-    time_limit = models.IntegerField(default=0)  # Time limit in minutes (0 = no limit)
+    points = models.IntegerField(default=1)  
+    passing_score = models.IntegerField(default=80) 
+    max_attempts = models.IntegerField(default=3)  
+    time_limit = models.IntegerField(default=0)  
 
     def __str__(self):
         return f"QCM: {self.question} ({self.points} points)"
-# In your models.py
 class Subscription(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='course_subscriptions')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='course_subscriptions')
     subscribed_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     
-    # Progress tracking
-    total_score = models.IntegerField(default=0)  # Total points earned
-    completed_contents = models.ManyToManyField('CourseContent', blank=True, related_name='completed_by_users')  # Add this line
+    total_score = models.IntegerField(default=0) 
+    completed_contents = models.ManyToManyField('CourseContent', blank=True, related_name='completed_by_users') 
     completed_qcms = models.ManyToManyField(QCM, through='QCMCompletion', blank=True)
     locked_contents = models.ManyToManyField('CourseContent', blank=True, related_name='locked_for_users')
     
-    # Add progress percentage field
     progress_percentage = models.FloatField(default=0.0)
     
     def update_total_score(self):
@@ -104,10 +101,9 @@ class Subscription(models.Model):
     
     def can_access_content(self, content):
         """Check if user can access specific content based on prerequisites"""
-        if content.order == 1:  # First content is always accessible
+        if content.order == 1:  
             return True
         
-        # Check if previous content is completed
         previous_content = CourseContent.objects.filter(
             course=content.course, 
             order=content.order - 1

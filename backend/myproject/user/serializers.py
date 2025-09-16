@@ -62,69 +62,29 @@ class QCMOptionSerializer(serializers.ModelSerializer):
         model = QCMOption
         fields = ['id', 'text', 'is_correct']
 
-# QCM Serializer
+# QCM Option Create Serializer
+class QCMOptionCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = QCMOption
+        fields = ['text', 'is_correct']
+
 class QCMSerializer(serializers.ModelSerializer):
     options = QCMOptionSerializer(many=True, read_only=True)
-    # is_completed = serializers.SerializerMethodField()
     
     class Meta:
         model = QCM
         fields = ['id', 'question', 'options', 'points', 'passing_score', 'max_attempts', 'time_limit']
-    
-    # def get_is_completed(self, obj):
-    #     request = self.context.get('request')
-    #     if request and request.user.is_authenticated:
-    #         qcm_completion = QCMCompletion.objects.filter(
-    #             subscription__user=request.user,
-    #             subscription__course=obj.course_content.course,
-    #             qcm=obj,
-    #             is_passed=True
-    #         ).exists()
-    #         return qcm_completion
-    #     return False
-
-# Video Content Serializer
 class VideoContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = VideoContent
-        fields = ['id', 'video_file']  # Include is_completed
-
-# PDF Content Serializer
+        fields = ['id', 'video_file'] 
 class PDFContentSerializer(serializers.ModelSerializer):
-    # is_completed = serializers.SerializerMethodField()
     
     class Meta:
         model = PDFContent
         fields = ['id', 'pdf_file']
-        read_only_fields = ['id', 'pdf_file']  # All fields are read-only
+        read_only_fields = ['id', 'pdf_file'] 
     
-    # def get_is_completed(self, obj):
-    #     # Get the request from context
-    #     request = self.context.get('request')
-    #     if not request or not request.user.is_authenticated:
-    #         return False
-        
-    #     # Get the course content associated with this PDF
-    #     try:
-    #         course_content = obj.course_content
-    #         if not course_content:
-    #             return False
-            
-    #         # Check if user has completed this content
-    #         subscription = Subscription.objects.filter(
-    #             user=request.user,
-    #             course=course_content.course,
-    #             is_active=True
-    #         ).first()
-    #         if subscription:
-    #             print('---------------------------------------subscription', subscription.completed_contents.filter(id=course_content.id).exists())
-    #             return subscription.completed_contents.filter(id=course_content.id).exists()
-            
-    #         return False
-    #     except:
-    #         return False
-
-# Course Content Serializer
 class CourseContentSerializer(serializers.ModelSerializer):
     video_content = VideoContentSerializer(read_only=True)
     pdf_content = PDFContentSerializer(read_only=True)
@@ -165,11 +125,6 @@ class CourseContentSerializer(serializers.ModelSerializer):
             return subscription.completed_contents.filter(id=obj.id).exists()
 
         return False
-
-# Course Serializer
-# from rest_framework import serializers
-# from django.urls import reverse
-# from django.conf import settings
 
 class CourseSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
@@ -229,10 +184,38 @@ class CourseCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Failed to create course: {str(e)}")
 
 # QCM Option Create Serializer
-class QCMOptionCreateSerializer(serializers.ModelSerializer):
+class QCMCreateSerializer(serializers.ModelSerializer):
+    options = QCMOptionCreateSerializer(many=True)
+    
     class Meta:
-        model = QCMOption
-        fields = ['text', 'is_correct']
+        model = QCM
+        fields = ['question', 'passing_score', 'options']  # Remove is_multiple_choice from fields
+    
+    def validate(self, data):
+        options = data.get('options', [])
+        
+        # Count correct options
+        correct_options = sum(1 for option in options if option.get('is_correct', False))
+        
+        if correct_options == 0:
+            raise serializers.ValidationError("At least one option must be correct")
+        
+        return data
+    
+    def create(self, validated_data):
+        options_data = validated_data.pop('options')
+        
+        # Automatically determine if it's multiple choice
+        correct_options = sum(1 for option in options_data if option.get('is_correct', False))
+        validated_data['is_multiple_choice'] = correct_options > 1
+        
+        qcm = QCM.objects.create(**validated_data)
+        
+        for option_data in options_data:
+            QCMOption.objects.create(qcm=qcm, **option_data)
+        
+        return qcm
+        
 
 # PDF Content Create Serializer
 class PDFContentCreateSerializer(serializers.ModelSerializer):
