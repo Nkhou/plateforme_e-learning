@@ -1,39 +1,19 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.utils.translation import gettext_lazy as _
 from .models import (
     CustomUser, Course, ContentType, CourseContent, QCM, 
     Subscription, QCMCompletion, VideoContent, PDFContent, 
-    QCMOption, QCMAttempt
+    QCMOption, QCMAttempt, Module
 )
 
 # Custom User Admin
-# user/admin.py
-from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser
-
-# user/admin.py
-from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from django.utils.translation import gettext_lazy as _
-from .models import CustomUser
-
-# @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-    # Fields to display in the list view
     list_display = ('username', 'email', 'first_name', 'last_name', 
                    'privilege', 'department', 'is_staff', 'is_active')
-    
-    # Fields to filter by in the right sidebar
     list_filter = ('privilege', 'department', 'is_staff', 'is_superuser', 'is_active')
-    
-    # Fields to search by
     search_fields = ('username', 'first_name', 'last_name', 'email')
-    
-    # How results are ordered
     ordering = ('username',)
-    
-    # Fieldsets for the edit view
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
         (_('Personal info'), {'fields': ('first_name', 'last_name', 'email')}),
@@ -43,8 +23,6 @@ class CustomUserAdmin(UserAdmin):
         (_('Important dates'), {'fields': ('last_login', 'date_joined')}),
         (_('Additional info'), {'fields': ('privilege', 'department')}),
     )
-    
-    # Fieldsets for the add view
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
@@ -52,6 +30,13 @@ class CustomUserAdmin(UserAdmin):
                       'first_name', 'last_name', 'privilege', 'department'),
         }),
     )
+
+# Module Admin
+class ModuleAdmin(admin.ModelAdmin):
+    list_display = ('course', 'title', 'order')
+    list_filter = ('course',)
+    search_fields = ('title', 'course__title_of_course')
+    ordering = ('course', 'order')
 
 # Course Admin
 class CourseAdmin(admin.ModelAdmin):
@@ -65,12 +50,17 @@ class ContentTypeAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
 
-# CourseContent Admin
+# CourseContent Admin (CORRECTED)
 class CourseContentAdmin(admin.ModelAdmin):
-    list_display = ('course', 'content_type', 'title', 'order')
-    list_filter = ('content_type', 'course')
-    search_fields = ('title', 'course__title_of_course')
-    ordering = ('course', 'order')
+    list_display = ('get_course', 'module', 'content_type', 'title', 'order')
+    list_filter = ('content_type', 'module__course')
+    search_fields = ('title', 'module__course__title_of_course')
+    ordering = ('module__course', 'order')
+    
+    def get_course(self, obj):
+        return obj.module.course.title_of_course if obj.module and obj.module.course else 'No Course'
+    get_course.short_description = 'Course'
+    get_course.admin_order_field = 'module__course__title_of_course'
 
 # QCM Admin
 class QCMAdmin(admin.ModelAdmin):
@@ -116,6 +106,7 @@ class QCMAttemptAdmin(admin.ModelAdmin):
 
 # Register all models
 admin.site.register(CustomUser, CustomUserAdmin)
+admin.site.register(Module, ModuleAdmin)
 admin.site.register(Course, CourseAdmin)
 admin.site.register(ContentType, ContentTypeAdmin)
 admin.site.register(CourseContent, CourseContentAdmin)

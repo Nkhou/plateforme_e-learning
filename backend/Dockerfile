@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements and install
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt 
 
 # Copy project
 COPY . .
@@ -41,7 +41,7 @@ RUN if [ ! -f "myproject/myproject/settings.py" ]; then \
     echo "ERROR: settings.py not found!"; find . -name "settings.py"; exit 1; \
     else echo "SUCCESS: settings.py found"; fi
 # Copy create_superuser.py to the correct location BEFORE changing WORKDIR
-COPY create_superuser.py /app/myproject/
+# COPY create_superuser.py /app/myproject/
 
 # Change to the project directory
 # W# Change to the project directory
@@ -54,4 +54,6 @@ USER appuser
 EXPOSE 8000
 
 # Use the management command instead
-CMD python manage.py createsuperuserauto && python manage.py runserver 0.0.0.0:8000
+CMD python manage.py migrate && \
+    (python create_superuser.py || true) && \
+    python manage.py runserver 0.0.0.0:8000

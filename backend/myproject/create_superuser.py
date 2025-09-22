@@ -3,7 +3,7 @@ import os
 import django
 from django.contrib.auth import get_user_model
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'your_project.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')  # Changed this line
 django.setup()
 
 def create_superuser():
@@ -13,6 +13,7 @@ def create_superuser():
     password = os.environ.get('SUPERUSER_PASSWORD', 'admin123')
     first_name = os.environ.get('SUPERUSER_FIRSTNAME', 'admin')
     last_name = os.environ.get('SUPERUSER_LASTNAME', 'admin')
+    
     if not User.objects.filter(username=username).exists():
         User.objects.create_superuser(
             username=username,

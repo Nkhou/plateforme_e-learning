@@ -1,26 +1,44 @@
-
-# Create your views here.
+# views.py
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import CustomUser
-from .serializers import CustomUserSerializer
+from .models import CustomUser, Course, Module, CourseContent, Subscription, QCM, QCMCompletion, QCMAttempt, QCMOption, VideoContent, PDFContent, ContentType
+from .serializers import (
+    CustomUserSerializer, CourseSerializer, CourseCreateSerializer, CourseDetailSerializer,
+    ModuleSerializer, ModuleCreateSerializer, CourseContentSerializer, CourseContentCreateSerializer,
+    SubscriptionSerializer, SubscriptionWithProgressSerializer, QCMAttemptSerializer, 
+    QCMCompletionSerializer, PDFContentSerializer, VideoContentSerializer, QCMSerializer,
+    QCMOptionCreateSerializer, QCMContentCreateSerializer, PDFContentCreateSerializer,
+    VideoContentCreateSerializer
+)
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from .serializers import SubscriptionWithProgressSerializer, QCMAttemptSerializer,PDFContentSerializer
 import logging
 import jwt
-from django.contrib.auth.hashers import make_password
-from django.utils.crypto import get_random_string
 from django.conf import settings
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes 
 from django.utils import timezone
+from django.db import connection
+import os
+import json
+import secrets
+import string
+from django.template.loader import render_to_string
+from django.core.mail import EmailMessage
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.db.models import Count, Avg, Q, F, Sum
+from django.db.models.functions import TruncMonth, TruncWeek, TruncDate
+from datetime import timedelta, datetime
+from django.contrib.auth import get_user_model
+from rest_framework import viewsets
+from rest_framework.decorators import action
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
 
-
+# Utility functions
 def is_secure_request(request):
     """Check if the request is secure (HTTPS)"""
     return (
@@ -29,6 +47,186 @@ def is_secure_request(request):
         settings.USE_SSL or
         settings.PRODUCTION
     )
+
+def generate_random_password():
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return ''.join(secrets.choice(alphabet) for _ in range(12))
+
+# Health Check Views
+class HealthCheckView(APIView):
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        health_status = {
+            'status': 'healthy',
+            'timestamp': str(timezone.now()),
+            'version': '1.0.0',
+            'service': 'course-app-backend',
+            'ssl_enabled': is_secure_request(request)
+        }
+        
+        # Test database connection
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            health_status['database'] = 'connected'
+        except Exception as e:
+            health_status['database'] = f'error: {str(e)}'
+            health_status['status'] = 'degraded'
+        
+        return Response(health_status, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def simple_health_check(request):
+    return Response({
+        'status': 'healthy',
+        'message': 'Service is running',
+        'timestamp': str(timezone.now()),
+        'ssl_enabled': is_secure_request(request)
+    }, status=status.HTTP_200_OK)
+
+# Authentication Views
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        try:
+            if request.content_type == 'application/json':
+                try:
+                    data = json.loads(request.body)
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON parse error: {e}")
+                    return Response(
+                        {"error": f"Invalid JSON format: {str(e)}"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:
+                data = request.data
+            
+            email = data.get('email')
+            password = data.get('password')
+            
+            if not email or not password:
+                return Response(
+                    {"error": "Email and password are required."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                user_obj = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return Response(
+                    {"error": "Invalid credentials."}, 
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            user = authenticate(request, username=user_obj.username, password=password)
+            if user is None:
+                return Response(
+                    {"error": "Invalid credentials."}, 
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            
+            response = Response({
+                'refresh': str(refresh),
+                'access': access_token,
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'username': user.username,
+                    'privilege': user.privilege
+                }
+            }, status=status.HTTP_200_OK)
+            
+            response.set_cookie(
+                key='accessToken',
+                value=access_token,
+                httponly=True,
+                secure=False,
+                samesite='Lax',
+                max_age=60 * 60 * 24
+            )
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Login error: {str(e)}")
+            return Response(
+                {"error": "An internal server error occurred."}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class LogoutView(APIView):
+    def post(self, request):
+        response = Response({"message": "Logged out"}, status=200)
+        response.delete_cookie('accessToken')
+        return response
+
+class CheckAuthentificationView(APIView):
+    def get(self, request):
+        try:
+            token = request.COOKIES.get('accessToken')
+            
+            if not token:
+                auth_header = request.headers.get('Authorization')
+                if auth_header and auth_header.startswith('Bearer '):
+                    token = auth_header.split(' ')[1]
+            
+            if not token:
+                return Response({
+                    'authenticated': False, 
+                    'message': 'No token'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            UserById_ = CustomUser.objects.filter(id=payload.get('user_id')).first()
+
+            user = {
+                "user_id": payload.get('user_id'),
+                "username": UserById_.username,
+                "firstname": UserById_.first_name,
+                "lastName": UserById_.last_name,
+                "email": UserById_.email,
+                "privilege": UserById_.privilege,
+                "department": UserById_.department,
+                "department_display": UserById_.get_department_display()
+            }
+            
+            return Response({
+                'authenticated': True, 
+                'user': user
+            }, status=status.HTTP_200_OK)
+
+        except jwt.ExpiredSignatureError:
+            request.delete_cookie('accessToken')
+            return Response({
+                'authenticated': False, 
+                'message': 'Token expired'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        except jwt.InvalidTokenError:
+            return Response({
+                'authenticated': False, 
+                'message': 'Invalid token'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+class DashboardView(APIView):
+    def get(self, request):
+        token = request.COOKIES.get('accessToken')
+        if not token:
+            return Response({'authenticated': False, 'message': 'No token'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            return Response({'authenticated': True, 'user_id': payload.get('user_id')})
+        except jwt.ExpiredSignatureError:
+            return Response({'authenticated': False, 'message': 'Token expired'}, status=status.HTTP_401_UNAUTHORIZED)
+        except jwt.InvalidTokenError:
+            return Response({'authenticated': False, 'message': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+
+# User Management Views
 class UserView(APIView):
     def get(self, request, pk):
         user = get_object_or_404(CustomUser, pk=pk)
@@ -52,266 +250,82 @@ class UserView(APIView):
         user.delete()
         return Response({'message': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
 
-# backend/your_app/views.py
-from rest_framework.decorators import api_view
+# Add this to your user/views.py
+from rest_framework.parsers import MultiPartParser
+import csv
+from io import TextIOWrapper
 
-from django.db import connection
-from redis import Redis
-
-
-import os
-from redis import Redis
-import redis
-
-class HealthCheckView(APIView):
-    """
-    Simple health check that doesn't require authentication
-    """
-    permission_classes = [AllowAny]
+class CSVUploadView(APIView):
+    parser_classes = [MultiPartParser]
     
-    def get(self, request):
-        health_status = {
-            'status': 'healthy',
-            'timestamp': str(timezone.now()),
-            'version': '1.0.0',
-            'service': 'course-app-backend',
-            'ssl_enabled': is_secure_request(request)
-        }
-        
-        # Test database connection
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            health_status['database'] = 'connected'
-        except Exception as e:
-            health_status['database'] = f'error: {str(e)}'
-            health_status['status'] = 'degraded'
-        
-        # Test Redis connection (optional)
-        try:
-            # Use environment variable or default to 'redis' (Docker service name)
-            redis_host = os.environ.get('REDIS_HOST', 'redis')
-            redis_port = int(os.environ.get('REDIS_PORT', 6379))
-            redis_password = os.environ.get('REDIS_PASSWORD', '')
-            
-            # Connect to Redis
-            if redis_password:
-                r = Redis(
-                    host=redis_host, 
-                    port=redis_port, 
-                    password=redis_password,
-                    socket_timeout=2
-                )
-            else:
-                r = Redis(
-                    host=redis_host, 
-                    port=redis_port, 
-                    socket_timeout=2
-                )
-                
-            r.ping()
-            health_status['redis'] = 'connected'
-        except Exception as e:
-            health_status['redis'] = f'error: {str(e)}'
-            # Don't mark as degraded since Redis is optional for basic functionality
-        
-        return Response(health_status, status=status.HTTP_200_OK)
-
-# Simple function-based view alternative
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def simple_health_check(request):
-    """
-    Very simple health check endpoint
-    """
-    return Response({
-        'status': 'healthy',
-        'message': 'Service is running',
-        'timestamp': str(timezone.now()),
-        'ssl_enabled': is_secure_request(request)
-    }, status=status.HTTP_200_OK)
-
-
-
-
-
-
-from django.contrib.auth import get_user_model
-import json
-
-from rest_framework.permissions import AllowAny  
-from django.utils import timezone
-
-logger = logging.getLogger(__name__)
-User = get_user_model()
-
-class LoginView(APIView):
-    permission_classes = [AllowAny]
     def post(self, request):
+        csv_file = request.FILES.get('csv_file')
+        if not csv_file:
+            return Response({'error': 'No CSV file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            # Handle both JSON and form data
-            if request.content_type == 'application/json':
+            # Read the CSV file
+            decoded_file = TextIOWrapper(csv_file.file, encoding='utf-8')
+            reader = csv.DictReader(decoded_file)
+            
+            created_users = []
+            errors = []
+            
+            for row_num, row in enumerate(reader, start=2):  # start=2 because header is row 1
                 try:
-                    data = json.loads(request.body)
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON parse error: {e}")
-                    return Response(
-                        {"error": f"Invalid JSON format: {str(e)}"}, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-            else:
-                data = request.data
+                    password = generate_random_password()
+                    username = f"{row['first_name'].lower()}_{row['last_name'].lower()}"[:150]
+                    username = ''.join(c for c in username if c.isalnum() or c in '._-')
+                    
+                    user_data = {
+                        'username': username,
+                        'email': row['email'],
+                        'first_name': row['first_name'],
+                        'last_name': row['last_name'],
+                        'department': row.get('department', 'F'),
+                        'password': password
+                    }
+                    
+                    serializer = CustomUserSerializer(data=user_data)
+                    if serializer.is_valid():
+                        user = serializer.save()
+                        created_users.append({
+                            'username': user.username,
+                            'email': user.email,
+                            'name': f"{user.first_name} {user.last_name}"
+                        })
+                    else:
+                        errors.append({
+                            'row': row_num,
+                            'errors': serializer.errors,
+                            'data': row
+                        })
+                        
+                except Exception as e:
+                    errors.append({
+                        'row': row_num,
+                        'error': str(e),
+                        'data': row
+                    })
             
-            email = data.get('email')
-            password = data.get('password')
-            
-            # Validate input
-            if not email or not password:
-                return Response(
-                    {"error": "Email and password are required."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Find user by email
-            try:
-                user_obj = User.objects.get(email=email)
-            except User.DoesNotExist:
-                return Response(
-                    {"error": "Invalid credentials."}, 
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            # Authenticate user
-            user = authenticate(request, username=user_obj.username, password=password)
-            if user is None:
-                return Response(
-                    {"error": "Invalid credentials."}, 
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
-            # print(refresh)
-            # print(access_token)
-            response = Response({
-                'refresh': str(refresh),
-                'access': access_token,
-                'user': {
-                    'id': user.id,
-                    'email': user.email,
-                    'username': user.username,
-                    'privilege':user.privilege
-                }
-            }, status=status.HTTP_200_OK)
-            
-            # Set HTTP-only cookie
-            response.set_cookie(
-                key='accessToken',
-                value=access_token,
-                httponly=True,
-                secure=False,  # Set to True in production with HTTPS
-                samesite='Lax',
-                max_age=60 * 60 * 24  # 24 hours
-            )
-            
-            return response
-            
-        except Exception as e:
-            logger.error(f"Login error: {str(e)}")
-            return Response(
-                {"error": "An internal server error occurred."}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-class LogoutView(APIView):
-    def post(self, request):
-        response = Response({"message": "Logged out"}, status=200)
-        response.delete_cookie('accessToken')
-        return response
-
-class CheckAuthentificationView(APIView):
-    def get(self, request):
-        try:
-            # First check cookie
-            token = request.COOKIES.get('accessToken')
-            
-            # If no cookie, check Authorization header
-            if not token:
-                auth_header = request.headers.get('Authorization')
-                if auth_header and auth_header.startswith('Bearer '):
-                    token = auth_header.split(' ')[1]
-            
-            if not token:
-                return Response({
-                    'authenticated': False, 
-                    'debug': 'authenticated1', 
-                    'message': 'No token'
-                }, status=status.HTTP_401_UNAUTHORIZED)
-            
-            # Decode and verify token
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-            UserById_ = CustomUser.objects.filter(id=payload.get('user_id')).first()
-
-            user = {
-                "user_id": payload.get('user_id'),
-                "username": UserById_.username,
-                "firstname": UserById_.first_name,
-                "lastName": UserById_.last_name,
-                "email": UserById_.email,
-                "privilege": UserById_.privilege,  # Changed from Privilege to privilege
-                "department": UserById_.department,  # Added department field
-                "department_display": UserById_.get_department_display()  # Added display field
+            response_data = {
+                'message': f'Processed {len(created_users) + len(errors)} rows',
+                'created_users': created_users,
+                'errors': errors
             }
             
-            return Response({
-                'authenticated': True, 
-                'debug': 'authenticated2', 
-                'user': user
-            }, status=status.HTTP_200_OK)
-
-        except jwt.ExpiredSignatureError:
-            # ... error handling
-            request.delete_cookie('accessToken')
-            return Response({
-                'authenticated': False, 
-                'debug': 'authenticated4', 
-                'message': 'Invalid token'
-            }, status=status.HTTP_401_UNAUTHORIZED)
-
-class DashboardView(APIView):
-    def get(self, request):
-        token = request.COOKIES.get('accessToken')
-        if not token:
-            return Response({'authenticated': False, 'message': 'No token'}, status=status.HTTP_401_UNAUTHORIZED)
-        try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-            return Response({'authenticated': True, 'user_id': payload.get('user_id')})
-        except jwt.ExpiredSignatureError:
-            return Response({'authenticated': False, 'message': 'Token expired'}, status=status.HTTP_401_UNAUTHORIZED)
-        except jwt.InvalidTokenError:
-            return Response({'authenticated': False, 'message': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
-
-import secrets
-import string
-
-import string
-import secrets
-
-from django.template.loader import render_to_string
-from django.core.mail import EmailMessage
-def generate_random_password():
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    return ''.join(secrets.choice(alphabet) for _ in range(12))
-
-import os
-from dotenv import load_dotenv
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({'error': f'Failed to process CSV: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 class RegisterwithoutFileView(APIView):
     def post(self, request):
-        load_dotenv()
         try:
             email = request.data.get('email', '').strip().lower()
             first_name = request.data.get('firstName', '').strip()
             last_name = request.data.get('lastName', '').strip()
-            privilege = request.data.get('privilege', 'AP').strip().upper()  # Changed from Privilege to privilege
-            department = request.data.get('department', 'F').strip().upper()  # Added department field
+            privilege = request.data.get('privilege', 'AP').strip().upper()
+            department = request.data.get('department', 'F').strip().upper()
             
             if not all([email, first_name, last_name]):
                 missing = [field for field in ['email', 'firstName', 'lastName'] 
@@ -323,6 +337,7 @@ class RegisterwithoutFileView(APIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            
             if CustomUser.objects.filter(email=email).exists():
                 return Response(
                     {"error": "Email already in use"},
@@ -338,10 +353,11 @@ class RegisterwithoutFileView(APIView):
                 'email': email,
                 'first_name': first_name,
                 'last_name': last_name,
-                'privilege': privilege,  # Changed from Privilege to privilege
-                'department': department,  # Added department field
+                'privilege': privilege,
+                'department': department,
                 'password': password
             }
+            
             serializer = CustomUserSerializer(data=user_data)
             if serializer.is_valid():
                 user = serializer.save()
@@ -379,117 +395,34 @@ class RegisterwithoutFileView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-from rest_framework.parsers import MultiPartParser
-import csv
-from io import TextIOWrapper
-
-class CSVUploadView(APIView):
-    def post(self, request):
-        csv_file = request.data.get('csv_file')
-        try:
-            for row in csv_file:
-                password = generate_random_password()
-                username = f"{row['firstName'].lower()}_{row['lastName'].lower()}"[:150]
-                user_data = {
-                    'username': username,
-                    'email': row['email'],
-                    'first_name': row['firstName'],
-                    'last_name': row['lastName'],
-                    'department': row.get('department', 'F'),  # Added department field
-                    'password': password
-                }
-                serializer = CustomUserSerializer(data=user_data)
-                if serializer.is_valid():
-                    serializer.save()
-                else:
-                    print(serializer)
-                    continue
-            return Response({'message': 'CSV processed successfully'}, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
-
-from rest_framework import viewsets
-from rest_framework.decorators import action
-# 
-from rest_framework.permissions import IsAuthenticated
-# 
-from .models import Course, CourseContent, ContentType
-from .serializers import (
-    CourseSerializer, CourseCreateSerializer, 
-    CourseContentSerializer
-)
-from .models import Course, Subscription
-from .serializers import CourseWithSubscribersSerializer, SubscriptionSerializer
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-
-from rest_framework.decorators import api_view, action
-
-
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.models import AnonymousUser
-
-from .models import Course, Subscription, CourseContent, QCM, QCMCompletion, QCMAttempt
-from .serializers import (
-    CourseSerializer, CourseCreateSerializer, CourseContentSerializer, 
-    SubscriptionSerializer,
-    SubscriptionWithProgressSerializer, QCMCompletionSerializer
-)
-
-# Course List and Detail Views
-
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+# Course Views
 class CourseList(APIView):
     permission_classes = [AllowAny]
     
     def post(self, request):
-        print('Received course creation request')
-        print(f"User: {request.user}")
-        print(f"Authenticated: {request.user.is_authenticated}")
-        print(f"Request data keys: {list(request.data.keys())}")
-        print(f"Request FILES keys: {list(request.FILES.keys())}")
-        
-        # Handle both form data and JSON
         data = request.data.copy()
         
-        # Handle file upload
         if 'image' in request.FILES:
             data['image'] = request.FILES['image']
-            print("Image file found in request")
-        else:
-            print("No image file found in request")
         
-        # Ensure department is included
         if 'department' not in data:
-            data['department'] = 'F'  # Default department
+            data['department'] = 'F'
         
-        # Pass request context to serializer
         serializer = CourseCreateSerializer(
             data=data, 
-            context={'request': request}  # This is crucial!
+            context={'request': request}
         )
         
         if serializer.is_valid():
-            print("Serializer is valid")
-            print(f"Validated data: {serializer.validated_data}")
-            
             try:
                 course = serializer.save()
-                print(f"Course created successfully with ID: {course.id}")
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             except Exception as e:
-                print(f"Error saving course: {str(e)}")
-                import traceback
-                traceback.print_exc()
                 return Response(
                     {'error': f'Failed to save course: {str(e)}'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
         else:
-            print(f"Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CourseDetail(APIView):
@@ -500,7 +433,7 @@ class CourseDetail(APIView):
     
     def get(self, request, pk):
         course = self.get_object(pk)
-        serializer = CourseSerializer(course)
+        serializer = CourseDetailSerializer(course, context={'request': request})
         return Response(serializer.data)
     
     def put(self, request, pk):
@@ -524,19 +457,14 @@ class CourseDetail(APIView):
         course.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-# My Courses View
-
-# views.py
 class MyCourses(APIView):
     def get(self, request):
         if not request.user.is_authenticated:
             return Response([], status=status.HTTP_200_OK)
         
         courses = Course.objects.filter(creator=request.user)
-        # Add context={'request': request} to include request in serializer
         serializer = CourseSerializer(courses, many=True, context={'request': request})
         return Response(serializer.data)
-# Course Image Update View
 
 class CourseImageUpdate(APIView):
     def patch(self, request, pk):
@@ -553,209 +481,12 @@ class CourseImageUpdate(APIView):
         
         return Response(CourseSerializer(course).data)
 
-# Course Contents Views
-
-# views.py
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from rest_framework.permissions import IsAuthenticated
-
-
-
-from .models import Course, CourseContent, ContentType, QCM, QCMOption, VideoContent, PDFContent
-from .serializers import (
-    CourseContentSerializer,
-    QCMOptionCreateSerializer, QCMCreateSerializer,
-    CourseContentCreateSerializer
-)
-
-# Add these views to your views.py
-
-class MarkVideoCompletedView(APIView):
+# Module Views
+class ModuleList(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request, pk):
-        try:
-            course = get_object_or_404(Course, pk=pk)
-            user = request.user
-            print('====================================================')
-            content_id = request.data.get('content_id')
-            print('====================================================')
-            # Get content and QCM
-            content = CourseContent.objects.get(id=content_id, course=course)
-            print('====================================================')
-            if content.content_type.name != 'Video':
-                return Response({'error': 'Content is not a Video'}, status=400)
-            print('====================================================')
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-
-            # Also add to subscription completed_contents for progress tracking
-            # subscription = Subscription.objects.get(
-            #     user=request.user,
-            #     course=pdf.course_content.course,
-            #     is_active=True
-            # )
-            print('hello111')
-            subscription.completed_contents.add(content)
-            print('====================================================')
-            return Response({'status': 'Video marked as completed'})
-        except PDFContent.DoesNotExist:
-            return Response({'error': 'Video not found'}, status=404)
-        except Subscription.DoesNotExist:
-            return Response({'error': 'Subscription not found'}, status=404)
-
-class MarkPDFCompletedView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request, pk):
-        try:
-            course = get_object_or_404(Course, pk=pk)
-            user = request.user
-            content_id = request.data.get('content_id')
-            
-            # Get the course content
-            content = CourseContent.objects.get(id=content_id, course=course)
-            
-            if content.content_type.name.lower() != 'pdf':  # Use lower() for case-insensitive comparison
-                return Response({'error': 'Content is not a pdf'}, status=400)
-            
-            # Get the PDF content object
-            pdf_content = content.pdf_content
-            if not pdf_content:
-                return Response({'error': 'PDF content not found'}, status=404)
-            
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-
-            # Mark as completed in subscription
-            if not subscription.completed_contents.filter(id=content.id).exists():
-                subscription.completed_contents.add(content)
-            
-            # Update progress percentage
-            total_contents = course.contents.count()
-            completed_count = subscription.completed_contents.count()
-            progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
-            
-            subscription.progress_percentage = progress_percentage
-            subscription.save()
-            
-            # Serialize the PDF content to include the updated is_completed status
-            serializer = PDFContentSerializer(pdf_content, context={'request': request})
-            
-            return Response({
-                'status': 'PDF marked as completed',
-                'progress_percentage': progress_percentage,
-                'completed_contents': list(subscription.completed_contents.values_list('id', flat=True)),
-                'pdf_content': serializer.data
-            })
-            
-        except CourseContent.DoesNotExist:
-            return Response({'error': 'Content not found'}, status=404)
-        except Subscription.DoesNotExist:
-            return Response({'error': 'Subscription not found. Please subscribe to the course first.'}, status=404)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
-
-class CourseContentsView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, pk):
-        try:
-            course = get_object_or_404(Course, pk=pk)
-            user = request.user
-            
-            # Get user's subscription for this course
-            subscription = Subscription.objects.filter(
-                user=user,
-                course=course,
-                is_active=True
-            ).first()
-            
-            contents = CourseContent.objects.filter(course=course).order_by('order')
-            
-            # Pass subscription to serializer context
-            serializer = CourseContentSerializer(
-                contents, 
-                many=True, 
-                context={
-                    'request': request,
-                    'subscription': subscription
-                }
-            )
-            
-            return Response(serializer.data)
-            
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
-class CourseContentDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
-    
-    def get_object(self, course_pk, content_pk):
-        course = get_object_or_404(Course, pk=course_pk)
-        return get_object_or_404(CourseContent, pk=content_pk, course=course)
-    
-    def get(self, request, course_pk, content_pk):
-        """Get specific content"""
-        try:
-            content = self.get_object(course_pk, content_pk)
-            serializer = CourseContentSerializer(content, context={'request': request})
-            return Response(serializer.data)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    
-    def put(self, request, course_pk, content_pk):
-        """Update content"""
-        print('++++++++++++++++++++++++++++++++++++!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        content = self.get_object(course_pk, content_pk)
-        
-        # Check permission
-        if content.course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        serializer = CourseContentCreateSerializer(content, data=request.data, partial=True)
-        
-        if serializer.is_valid():
-            content = serializer.save()
-            return Response(CourseContentSerializer(content).data)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self, request, course_pk, content_pk):
-        """Delete content"""
-        content = self.get_object(course_pk, content_pk)
-        
-        # Check permission
-        if content.course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        content.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-from rest_framework.parsers import MultiPartParser, JSONParser
-from rest_framework.permissions import IsAuthenticated
-
-
-
-from .models import Course, ContentType
-from .serializers import (
-    PDFContentCreateSerializer, 
-    VideoContentCreateSerializer, 
-    QCMContentCreateSerializer,
-    CourseContentSerializer
-)
-
-class CreatePDFContentView(APIView):
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser]
-    
-    def post(self, request, pk):
-        """Create PDF content"""
+        """Create a new module for a course"""
         course = get_object_or_404(Course, pk=pk)
         
         if course.creator != request.user:
@@ -764,965 +495,24 @@ class CreatePDFContentView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Use get_or_create to handle missing content type
-        content_type, created = ContentType.objects.get_or_create(name='pdf')
-        if created:
-            print(f"Created new content type: {content_type.name}")
-        
-        serializer = PDFContentCreateSerializer(
-            data=request.data, 
-            context={
-                'request': request,
-                'course': course,
-                'content_type': content_type
-            }
+        serializer = ModuleCreateSerializer(
+            data=request.data,
+            context={'course': course}
         )
         
         if serializer.is_valid():
-            content = serializer.save()
-            return Response(
-                CourseContentSerializer(content).data,
-                status=status.HTTP_201_CREATED
-            )
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-class CreateVideoContentView(APIView):
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser]
-    
-    def post(self, request, pk):
-        """Create Video content"""
-        
-        course = get_object_or_404(Course, pk=pk)
-        
-        
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Get Video content type
-        content_type, created = ContentType.objects.get_or_create(name='Video')
-        if created:
-            print(f"Created new content type: {content_type.name}")
-        # content_type = get_object_or_404(ContentType, name='Video')
-        
-        serializer = VideoContentCreateSerializer(
-            data=request.data, 
-            context={
-                'request': request,
-                'course': course,
-                'content_type': content_type
-            }
-        )
-        
-        if serializer.is_valid():
-            content = serializer.save()
-            return Response(
-                CourseContentSerializer(content).data,
-                status=status.HTTP_201_CREATED
-            )
+            module = serializer.save()
+            return Response(ModuleSerializer(module).data, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CreateQCMContentView(APIView):
-    permission_classes = [IsAuthenticated]
-    parser_classes = [JSONParser]
-    
-    def post(self, request, pk):
-        """Create QCM quiz content"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Get QCM content type
-        content_type, created = ContentType.objects.get_or_create(name='QCM')
-        if created:
-            print(f"Created new content type: {content_type.name}")
-        # content_type = get_object_or_404(ContentType, name='QCM')
-        
-        serializer = QCMContentCreateSerializer(
-            data=request.data, 
-            context={
-                'request': request,
-                'course': course,
-                'content_type': content_type
-            }
-        )
-        
-        if serializer.is_valid():
-            content = serializer.save()
-            return Response(
-                CourseContentSerializer(content).data,
-                status=status.HTTP_201_CREATED
-            )
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-# Subscription Views
-
-class CourseSubscribers(APIView):
-    def get(self, request, pk):
-        print("+++++++++++++++++++++++++++++++++++hello")
-        course = get_object_or_404(Course, pk=pk)
-        print('9988888888888888888888888888')
-        subscriptions = course.course_subscriptions.filter(is_active=True)
-        print('444444444444444444444444444255')
-        print(subscriptions)
-        serializer = SubscriptionSerializer(subscriptions, many=True)
-        print('-----------------------------CourseSubscribers', serializer.data)
-        return Response(serializer.data)
-
-
-class SubscribeToCourse(APIView):
-    def post(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        
-        # Check if already subscribed
-        subscription, created = Subscription.objects.get_or_create(
-            user=user,
-            course=course,
-            defaults={'is_active': True}
-        )
-        
-        if not created:
-            subscription.is_active = True
-            subscription.save()
-        
-        return Response(
-            {'message': 'Subscribed successfully', 'subscription_id': subscription.id},
-            status=status.HTTP_201_CREATED
-        )
-
-
-class UnsubscribeFromCourse(APIView):
-    def post(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        
-        try:
-            subscription = Subscription.objects.get(user=user, course=course)
-            subscription.is_active = False
-            subscription.save()
-            
-            return Response({'message': 'Unsubscribed successfully'})
-        except Subscription.DoesNotExist:
-            return Response(
-                {'error': 'You are not subscribed to this course'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-class CheckSubscription(APIView):
-    def get(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        print('66666666666666666666666666666666666666')
-        # Check if user is subscribed
-        subscription = Subscription.objects.filter(
-            user=user, 
-            course=course,
-            is_active=True
-        ).first()
-        print('88888888888888888888888888888')
-        is_subscribed = subscription is not None
-        print('111111111111111111111111111111111111')
-        # Calculate progress percentage if subscribed
-        progress_percentage = 0
-        print('444444444444444444444444444444444444444')
-        if is_subscribed:
-            total_contents = course.contents.count()
-            completed_count = subscription.completed_contents.count()
-            if total_contents > 0:
-                progress_percentage = (completed_count / total_contents) * 100
-        print('0000000000000000000000000000000000000000')
-        # Build response data according to CourseDetailData interface
-        
-        response_data = {
-        'id': course.id,
-        'title': course.title_of_course,  # Make sure this matches your Course model field
-        'description': course.description,  # Make sure this matches your Course model field
-        'image': course.image.url if course.image else '',  # Make sure this matches your Course model field
-        'creator_username': course.creator.username,
-        # 'creator_first_name': course.creator.first_name if course.creator else '')
-        # 'creator_last_name': course.creator.last_name if course.creator else '')
-        'created_at': course.created_at.isoformat() if course.created_at else '',
-        'updated_at': course.updated_at.isoformat() if course.updated_at else '',
-        'is_subscribed': is_subscribed,
-        'progress_percentage': progress_percentage,
-        }
-        # print('response_data', response_data)
-        return Response(response_data)
-class MySubscriptions(APIView):
-    def get(self, request):
-        try:
-            user = request.user
-            # Use 'user' field instead of 'id' field to filter by the user object
-            subscriptions = Subscription.objects.filter(user=user, is_active=True)
-            courses = [sub.course for sub in subscriptions]
-            serializer = CourseSerializer(courses, many=True)
-            return Response(serializer.data)
-        except Exception as e:
-            print(f"Error retrieving subscriptions: {str(e)}")
-            return Response({"error": str(e)}, status=400)
-
-class SubscriptionStats(APIView):
-    permission_classes = [IsAuthenticated]  # Add authentication if needed
-    
-    def get(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        subscriptions = course.course_subscriptions.all()
-        total = subscriptions.count()
-        active = subscriptions.filter(is_active=True).count()
-        
-        # Additional stats you could add:
-        recent_subscriptions = subscriptions.filter(
-            subscribed_at__gte=timezone.now() - timedelta(days=30)
-        ).count()
-        
-        # Average completion if you have that data
-        avg_completion = subscriptions.aggregate(
-            avg_completed=Avg('completed_qcms')
-        )['avg_completed'] or 0
-
-        return Response({
-            'total_subscriptions': total,
-            'active_subscriptions': active,
-            'inactive_subscriptions': total - active,
-            'recent_subscriptions_30d': recent_subscriptions,
-            'avg_completed_qcms': round(avg_completion, 2),
-            'completion_rate': round((active / total * 100) if total > 0 else 0, 2)
-        })
-
-# Progress Tracking Views
-
-class UpdateProgress(APIView):
-    def post(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        
-        try:
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-            
-            # Update progress based on request data
-            score = request.data.get('score')
-            level = request.data.get('level')
-            progress = request.data.get('progress_percentage')
-            
-            if score is not None:
-                subscription.score = score
-            if level is not None:
-                subscription.level = level
-            if progress is not None:
-                subscription.progress_percentage = min(100.0, max(0.0, float(progress)))
-            
-            subscription.save()
-            
-            return Response(SubscriptionWithProgressSerializer(subscription).data)
-            
-        except Subscription.DoesNotExist:
-            return Response(
-                {'error': 'You are not subscribed to this course'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-
-class CourseContentCompletionView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, pk):
-        """Get completion status for all contents in a course"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        try:
-            subscription = Subscription.objects.get(
-                user=request.user,
-                course=course,
-                is_active=True
-            )
-            
-            contents = course.contents.all().order_by('order')
-            completion_data = []
-            
-            for content in contents:
-                is_completed = False
-                
-                if content.content_type.name == 'qcm':
-                    is_completed = QCMCompletion.objects.filter(
-                        subscription=subscription,
-                        qcm=content.qcm,
-                        is_passed=True
-                    ).exists()
-                else:
-                    is_completed = subscription.completed_contents.filter(id=content.id).exists()
-                
-                completion_data.append({
-                    'content_id': content.id,
-                    'title': content.title,
-                    'content_type': content.content_type.name,
-                    'order': content.order,
-                    'is_completed': is_completed
-                })
-            
-            return Response(completion_data)
-            
-        except Subscription.DoesNotExist:
-            return Response({'error': 'Not subscribed to this course'}, status=404)
-
-
-class CourseLeaderboard(APIView):
-    def get(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        
-        # Get top subscribers by score
-        leaderboard = course.course_subscriptions.filter(
-            is_active=True
-        ).order_by('-score', '-progress_percentage')[:10]  # Top 10
-        
-        serializer = SubscriptionWithProgressSerializer(leaderboard, many=True)
-        
-        return Response({
-            'course': course.title_of_course,
-            'leaderboard': serializer.data
-        })
-
-
-class MyProgress(APIView):
-    def get(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        
-        try:
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-            serializer = SubscriptionWithProgressSerializer(subscription)
-            return Response(serializer.data)
-            
-        except Subscription.DoesNotExist:
-            return Response(
-                {'error': 'You are not subscribed to this course'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-# QCM Views
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
-from .models import Course, CourseContent, Subscription, QCMCompletion, QCMAttempt, QCMOption
-class SubmitQCM(APIView):
-    def post(self, request, pk):  # pk is course ID
-        print('Received data:', request.data)
-        
-        try:
-            course = get_object_or_404(Course, pk=pk)
-            user = request.user
-            content_id = request.data.get('content_id')
-            
-            print(f'Course: {course.id}, Content ID: {content_id}, User: {user.id}')
-            
-            # Get the QCM content
-            content = get_object_or_404(CourseContent, id=content_id, course=course)
-            
-            print(f'Content type: {content.content_type.name}')
-            print(f'Content object: {content}')
-            
-            if content.content_type.name.lower() != 'qcm':  # Use lower() for case insensitivity
-                print(f'Expected QCM but got: {content.content_type.name}')
-                return Response({'error': 'Content is not a QCM'}, status=400)
-            
-            qcm = content.qcm
-            if not qcm:
-                print('QCM object not found for this content')
-                return Response({'error': 'QCM not found for this content'}, status=404)
-            
-            print(f'QCM found: {qcm.id}')
-            
-            serializer = QCMAttemptSerializer(data=request.data)
-            print('Serializer created')
-            
-            if serializer.is_valid():
-                print('Serializer is valid')
-                attempt = QCMAttempt.objects.create(
-                    user=user,
-                    qcm=qcm,
-                    time_taken=request.data.get('time_taken', 0),
-                    attempt_number=self.get_next_attempt_number(user, qcm)
-                )
-                print('Attempt created')
-                
-                # Assign selected options manually
-                selected_option_ids = serializer.validated_data['selected_option_ids']
-                selected_options = QCMOption.objects.filter(id__in=selected_option_ids, qcm=qcm)
-                attempt.selected_options.set(selected_options)
-
-                # Calculate score and finalize
-                attempt.completed_at = timezone.now()
-                attempt.calculate_score()
-                
-                # Update subscription progress if passed
-                if attempt.is_passed:
-                    try:
-                        subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-                        subscription.completed_contents.add(content)
-                        
-                        # Update progress percentage
-                        total_contents = course.contents.count()
-                        completed_count = subscription.completed_contents.count()
-                        progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
-                        
-                        subscription.progress_percentage = progress_percentage
-                        subscription.save()
-                        
-                        response_data = QCMAttemptSerializer(attempt).data
-                        response_data['progress_percentage'] = progress_percentage
-                        response_data['completed_contents'] = list(subscription.completed_contents.values_list('id', flat=True))
-                        
-                        return Response(response_data, status=201)
-                    except Subscription.DoesNotExist:
-                        # Return attempt data but without subscription info
-                        return Response(QCMAttemptSerializer(attempt).data, status=201)
-                else:
-                    return Response(QCMAttemptSerializer(attempt).data, status=201)
-            else:
-                print('Serializer errors:', serializer.errors)
-                return Response(serializer.errors, status=400)
-                
-        except Exception as e:
-            print('Error in SubmitQCM:', str(e))
-            import traceback
-            traceback.print_exc()
-            return Response({'error': str(e)}, status=500)
-
-    def get_next_attempt_number(self, user, qcm):
-        last_attempt = QCMAttempt.objects.filter(user=user, qcm=qcm).order_by('-attempt_number').first()
-        return last_attempt.attempt_number + 1 if last_attempt else 1
-from .models import QCMOption
-class QCMProgress(APIView):
-    def get(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        
-        try:
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-            completions = QCMCompletion.objects.filter(
-                subscription=subscription,
-                qcm__course_content__course=course
-            )
-            
-            serializer = QCMCompletionSerializer(completions, many=True)
-            
-            # Calculate totals
-            total_qcms = QCM.objects.filter(course_content__course=course).count()
-            passed_qcms = completions.filter(is_passed=True).count()
-            total_points = subscription.total_score
-            max_points = sum(qcm.points for qcm in QCM.objects.filter(course_content__course=course))
-            
-            return Response({
-                'completions': serializer.data,
-                'summary': {
-                    'total_qcms': total_qcms,
-                    'passed_qcms': passed_qcms,
-                    'completion_rate': (passed_qcms / total_qcms * 100) if total_qcms > 0 else 0,
-                    'total_points': total_points,
-                    'max_points': max_points,
-                    'points_percentage': (total_points / max_points * 100) if max_points > 0 else 0
-                }
-            })
-            
-        except Subscription.DoesNotExist:
-            return Response({'error': 'Not subscribed'}, status=400)
-
-
-class CheckContentAccess(APIView):
-    def get(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
-        content_id = request.query_params.get('content_id')
-        
-        try:
-            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-            content = CourseContent.objects.get(id=content_id, course=course)
-            
-            can_access = subscription.can_access_content(content)
-            is_locked = not can_access
-            
-            return Response({
-                'can_access': can_access,
-                'is_locked': is_locked,
-                'content_id': content_id,
-                'content_title': content.title
-            })
-            
-        except (Subscription.DoesNotExist, CourseContent.DoesNotExist):
-            return Response({'error': 'Not found'}, status=404)
-
-
-
-
-# views.py
-from django.db.models import Count, Avg, Q, F
-
-
-
-from .models import Course, Subscription, QCMCompletion
-
-class CourseStatisticsView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, pk):
-        """Get comprehensive statistics for a course"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        # Check if user is the course creator
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Get subscription statistics
-        total_subscriptions = course.course_subscriptions.count()
-        active_subscriptions = course.course_subscriptions.filter(is_active=True).count()
-        inactive_subscriptions = total_subscriptions - active_subscriptions
-        
-        # Get progress statistics
-        progress_stats = course.course_subscriptions.filter(is_active=True).aggregate(
-            avg_progress=Avg('progress_percentage'),
-            max_progress=Avg('progress_percentage'),
-            min_progress=Avg('progress_percentage')
-        )
-        
-        # Get score statistics
-        score_stats = course.course_subscriptions.filter(is_active=True).aggregate(
-            avg_score=Avg('total_score'),
-            max_score=Avg('total_score'),
-            min_score=Avg('total_score')
-        )
-        
-        # Get completion statistics
-        completed_count = course.course_subscriptions.filter(
-            is_active=True, 
-            progress_percentage=100
-        ).count()
-        
-        # Get QCM completion statistics
-        qcm_stats = QCMCompletion.objects.filter(
-            subscription__course=course,
-            subscription__is_active=True
-        ).aggregate(
-            avg_attempts=Avg('attempts_count'),
-            avg_score=Avg('best_score'),
-            pass_rate=Avg('is_passed', output_field=models.FloatField()) * 100
-        )
-        
-        # Get recent activity (last 7 days)
-        from datetime import datetime, timedelta
-        week_ago = datetime.now() - timedelta(days=7)
-        recent_activity = course.course_subscriptions.filter(
-            is_active=True,
-            last_activity__gte=week_ago
-        ).count()
-        
-        # Get enrollment trend (monthly)
-        from django.db.models.functions import TruncMonth
-        enrollment_trend = course.course_subscriptions.annotate(
-            month=TruncMonth('subscribed_at')
-        ).values('month').annotate(
-            count=Count('id')
-        ).order_by('month')
-        
-        return Response({
-            'course': {
-                'id': course.id,
-                'title': course.title_of_course,
-                'creator': course.creator.get_full_name(),
-                'created_at': course.created_at
-            },
-            'subscriptions': {
-                'total': total_subscriptions,
-                'active': active_subscriptions,
-                'inactive': inactive_subscriptions,
-                'completion_rate': (completed_count / active_subscriptions * 100) if active_subscriptions > 0 else 0
-            },
-            'progress': {
-                'average': progress_stats['avg_progress'] or 0,
-                'maximum': progress_stats['max_progress'] or 0,
-                'minimum': progress_stats['min_progress'] or 0,
-                'completed': completed_count
-            },
-            'scores': {
-                'average': score_stats['avg_score'] or 0,
-                'maximum': score_stats['max_score'] or 0,
-                'minimum': score_stats['min_score'] or 0
-            },
-            'qcm_performance': {
-                'average_attempts': qcm_stats['avg_attempts'] or 0,
-                'average_score': qcm_stats['avg_score'] or 0,
-                'pass_rate': qcm_stats['pass_rate'] or 0
-            },
-            'activity': {
-                'recent_activity': recent_activity,
-                'enrollment_trend': list(enrollment_trend)
-            }
-        })
-
-from rest_framework.generics import GenericAPIView
-from rest_framework.pagination import PageNumberPagination
-
-class CourseSubscribersListView(GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    pagination_class = PageNumberPagination  # Add this
-    
-    def get(self, request, pk):
-        """Get detailed list of subscribers with their progress"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        subscribers = course.course_subscriptions.filter(is_active=True).select_related('user')
-        
-        # Now paginate_queryset will work
-        page = self.paginate_queryset(subscribers)
-        if page is not None:
-            serializer = SubscriptionWithProgressSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = SubscriptionWithProgressSerializer(subscribers, many=True)
-        return Response(serializer.data)
-from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-
-class CourseSubscribersListViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
-    
-    def list(self, request, pk=None):
-        """Get detailed list of subscribers with their progress"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        subscribers = course.course_subscriptions.filter(is_active=True).select_related('user')
-        
-        # ViewSet automatically handles pagination
-        page = self.paginate_queryset(subscribers)
-        if page is not None:
-            serializer = SubscriptionWithProgressSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = SubscriptionWithProgressSerializer(subscribers, many=True)
-        return Response(serializer.data)
-class CourseProgressOverviewView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, pk):
-        """Get overview of course progress for all subscribers"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Get all active subscriptions
-        active_subscriptions = course.course_subscriptions.filter(is_active=True)
-        
-        # Calculate progress for each subscription
-        progress_data = []
-        for subscription in active_subscriptions:
-            # Calculate progress percentage dynamically
-            total_qcms = course.qcms.count()
-            completed_qcms = subscription.completed_qcms.count()
-            progress_percentage = (completed_qcms / total_qcms * 100) if total_qcms > 0 else 0
-            
-            progress_data.append({
-                'subscription': subscription,
-                'progress_percentage': progress_percentage
-            })
-        
-        # Get progress distribution
-        progress_distribution = {
-            '0-20%': len([p for p in progress_data if 0 <= p['progress_percentage'] <= 20]),
-            '21-40%': len([p for p in progress_data if 21 <= p['progress_percentage'] <= 40]),
-            '41-60%': len([p for p in progress_data if 41 <= p['progress_percentage'] <= 60]),
-            '61-80%': len([p for p in progress_data if 61 <= p['progress_percentage'] <= 80]),
-            '81-99%': len([p for p in progress_data if 81 <= p['progress_percentage'] <= 99]),
-            '100%': len([p for p in progress_data if p['progress_percentage'] == 100])
-        }
-        
-        # Get average time to complete (only for 100% completed)
-        completed_subscriptions = [p for p in progress_data if p['progress_percentage'] == 100]
-        
-        avg_completion_time = None
-        if completed_subscriptions:
-            total_time = timedelta()
-            for p in completed_subscriptions:
-                subscription = p['subscription']
-                if subscription.last_activity and subscription.subscribed_at:
-                    total_time += (subscription.last_activity - subscription.subscribed_at)
-            
-            if total_time:
-                avg_completion_time = total_time / len(completed_subscriptions)
-        
-        return Response({
-            'progress_distribution': progress_distribution,
-            'average_completion_time': avg_completion_time.total_seconds() / 86400 if avg_completion_time else 0,
-            'total_learners': len(progress_data),
-            'active_this_week': active_subscriptions.filter(
-                last_activity__gte=datetime.now() - timedelta(days=7)
-            ).count()
-        })
-class QCMPerformanceView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, pk):
-        """Get QCM performance statistics for the course"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Get all QCMs in this course
-        qcms = QCM.objects.filter(course_content__course=course)
-        
-        qcm_performance = []
-        for qcm in qcms:
-            completions = QCMCompletion.objects.filter(qcm=qcm)
-            
-            stats = completions.aggregate(
-                total_attempts=Count('id'),
-                avg_score=Avg('best_score'),
-                pass_rate=Avg('is_passed', output_field=models.FloatField()) * 100,
-                avg_attempts=Avg('attempts_count')
-            )
-            
-            qcm_performance.append({
-                'qcm_id': qcm.id,
-                'question': qcm.question,
-                'total_attempts': stats['total_attempts'] or 0,
-                'average_score': stats['avg_score'] or 0,
-                'pass_rate': stats['pass_rate'] or 0,
-                'average_attempts': stats['avg_attempts'] or 0,
-                'difficulty': 'Easy' if (stats['avg_score'] or 0) >= 80 else 
-                             'Medium' if (stats['avg_score'] or 0) >= 60 else 'Hard'
-            })
-        
-        return Response({
-            'total_qcms': qcms.count(),
-            'qcm_performance': qcm_performance,
-            'overall_pass_rate': sum(item['pass_rate'] for item in qcm_performance) / len(qcm_performance) if qcm_performance else 0
-        })
-
-class EnrollmentTrendView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request, pk):
-        """Get enrollment trends over time"""
-        course = get_object_or_404(Course, pk=pk)
-        
-        if course.creator != request.user:
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Monthly enrollment trend
-        monthly_trend = course.course_subscriptions.annotate(
-            month=TruncMonth('subscribed_at')
-        ).values('month').annotate(
-            enrollments=Count('id'),
-            active_enrollments=Count('id', filter=Q(is_active=True))
-        ).order_by('month')
-        
-        # Weekly activity trend
-        from django.db.models.functions import TruncWeek
-        weekly_activity = course.course_subscriptions.filter(
-            is_active=True
-        ).annotate(
-            week=TruncWeek('last_activity')
-        ).values('week').annotate(
-            active_users=Count('id', distinct=True)
-        ).order_by('week')[:12]  # Last 12 weeks
-        
-        return Response({
-            'monthly_enrollment': list(monthly_trend),
-            'weekly_activity': list(weekly_activity),
-            'total_enrollments': course.course_subscriptions.count(),
-            'current_active': course.course_subscriptions.filter(is_active=True).count()
-        })
-
-# admin_dashboard/views.py (continued)
-
-
-
-from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Sum, Avg, Q, F, ExpressionWrapper, FloatField
-from django.utils import timezone
-from datetime import timedelta, datetime
-
-from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
-from django.db.models.functions import Cast
-import json
-from collections import defaultdict
-
-class IsSuperUser(IsAuthenticated):
-    def has_permission(self, request, view):
-        return super().has_permission(request, view) or request.user.Privilege == 'A'
-
-from django.db.models import Avg, Value
-from django.db.models.functions import Coalesce
-
-class AdminDashboardView(APIView):
-    permission_classes = [IsSuperUser]
-    
-    def get(self, request):
-        # Get statistics
-        total_users = CustomUser.objects.count()
-        print('888888888888888888888888888888888*******')
-        total_courses = Course.objects.count()
-        print('888888888888888888888888888888888------')
-        total_subscriptions = Subscription.objects.filter(is_active=True).count()
-        # Recent activity (last 7 days)
-        print('888888888888888888888888888888888ùùùùù')
-        week_ago = timezone.now() - timedelta(days=7)
-        recent_users = CustomUser.objects.filter(date_joined__gte=week_ago).count()
-        print('888888888888888888888888888888888=====')
-        recent_courses = Course.objects.filter(created_at__gte=week_ago).count()
-        print('888888888888888888888888888888888_____')
-        # User distribution by privilege
-        user_distribution = CustomUser.objects.values('privilege').annotate(
-            count=Count('id')
-        )
-        print('888888888888888888888888888888888-----------')
-        # Daily user registration chart data
-        user_registration_data = self.get_user_registration_chart_data()
-        print('888888888888888888888888888888888############')
-        # Course statistics
-        course_stats = self.get_course_statistics()
-        print('888888888888888888888888888888888^^^^^^^^^^^^^^^^^^^^^')
-        return Response({
-            'overview': {
-                'total_users': total_users,
-                'total_courses': total_courses,
-                'active_subscriptions': total_subscriptions,
-                'recent_users': recent_users,
-                'recent_courses': recent_courses,
-            },
-            'user_distribution': list(user_distribution),
-            'user_registration_chart': user_registration_data,
-            'course_statistics': course_stats,
-            'timestamp': timezone.now()
-        })
-    
-    def get_user_registration_chart_data(self):
-        # Last 30 days user registration data
-        thirty_days_ago = timezone.now() - timedelta(days=30)
-        
-        registration_data = (
-            CustomUser.objects
-            .filter(date_joined__gte=thirty_days_ago)
-            .annotate(date=TruncDate('date_joined'))
-            .values('date')
-            .annotate(count=Count('id'))
-            .order_by('date')
-        )
-        
-        return {
-            'labels': [item['date'].strftime('%Y-%m-%d') for item in registration_data],
-            'data': [item['count'] for item in registration_data]
-        }
-    
-    def get_course_statistics(self):
-        courses = Course.objects.all()
-        course_data = []
-
-        for course in courses:
-            subscriptions = course.course_subscriptions.filter(is_active=True)
-            total_subscribers = subscriptions.count()
-
-            # Check what the actual relationship name is for QCMs
-            # Common possibilities: qcms, qcm_set, questions, quizzes, etc.
-
-            # Try these common relationship names:
-            if hasattr(course, 'qcms'):
-                total_qcms = course.qcms.count()
-            elif hasattr(course, 'qcm_set'):
-                total_qcms = course.qcm_set.count()
-            elif hasattr(course, 'questions'):
-                total_qcms = course.questions.count()
-            elif hasattr(course, 'quizzes'):
-                total_qcms = course.quizzes.count()
-            else:
-                # If none found, look at all related objects
-                total_qcms = 0
-                for attr in dir(course):
-                    if attr.endswith('_set') and 'qcm' in attr.lower():
-                        related_manager = getattr(course, attr)
-                        total_qcms = related_manager.count()
-                        break
-                    
-            completed_count = 0
-            for subscription in subscriptions:
-                # Calculate completed QCMs for this subscription
-                completed_qcms = subscription.completed_qcms.count()
-                progress_percentage = (completed_qcms / total_qcms * 100) if total_qcms > 0 else 0
-
-                if progress_percentage == 100:
-                    completed_count += 1
-
-            completion_rate = round((completed_count / total_subscribers * 100) if total_subscribers > 0 else 0)
-
-            try:
-                result = subscriptions.aggregate(avg=Avg('total_score'))
-                avg_value = result['avg']
-                average_score = round(avg_value) if avg_value is not None else 0
-            except Exception as e:
-                print('Error calculating average score:', e)
-                average_score = 0
-
-            course_data.append({
-                'id': course.id,
-                'title': course.title_of_course,
-                'creator': course.creator.username,
-                'created_at': course.created_at,
-                'total_subscribers': total_subscribers,
-                'completed_count': completed_count,
-                'completion_rate': completion_rate,
-                'average_score': average_score,
-                'total_qcms': total_qcms  # For debugging
-            })
-
-        return course_data
-
-from django.utils import timezone
-from datetime import datetime, timedelta
-from django.db.models import Count
-from rest_framework.views import APIView
-from rest_framework.response import Response
-
+# Add this to your user/views.py
 class UserManagementView(APIView):
-    permission_classes = [IsSuperUser]
+    permission_classes = [IsAuthenticated]
     
     def get(self, request):
         users = CustomUser.objects.all().order_by('-date_joined')
         user_data = []
-        print('6666666666666666666666666666666666')
         
         for user in users:
             user_data.append({
@@ -1730,20 +520,21 @@ class UserManagementView(APIView):
                 'username': user.username,
                 'email': user.email,
                 'full_name': f"{user.first_name} {user.last_name}",
-                'privilege': user.get_privilege_display(),
-                'department': user.get_department_display(),
+                'privilege': user.privilege,
+                'privilege_display': user.get_privilege_display(),
+                'department': user.department,
+                'department_display': user.get_department_display(),
                 'date_joined': user.date_joined,
                 'last_login': user.last_login,
                 'is_active': user.is_active,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
                 'course_count': user.created_courses.count(),
                 'subscription_count': user.course_subscriptions.filter(is_active=True).count()
             })
         
-        print('5555555555555555555555555555555555555555555555')
-        
         # User growth statistics
         user_growth = self.get_user_growth_stats()
-        print('èèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèèè')
         
         return Response({
             'users': user_data,
@@ -1800,18 +591,41 @@ class UserManagementView(APIView):
             'daily_growth': daily_growth,
             'active_users': CustomUser.objects.filter(is_active=True).count(),
         }
+
+# Add these to your user/views.py if you need them
+# Add this at the top of your views.py file, near the other imports
+class IsSuperUser(IsAuthenticated):
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.privilege == 'A'
+from django.db.models import Count, Avg, Q, F, Sum
+from django.db.models.functions import TruncMonth, TruncWeek, TruncDate
+from datetime import timedelta, datetime
 class CourseManagementView(APIView):
     permission_classes = [IsSuperUser]
     
     def get(self, request):
-        courses = Course.objects.all().select_related('creator').prefetch_related('contents')
-        serializer = CourseWithSubscribersSerializer(courses, many=True, context={'request': request})
+        courses = Course.objects.all().select_related('creator')
+        
+        # Create course data manually since CourseWithSubscribersSerializer might not exist
+        course_data = []
+        for course in courses:
+            subscription_count = course.course_subscriptions.filter(is_active=True).count()
+            course_data.append({
+                'id': course.id,
+                'title': course.title_of_course,
+                'description': course.description,
+                'creator': course.creator.username if course.creator else 'Unknown',
+                'department': course.department,
+                'created_at': course.created_at,
+                'subscriber_count': subscription_count,
+                'image_url': request.build_absolute_uri(course.image.url) if course.image else None
+            })
         
         # Course enrollment statistics
         enrollment_stats = self.get_enrollment_stats()
         
         return Response({
-            'courses': serializer.data,
+            'courses': course_data,
             'enrollment_stats': enrollment_stats
         })
     
@@ -1819,7 +633,7 @@ class CourseManagementView(APIView):
         # Course popularity by enrollment count
         popular_courses = (
             Course.objects
-            .annotate(enrollment_count=Count('course_subscriptions'))
+            .annotate(enrollment_count=Count('course_subscriptions', filter=Q(course_subscriptions__is_active=True)))
             .order_by('-enrollment_count')[:10]
             .values('title_of_course', 'enrollment_count')
         )
@@ -1828,9 +642,6 @@ class CourseManagementView(APIView):
             'labels': [course['title_of_course'] for course in popular_courses],
             'data': [course['enrollment_count'] for course in popular_courses]
         }
-    
-from django.db.models import Count, Avg, ExpressionWrapper, FloatField, Case, When, Value
-
 class SystemAnalyticsView(APIView):
     permission_classes = [IsSuperUser]
     
@@ -1844,11 +655,16 @@ class SystemAnalyticsView(APIView):
                 subscriptions = course.course_subscriptions.filter(is_active=True)
                 total_subscribers = subscriptions.count()
                 
-                # Calculate completion based on completed_qcms vs total_qcms
-                if total_subscribers > 0 and hasattr(course, 'total_qcms') and course.total_qcms > 0:
-                    completed_count = subscriptions.filter(completed_qcms=course.total_qcms).count()
-                else:
-                    completed_count = 0
+                # Calculate total contents in course (across all modules)
+                total_contents = CourseContent.objects.filter(module__course=course).count()
+                
+                # Calculate completion based on completed contents
+                completed_count = 0
+                for subscription in subscriptions:
+                    completed_contents = subscription.completed_contents.count()
+                    progress_percentage = (completed_contents / total_contents * 100) if total_contents > 0 else 0
+                    if progress_percentage == 100:
+                        completed_count += 1
                 
                 completion_rate = round((completed_count / total_subscribers * 100) if total_subscribers > 0 else 0)
                 
@@ -1875,7 +691,7 @@ class SystemAnalyticsView(APIView):
             # QCM performance - simplified
             try:
                 qcm_stats = QCMCompletion.objects.values(
-                    'qcm__course_content__course__title_of_course'
+                    'qcm__course_content__module__course__title_of_course'
                 ).annotate(
                     total_attempts=Count('id'),
                     avg_score=Avg('best_score'),
@@ -1890,7 +706,7 @@ class SystemAnalyticsView(APIView):
                     pass_rate = round((passed / total * 100) if total > 0 else 0, 2)
                     
                     qcm_stats_list.append({
-                        'course_title': stat['qcm__course_content__course__title_of_course'],
+                        'course_title': stat['qcm__course_content__module__course__title_of_course'],
                         'total_attempts': total,
                         'avg_score': round(stat['avg_score'] or 0, 2),
                         'pass_rate': pass_rate
@@ -1952,10 +768,11 @@ class SystemAnalyticsView(APIView):
         distribution = []
         for label, (min_val, max_val) in progress_ranges:
             try:
+                # Count subscriptions with progress percentage in this range
                 count = Subscription.objects.filter(
                     is_active=True,
-                    completed_qcms__gte=min_val,
-                    completed_qcms__lte=max_val
+                    progress_percentage__gte=min_val,
+                    progress_percentage__lte=max_val
                 ).count()
                 distribution.append({'range': label, 'count': count})
             except Exception as e:
@@ -1984,28 +801,32 @@ class SystemAnalyticsView(APIView):
         except Exception as e:
             print(f"Error in weekly activity: {e}")
             return {'labels': [], 'data': []}
+
 class ContentManagementView(APIView):
     permission_classes = [IsSuperUser]
     
     def get(self, request):
-        contents = CourseContent.objects.all().select_related('course', 'content_type')
-        print('helloooooooooo')
+        contents = CourseContent.objects.all().select_related('module__course', 'content_type')
         content_data = []
+        
         for content in contents:
             try:
-            
+                qcm_attempts = 0
+                if hasattr(content, 'qcm'):
+                    qcm_attempts = content.qcm.attempts.count()
+                
                 content_data.append({
                     'id': content.id,
                     'title': content.title,
-                    'course': content.course.title_of_course,
+                    'course': content.module.course.title_of_course,
+                    'module': content.module.title,
                     'content_type': content.content_type.name,
                     'order': content.order,
-                    # 'created_at': content.created_at,
-                    'qcm_attempts': getattr(content, 'qcm', None).attempts.count() if hasattr(content, 'qcm') else 0,
+                    'qcm_attempts': qcm_attempts,
                 })
             except Exception as e:
                 print(f"Database error: {e}")
-        print('hellooooooooooooooooo')
+        
         # Content type distribution
         content_type_stats = (
             CourseContent.objects
@@ -2013,11 +834,10 @@ class ContentManagementView(APIView):
             .annotate(count=Count('id'))
             .order_by('-count')
         )
-        print('good by++++')
         
         # Content usage statistics
         content_usage = self.get_content_usage_stats()
-        print('na na ana ')
+        
         return Response({
             'contents': content_data,
             'content_type_stats': list(content_type_stats),
@@ -2031,31 +851,28 @@ class ContentManagementView(APIView):
             .filter(qcm__isnull=False)
             .annotate(attempts_count=Count('qcm__attempts'))
             .order_by('-attempts_count')[:10]
-            .values('title', 'course__title_of_course', 'attempts_count')
+            .values('title', 'module__course__title_of_course', 'attempts_count')
         )
         
         return {
-            'labels': [f"{item['title']} ({item['course__title_of_course']})" for item in popular_content],
+            'labels': [f"{item['title']} ({item['module__course__title_of_course']})" for item in popular_content],
             'data': [item['attempts_count'] for item in popular_content]
         }
-from django.db.models import Count, DateField
-from django.db.models.functions import TruncDate
+
 class UserDetailView(APIView):
     permission_classes = [IsSuperUser]
     
     def get_user_growth_stats(self):
         """Calculate user growth statistics over time"""
-        
-        print('hello++++++++')
         # Get user registration counts by date
         growth_data = (
             CustomUser.objects
-            .annotate(registration_date=TruncDate('date_joined', output_field=DateField()))
+            .annotate(registration_date=TruncDate('date_joined'))
             .values('registration_date')
             .annotate(user_count=Count('id'))
             .order_by('registration_date')
         )
-        print('bay--------------------')
+        
         # Format the data
         growth_stats = [
             {
@@ -2069,15 +886,16 @@ class UserDetailView(APIView):
     
     def get_user_learning_stats(self, user):
         """Calculate user learning statistics"""
-        # Implement your learning stats logic here
-        # This is just a placeholder - replace with your actual logic
         return {
             'total_courses_enrolled': user.course_subscriptions.filter(is_active=True).count(),
-            'total_courses_completed': user.course_subscriptions.filter(is_active=True, progress_percentage=100).count(),
+            'total_courses_completed': user.course_subscriptions.filter(
+                is_active=True, 
+                progress_percentage=100
+            ).count(),
             'average_score': user.course_subscriptions.filter(is_active=True).aggregate(
-                avg_score=Avg('score')
+                avg_score=Avg('total_score')
             )['avg_score'] or 0,
-            'total_learning_time': 0  # Add your logic for calculating learning time
+            'total_learning_time': 0  # Placeholder
         }
     
     def get(self, request, user_id):
@@ -2085,7 +903,7 @@ class UserDetailView(APIView):
         
         # User learning statistics
         learning_stats = self.get_user_learning_stats(user)
-        user_growth = self.get_user_growth_stats()  # This will now work
+        user_growth = self.get_user_growth_stats()
         
         user_data = {
             'id': user.id,
@@ -2117,7 +935,7 @@ class UserDetailView(APIView):
                     'course_title': sub.course.title_of_course,
                     'subscribed_at': sub.subscribed_at,
                     'progress': sub.progress_percentage,
-                    'score': sub.score
+                    'score': sub.total_score
                 }
                 for sub in user.course_subscriptions.filter(is_active=True)
             ],
@@ -2132,27 +950,18 @@ class UserDetailView(APIView):
                 for comp in user.qcmcompletion_set.all()
             ],
             'learning_stats': learning_stats,
-            'user_growth_stats': user_growth  # Add growth stats to response
+            'user_growth_stats': user_growth
         }
         
         return Response({'user': user_data})
-    
-    def get_user_learning_stats(self, user):
-        # User learning progress over time
-        monthly_progress = (
-            Subscription.objects
-            .filter(user=user, is_active=True)
-            .annotate(month=TruncMonth('last_activity'))
-            .values('month')
-            .annotate(avg_progress=Avg('progress_percentage'))
-            .order_by('month')
-        )
-        
-        return {
-            'labels': [item['month'].strftime('%Y-%m') for item in monthly_progress],
-            'data': [item['avg_progress'] for item in monthly_progress]
-        }
+# REMOVE these top-level imports from views.py:
+# import subprocess
+# import psutil
+# import datetime
 
+# Keep only these imports at the top:
+from django.contrib.sessions.models import Session
+from django.utils import timezone
 
 class SystemHealthView(APIView):
     permission_classes = [IsSuperUser]
@@ -2163,45 +972,1239 @@ class SystemHealthView(APIView):
             'database_size': self.get_database_size(),
             'active_sessions': self.get_active_sessions(),
             'server_uptime': self.get_server_uptime(),
-            'error_rate': self.get_error_rate()
+            'error_rate': self.get_error_rate(),
+            'database_vendor': self.get_database_vendor(),
+            'memory_usage': self.get_memory_usage(),
+            'cpu_usage': self.get_cpu_usage(),
+            'disk_usage': self.get_disk_usage()
         }
         
         return Response({
             'system_metrics': system_metrics,
-            'performance_stats': self.get_performance_stats()
+            'performance_stats': self.get_performance_stats(),
+            'timestamp': timezone.now().isoformat()
         })
     
-    def get_database_size(self):
-        # Placeholder for database size calculation
-        return "2.5 GB"
-    
-    def get_active_sessions(self):
-        # Get active user sessions
-        from django.contrib.sessions.models import Session
-        return Session.objects.count()
-    
     def get_server_uptime(self):
-        # Placeholder for server uptime
-        return "15 days, 3 hours"
+        """Get server uptime - works in Docker containers"""
+        try:
+            # Import inside the method
+            import datetime
+            # Method 1: Read from /proc/uptime (Linux/Docker)
+            with open('/proc/uptime', 'r') as f:
+                uptime_seconds = float(f.readline().split()[0])
+                days = int(uptime_seconds // 86400)
+                hours = int((uptime_seconds % 86400) // 3600)
+                minutes = int((uptime_seconds % 3600) // 60)
+                return f"{days} days, {hours} hours, {minutes} minutes"
+                
+        except (FileNotFoundError, PermissionError):
+            try:
+                # Method 2: Use psutil as fallback - import inside method
+                import psutil
+                import datetime
+                boot_time = datetime.datetime.fromtimestamp(psutil.boot_time())
+                uptime = datetime.datetime.now() - boot_time
+                days = uptime.days
+                hours = uptime.seconds // 3600
+                minutes = (uptime.seconds % 3600) // 60
+                return f"{days} days, {hours} hours, {minutes} minutes"
+                
+            except Exception:
+                return "Uptime unavailable"
+        except Exception as e:
+            return f"Uptime error: {str(e)}"
     
     def get_error_rate(self):
-        # Placeholder for error rate calculation
-        return "0.2%"
+        """Get error rate - placeholder for actual implementation"""
+        try:
+            # This would ideally come from your monitoring system
+            from django.core.cache import cache
+            
+            # Get from cache or use default
+            error_count = cache.get('system_error_count', 15)
+            total_requests = cache.get('system_total_requests', 5000)
+            
+            if total_requests > 0:
+                error_rate = (error_count / total_requests) * 100
+                return f"{error_rate:.2f}%"
+            
+            return "0.30%"  # Default fallback
+            
+        except Exception as e:
+            return "Error rate unavailable"
+    
+    def get_memory_usage(self):
+        """Get memory usage of the container"""
+        try:
+            # Import inside the method
+            import psutil
+            memory = psutil.virtual_memory()
+            return {
+                'total': f"{memory.total // (1024**2)} MB",
+                'available': f"{memory.available // (1024**2)} MB",
+                'used': f"{memory.used // (1024**2)} MB",
+                'percent': f"{memory.percent}%"
+            }
+        except Exception:
+            return "Memory usage unavailable"
+    
+    def get_cpu_usage(self):
+        """Get CPU usage"""
+        try:
+            # Import inside the method
+            import psutil
+            cpu_percent = psutil.cpu_percent(interval=1)
+            return f"{cpu_percent}%"
+        except Exception:
+            return "CPU usage unavailable"
+    
+    def get_disk_usage(self):
+        """Get disk usage"""
+        try:
+            # Import inside the method
+            import psutil
+            disk = psutil.disk_usage('/')
+            return {
+                'total': f"{disk.total // (1024**3)} GB",
+                'used': f"{disk.used // (1024**3)} GB",
+                'free': f"{disk.free // (1024**3)} GB",
+                'percent': f"{disk.percent}%"
+            }
+        except Exception:
+            return "Disk usage unavailable"
     
     def get_performance_stats(self):
-        # API response time statistics
+        """Get performance statistics - placeholder for real monitoring"""
+        try:
+            # This would come from your APM tool
+            stats = {
+                'labels': ['Auth', 'Courses', 'Content', 'QCM', 'Database', 'Cache'],
+                'data': [95, 210, 165, 280, 75, 40],
+                'request_counts': [1200, 650, 950, 450, 0, 0],
+                'error_rates': [0.8, 1.5, 1.2, 2.5, 0.2, 0.4]
+            }
+            return stats
+            
+        except Exception as e:
+            return {
+                'labels': ['Auth', 'Courses', 'Content', 'QCM'],
+                'data': [120, 250, 180, 300],
+                'request_counts': [0, 0, 0, 0],
+                'error_rates': [0, 0, 0, 0]
+            }
+    
+    def get_database_size(self):
+        """Get database size"""
+        from django.db import connection
+        try:
+            with connection.cursor() as cursor:
+                vendor = connection.vendor
+                
+                if vendor == 'postgresql':
+                    cursor.execute("SELECT pg_size_pretty(pg_database_size(current_database()))")
+                elif vendor == 'mysql':
+                    cursor.execute("SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) FROM information_schema.tables WHERE table_schema = DATABASE()")
+                elif vendor == 'sqlite':
+                    import os
+                    from django.conf import settings
+                    db_path = settings.DATABASES['default']['NAME']
+                    size_bytes = os.path.getsize(db_path)
+                    return f"{round(size_bytes / (1024 * 1024), 2)} MB"
+                else:
+                    return "Unknown database type"
+                
+                row = cursor.fetchone()
+                return row[0] if row else "Unknown"
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    def get_database_vendor(self):
+        from django.db import connection
+        return connection.vendor
+    
+    def get_active_sessions(self):
+        from django.contrib.sessions.models import Session
+        return Session.objects.count()
+class ModuleDetail(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get_object(self, course_pk, module_pk):
+        course = get_object_or_404(Course, pk=course_pk)
+        return get_object_or_404(Module, pk=module_pk, course=course)
+    
+    def get(self, request, course_pk, module_pk):
+        module = self.get_object(course_pk, module_pk)
+        serializer = ModuleSerializer(module)
+        return Response(serializer.data)
+    
+    def put(self, request, course_pk, module_pk):
+        module = self.get_object(course_pk, module_pk)
+        
+        if module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = ModuleSerializer(module, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, course_pk, module_pk):
+        module = self.get_object(course_pk, module_pk)
+        
+        if module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        module.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+# Content Views
+class CourseContentsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        try:
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            
+            # Get user's subscription for this course
+            subscription = Subscription.objects.filter(
+                user=user,
+                course=course,
+                is_active=True
+            ).first()
+            
+            # Get all modules with their contents
+            modules = course.modules.all().order_by('order')
+            
+            # Pass subscription to serializer context
+            module_data = []
+            for module in modules:
+                module_serializer = ModuleSerializer(module)
+                contents = module.contents.all().order_by('order')
+                
+                content_serializer = CourseContentSerializer(
+                    contents, 
+                    many=True, 
+                    context={
+                        'request': request,
+                        'subscription': subscription
+                    }
+                )
+                
+                module_data.append({
+                    **module_serializer.data,
+                    'contents': content_serializer.data
+                })
+            
+            return Response(module_data)
+            
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class CourseContentDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    
+    def get_object(self, course_pk, content_pk):
+        course = get_object_or_404(Course, pk=course_pk)
+        return get_object_or_404(CourseContent, pk=content_pk, module__course=course)
+    
+    def get(self, request, course_pk, content_pk):
+        try:
+            content = self.get_object(course_pk, content_pk)
+            serializer = CourseContentSerializer(content, context={'request': request})
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def put(self, request, course_pk, content_pk):
+        content = self.get_object(course_pk, content_pk)
+        
+        if content.module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = CourseContentCreateSerializer(content, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            content = serializer.save()
+            return Response(CourseContentSerializer(content).data)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, course_pk, content_pk):
+        content = self.get_object(course_pk, content_pk)
+        
+        if content.module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        content.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class CreatePDFContentView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
+    
+    def post(self, request, course_id, module_id):  # Changed from 'pk' to 'course_id, module_id'
+        print('---------------------------------------------Create PDF content in a module')
+        module = get_object_or_404(Module, pk=module_id)  # Use module_id instead of pk
+        if module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        print('---------------------------------------------Create PDF content in a module')
+        content_type, created = ContentType.objects.get_or_create(name='pdf')
+        print('---------------------------------------------Create PDF content in a module')
+        serializer = PDFContentCreateSerializer(
+            data=request.data,
+            context={
+                'request': request,
+                'module': module,
+                'content_type': content_type
+            }
+        )
+        print('---------------------------------------------Create PDF content in a module')
+        if serializer.is_valid():
+            content = serializer.save()
+            return Response(
+                CourseContentSerializer(content).data,
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class CreateVideoContentView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
+    
+    def post(self, request, course_id, module_id):
+        """Create Video content in a module"""
+        module = get_object_or_404(Module, pk=module_id)
+        
+        if module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        content_type, created = ContentType.objects.get_or_create(name='Video')
+        
+        serializer = VideoContentCreateSerializer(
+            data=request.data, 
+            context={
+                'request': request,
+                'module': module,
+                'content_type': content_type
+            }
+        )
+        
+        if serializer.is_valid():
+            content = serializer.save()
+            return Response(
+                CourseContentSerializer(content).data,
+                status=status.HTTP_201_CREATED
+            )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class CreateQCMContentView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+    
+    def post(self, request, course_id, module_id):
+        """Create QCM quiz content in a module"""
+        module = get_object_or_404(Module, pk=module_id)
+        
+        if module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        content_type, created = ContentType.objects.get_or_create(name='QCM')
+        
+        serializer = QCMContentCreateSerializer(
+            data=request.data, 
+            context={
+                'request': request,
+                'module': module,
+                'content_type': content_type
+            }
+        )
+        
+        if serializer.is_valid():
+            content = serializer.save()
+            return Response(
+                CourseContentSerializer(content).data,
+                status=status.HTTP_201_CREATED
+            )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# Content Completion Views
+class MarkVideoCompletedView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            content_id = request.data.get('content_id')
+            
+            # Get content
+            content = CourseContent.objects.get(id=content_id, module__course=course)
+            
+            if content.content_type.name != 'Video':
+                return Response({'error': 'Content is not a Video'}, status=400)
+            
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            
+            # Mark as completed
+            if not subscription.completed_contents.filter(id=content.id).exists():
+                subscription.completed_contents.add(content)
+            
+            # Update progress percentage
+            total_contents = CourseContent.objects.filter(module__course=course).count()
+            completed_count = subscription.completed_contents.count()
+            progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+            
+            subscription.progress_percentage = progress_percentage
+            subscription.save()
+            
+            return Response({
+                'status': 'Video marked as completed',
+                'progress_percentage': progress_percentage,
+                'completed_contents': list(subscription.completed_contents.values_list('id', flat=True))
+            })
+            
+        except CourseContent.DoesNotExist:
+            return Response({'error': 'Content not found'}, status=404)
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Subscription not found. Please subscribe to the course first.'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class MarkPDFCompletedView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            content_id = request.data.get('content_id')
+            
+            # Get the course content
+            content = CourseContent.objects.get(id=content_id, module__course=course)
+            
+            if content.content_type.name.lower() != 'pdf':
+                return Response({'error': 'Content is not a pdf'}, status=400)
+            
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+
+            # Mark as completed in subscription
+            if not subscription.completed_contents.filter(id=content.id).exists():
+                subscription.completed_contents.add(content)
+            
+            # Update progress percentage
+            total_contents = CourseContent.objects.filter(module__course=course).count()
+            completed_count = subscription.completed_contents.count()
+            progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+            
+            subscription.progress_percentage = progress_percentage
+            subscription.save()
+            
+            # Serialize the PDF content
+            serializer = PDFContentSerializer(content.pdf_content, context={'request': request})
+            
+            return Response({
+                'status': 'PDF marked as completed',
+                'progress_percentage': progress_percentage,
+                'completed_contents': list(subscription.completed_contents.values_list('id', flat=True)),
+                'pdf_content': serializer.data
+            })
+            
+        except CourseContent.DoesNotExist:
+            return Response({'error': 'Content not found'}, status=404)
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Subscription not found. Please subscribe to the course first.'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+# Subscription Views
+class CourseSubscribers(APIView):
+    def get(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        subscriptions = course.course_subscriptions.filter(is_active=True)
+        serializer = SubscriptionSerializer(subscriptions, many=True)
+        return Response(serializer.data)
+
+class SubscribeToCourse(APIView):
+    def post(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        
+        # Check if already subscribed
+        subscription, created = Subscription.objects.get_or_create(
+            user=user,
+            course=course,
+            defaults={'is_active': True}
+        )
+        
+        if not created:
+            subscription.is_active = True
+            subscription.save()
+        
+        return Response(
+            {'message': 'Subscribed successfully', 'subscription_id': subscription.id},
+            status=status.HTTP_201_CREATED
+        )
+
+class UnsubscribeFromCourse(APIView):
+    def post(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        
+        try:
+            subscription = Subscription.objects.get(user=user, course=course)
+            subscription.is_active = False
+            subscription.save()
+            
+            return Response({'message': 'Unsubscribed successfully'})
+        except Subscription.DoesNotExist:
+            return Response(
+                {'error': 'You are not subscribed to this course'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class CheckSubscription(APIView):
+    def get(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        
+        # Check if user is subscribed
+        subscription = Subscription.objects.filter(
+            user=user, 
+            course=course,
+            is_active=True
+        ).first()
+        
+        is_subscribed = subscription is not None
+        
+        # Calculate progress percentage if subscribed
+        progress_percentage = 0
+        if is_subscribed:
+            total_contents = CourseContent.objects.filter(module__course=course).count()
+            completed_count = subscription.completed_contents.count()
+            if total_contents > 0:
+                progress_percentage = (completed_count / total_contents) * 100
+        
+        response_data = {
+            'id': course.id,
+            'title': course.title_of_course,
+            'description': course.description,
+            'image': course.image.url if course.image else '',
+            'creator_username': course.creator.username,
+            'created_at': course.created_at.isoformat() if course.created_at else '',
+            'updated_at': course.updated_at.isoformat() if course.updated_at else '',
+            'is_subscribed': is_subscribed,
+            'progress_percentage': progress_percentage,
+        }
+        
+        return Response(response_data)
+
+class MySubscriptions(APIView):
+    def get(self, request):
+        try:
+            user = request.user
+            subscriptions = Subscription.objects.filter(user=user, is_active=True)
+            courses = [sub.course for sub in subscriptions]
+            serializer = CourseSerializer(courses, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            print(f"Error retrieving subscriptions: {str(e)}")
+            return Response({"error": str(e)}, status=400)
+
+# QCM Views
+class SubmitQCM(APIView):
+    def post(self, request, pk):
+        try:
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            content_id = request.data.get('content_id')
+            
+            # Get the QCM content
+            content = get_object_or_404(CourseContent, id=content_id, module__course=course)
+            
+            if content.content_type.name.lower() != 'qcm':
+                return Response({'error': 'Content is not a QCM'}, status=400)
+            
+            qcm = content.qcm
+            if not qcm:
+                return Response({'error': 'QCM not found for this content'}, status=404)
+            
+            serializer = QCMAttemptSerializer(data=request.data)
+            
+            if serializer.is_valid():
+                attempt = QCMAttempt.objects.create(
+                    user=user,
+                    qcm=qcm,
+                    time_taken=request.data.get('time_taken', 0),
+                    attempt_number=self.get_next_attempt_number(user, qcm)
+                )
+                
+                # Assign selected options manually
+                selected_option_ids = serializer.validated_data['selected_option_ids']
+                selected_options = QCMOption.objects.filter(id__in=selected_option_ids, qcm=qcm)
+                attempt.selected_options.set(selected_options)
+
+                # Calculate score and finalize
+                attempt.completed_at = timezone.now()
+                attempt.calculate_score()
+                
+                # Update subscription progress if passed
+                if attempt.is_passed:
+                    try:
+                        subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+                        subscription.completed_contents.add(content)
+                        
+                        # Update progress percentage
+                        total_contents = CourseContent.objects.filter(module__course=course).count()
+                        completed_count = subscription.completed_contents.count()
+                        progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+                        
+                        subscription.progress_percentage = progress_percentage
+                        subscription.save()
+                        
+                        response_data = QCMAttemptSerializer(attempt).data
+                        response_data['progress_percentage'] = progress_percentage
+                        response_data['completed_contents'] = list(subscription.completed_contents.values_list('id', flat=True))
+                        
+                        return Response(response_data, status=201)
+                    except Subscription.DoesNotExist:
+                        # Return attempt data but without subscription info
+                        return Response(QCMAttemptSerializer(attempt).data, status=201)
+                else:
+                    return Response(QCMAttemptSerializer(attempt).data, status=201)
+            else:
+                return Response(serializer.errors, status=400)
+                
+        except Exception as e:
+            print('Error in SubmitQCM:', str(e))
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+    def get_next_attempt_number(self, user, qcm):
+        last_attempt = QCMAttempt.objects.filter(user=user, qcm=qcm).order_by('-attempt_number').first()
+        return last_attempt.attempt_number + 1 if last_attempt else 1
+
+class QCMProgress(APIView):
+    def get(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        
+        try:
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            completions = QCMCompletion.objects.filter(
+                subscription=subscription,
+                qcm__course_content__module__course=course
+            )
+            
+            serializer = QCMCompletionSerializer(completions, many=True)
+            
+            # Calculate totals
+            total_qcms = QCM.objects.filter(course_content__module__course=course).count()
+            passed_qcms = completions.filter(is_passed=True).count()
+            total_points = subscription.total_score
+            max_points = sum(qcm.points for qcm in QCM.objects.filter(course_content__module__course=course))
+            
+            return Response({
+                'completions': serializer.data,
+                'summary': {
+                    'total_qcms': total_qcms,
+                    'passed_qcms': passed_qcms,
+                    'completion_rate': (passed_qcms / total_qcms * 100) if total_qcms > 0 else 0,
+                    'total_points': total_points,
+                    'max_points': max_points,
+                    'points_percentage': (total_points / max_points * 100) if max_points > 0 else 0
+                }
+            })
+            
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Not subscribed'}, status=400)
+
+class CheckContentAccess(APIView):
+    def get(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        content_id = request.query_params.get('content_id')
+        
+        try:
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            content = CourseContent.objects.get(id=content_id, module__course=course)
+            
+            can_access = subscription.can_access_content(content)
+            is_locked = not can_access
+            
+            return Response({
+                'can_access': can_access,
+                'is_locked': is_locked,
+                'content_id': content_id,
+                'content_title': content.title
+            })
+            
+        except (Subscription.DoesNotExist, CourseContent.DoesNotExist):
+            return Response({'error': 'Not found'}, status=404)
+
+# Progress Tracking Views
+class UpdateProgress(APIView):
+    def post(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        
+        try:
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            
+            # Update progress based on request data
+            score = request.data.get('score')
+            level = request.data.get('level')
+            progress = request.data.get('progress_percentage')
+            
+            if score is not None:
+                subscription.score = score
+            if level is not None:
+                subscription.level = level
+            if progress is not None:
+                subscription.progress_percentage = min(100.0, max(0.0, float(progress)))
+            
+            subscription.save()
+            
+            return Response(SubscriptionWithProgressSerializer(subscription).data)
+            
+        except Subscription.DoesNotExist:
+            return Response(
+                {'error': 'You are not subscribed to this course'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class CourseContentCompletionView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get completion status for all contents in a course"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        try:
+            subscription = Subscription.objects.get(
+                user=request.user,
+                course=course,
+                is_active=True
+            )
+            
+            contents = CourseContent.objects.filter(module__course=course).order_by('order')
+            completion_data = []
+            
+            for content in contents:
+                is_completed = False
+                
+                if content.content_type.name == 'qcm':
+                    is_completed = QCMCompletion.objects.filter(
+                        subscription=subscription,
+                        qcm=content.qcm,
+                        is_passed=True
+                    ).exists()
+                else:
+                    is_completed = subscription.completed_contents.filter(id=content.id).exists()
+                
+                completion_data.append({
+                    'content_id': content.id,
+                    'title': content.title,
+                    'content_type': content.content_type.name,
+                    'order': content.order,
+                    'is_completed': is_completed
+                })
+            
+            return Response(completion_data)
+            
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Not subscribed to this course'}, status=404)
+class CourseSubscribersListViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    def list(self, request, pk=None):
+        """Get detailed list of subscribers with their progress"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        subscribers = course.course_subscriptions.filter(is_active=True).select_related('user')
+        
+        # Create subscriber data manually
+        subscriber_data = []
+        for subscription in subscribers:
+            # Calculate progress percentage
+            total_contents = CourseContent.objects.filter(module__course=course).count()
+            completed_count = subscription.completed_contents.count()
+            progress_percentage = (completed_count / total_contents * 100) if total_contents > 0 else 0
+            
+            subscriber_data.append({
+                'id': subscription.id,
+                'user': {
+                    'id': subscription.user.id,
+                    'username': subscription.user.username,
+                    'email': subscription.user.email,
+                    'full_name': f"{subscription.user.first_name} {subscription.user.last_name}",
+                    'department': subscription.user.department,
+                    'department_display': subscription.user.get_department_display(),
+                },
+                'subscribed_at': subscription.subscribed_at,
+                'is_active': subscription.is_active,
+                'progress_percentage': round(progress_percentage, 2),
+                'total_score': subscription.total_score,
+                'completed_contents_count': completed_count,
+                'total_contents_count': total_contents
+            })
+        
+        # Manual pagination
+        page_size = request.query_params.get('page_size', 10)
+        paginator = Paginator(subscriber_data, page_size)
+        page_number = request.query_params.get('page', 1)
+        
+        try:
+            page = paginator.page(page_number)
+        except PageNotAnInteger:
+            page = paginator.page(1)
+        except EmptyPage:
+            page = paginator.page(paginator.num_pages)
+        
+        return Response({
+            'count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': page.number,
+            'next': page.next_page_number() if page.has_next() else None,
+            'previous': page.previous_page_number() if page.has_previous() else None,
+            'results': page.object_list
+        })
+
+class CourseStatisticsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get comprehensive statistics for a course"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        # Check if user is the course creator
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get subscription statistics
+        total_subscriptions = course.course_subscriptions.count()
+        active_subscriptions = course.course_subscriptions.filter(is_active=True).count()
+        inactive_subscriptions = total_subscriptions - active_subscriptions
+        
+        # Get progress statistics
+        progress_stats = course.course_subscriptions.filter(is_active=True).aggregate(
+            avg_progress=Avg('progress_percentage'),
+            max_progress=Max('progress_percentage'),
+            min_progress=Min('progress_percentage')
+        )
+        
+        # Get score statistics
+        score_stats = course.course_subscriptions.filter(is_active=True).aggregate(
+            avg_score=Avg('total_score'),
+            max_score=Max('total_score'),
+            min_score=Min('total_score')
+        )
+        
+        # Get completion statistics
+        completed_count = course.course_subscriptions.filter(
+            is_active=True, 
+            progress_percentage=100
+        ).count()
+        
+        # Get QCM completion statistics
+        qcm_stats = QCMCompletion.objects.filter(
+            subscription__course=course,
+            subscription__is_active=True
+        ).aggregate(
+            avg_attempts=Avg('attempts_count'),
+            avg_score=Avg('best_score'),
+            pass_rate=Avg('is_passed', output_field=models.FloatField()) * 100
+        )
+        
+        # Get recent activity (last 7 days)
+        week_ago = timezone.now() - timedelta(days=7)
+        recent_activity = course.course_subscriptions.filter(
+            is_active=True,
+            last_activity__gte=week_ago
+        ).count()
+        
+        # Get enrollment trend (monthly)
+        enrollment_trend = course.course_subscriptions.annotate(
+            month=TruncMonth('subscribed_at')
+        ).values('month').annotate(
+            count=Count('id')
+        ).order_by('month')
+        
+        return Response({
+            'course': {
+                'id': course.id,
+                'title': course.title_of_course,
+                'creator': course.creator.get_full_name() if course.creator else 'Unknown',
+                'created_at': course.created_at
+            },
+            'subscriptions': {
+                'total': total_subscriptions,
+                'active': active_subscriptions,
+                'inactive': inactive_subscriptions,
+                'completion_rate': (completed_count / active_subscriptions * 100) if active_subscriptions > 0 else 0
+            },
+            'progress': {
+                'average': progress_stats['avg_progress'] or 0,
+                'maximum': progress_stats['max_progress'] or 0,
+                'minimum': progress_stats['min_progress'] or 0,
+                'completed': completed_count
+            },
+            'scores': {
+                'average': score_stats['avg_score'] or 0,
+                'maximum': score_stats['max_score'] or 0,
+                'minimum': score_stats['min_score'] or 0
+            },
+            'qcm_performance': {
+                'average_attempts': qcm_stats['avg_attempts'] or 0,
+                'average_score': qcm_stats['avg_score'] or 0,
+                'pass_rate': qcm_stats['pass_rate'] or 0
+            },
+            'activity': {
+                'recent_activity': recent_activity,
+                'enrollment_trend': list(enrollment_trend)
+            }
+        })
+class CourseProgressOverviewView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get overview of course progress for all subscribers"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get all active subscriptions
+        active_subscriptions = course.course_subscriptions.filter(is_active=True)
+        
+        # Calculate progress for each subscription
+        progress_data = []
+        for subscription in active_subscriptions:
+            # Calculate progress percentage based on completed contents vs total contents
+            total_contents = CourseContent.objects.filter(module__course=course).count()
+            completed_contents = subscription.completed_contents.count()
+            progress_percentage = (completed_contents / total_contents * 100) if total_contents > 0 else 0
+            
+            progress_data.append({
+                'subscription': subscription,
+                'progress_percentage': progress_percentage
+            })
+        
+        # Get progress distribution
+        progress_distribution = {
+            '0-20%': len([p for p in progress_data if 0 <= p['progress_percentage'] <= 20]),
+            '21-40%': len([p for p in progress_data if 21 <= p['progress_percentage'] <= 40]),
+            '41-60%': len([p for p in progress_data if 41 <= p['progress_percentage'] <= 60]),
+            '61-80%': len([p for p in progress_data if 61 <= p['progress_percentage'] <= 80]),
+            '81-99%': len([p for p in progress_data if 81 <= p['progress_percentage'] <= 99]),
+            '100%': len([p for p in progress_data if p['progress_percentage'] == 100])
+        }
+        
+        # Get average time to complete (only for 100% completed)
+        completed_subscriptions = [p for p in progress_data if p['progress_percentage'] == 100]
+        
+        avg_completion_time = None
+        if completed_subscriptions:
+            total_time = timedelta()
+            for p in completed_subscriptions:
+                subscription = p['subscription']
+                if subscription.last_activity and subscription.subscribed_at:
+                    total_time += (subscription.last_activity - subscription.subscribed_at)
+            
+            if total_time:
+                avg_completion_time = total_time / len(completed_subscriptions)
+        
+        return Response({
+            'progress_distribution': progress_distribution,
+            'average_completion_time': avg_completion_time.total_seconds() / 86400 if avg_completion_time else 0,
+            'total_learners': len(progress_data),
+            'active_this_week': active_subscriptions.filter(
+                last_activity__gte=timezone.now() - timedelta(days=7)
+            ).count()
+        })
+class QCMPerformanceView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get QCM performance statistics for the course"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get all QCMs in this course (through the module relationship)
+        qcms = QCM.objects.filter(course_content__module__course=course)
+        
+        qcm_performance = []
+        for qcm in qcms:
+            completions = QCMCompletion.objects.filter(qcm=qcm)
+            
+            stats = completions.aggregate(
+                total_attempts=Count('id'),
+                avg_score=Avg('best_score'),
+                pass_rate=Avg('is_passed', output_field=models.FloatField()) * 100,
+                avg_attempts=Avg('attempts_count')
+            )
+            
+            qcm_performance.append({
+                'qcm_id': qcm.id,
+                'question': qcm.question,
+                'total_attempts': stats['total_attempts'] or 0,
+                'average_score': stats['avg_score'] or 0,
+                'pass_rate': stats['pass_rate'] or 0,
+                'average_attempts': stats['avg_attempts'] or 0,
+                'difficulty': 'Easy' if (stats['avg_score'] or 0) >= 80 else 
+                             'Medium' if (stats['avg_score'] or 0) >= 60 else 'Hard'
+            })
+        
+        # Calculate overall pass rate
+        overall_pass_rate = 0
+        if qcm_performance:
+            total_pass_rate = sum(item['pass_rate'] for item in qcm_performance)
+            overall_pass_rate = total_pass_rate / len(qcm_performance)
+        
+        return Response({
+            'total_qcms': qcms.count(),
+            'qcm_performance': qcm_performance,
+            'overall_pass_rate': round(overall_pass_rate, 2)
+        })
+class EnrollmentTrendView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get enrollment trends over time"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Monthly enrollment trend
+        monthly_trend = course.course_subscriptions.annotate(
+            month=TruncMonth('subscribed_at')
+        ).values('month').annotate(
+            enrollments=Count('id'),
+            active_enrollments=Count('id', filter=Q(is_active=True))
+        ).order_by('month')
+        
+        # Weekly activity trend
+        weekly_activity = course.course_subscriptions.filter(
+            is_active=True
+        ).annotate(
+            week=TruncWeek('last_activity')
+        ).values('week').annotate(
+            active_users=Count('id', distinct=True)
+        ).order_by('week')[:12]  # Last 12 weeks
+        
+        return Response({
+            'monthly_enrollment': list(monthly_trend),
+            'weekly_activity': list(weekly_activity),
+            'total_enrollments': course.course_subscriptions.count(),
+            'current_active': course.course_subscriptions.filter(is_active=True).count()
+        })
+class SubscriptionStats(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        subscriptions = course.course_subscriptions.all()
+        total = subscriptions.count()
+        active = subscriptions.filter(is_active=True).count()
+        
+        # Additional stats
+        recent_subscriptions = subscriptions.filter(
+            subscribed_at__gte=timezone.now() - timedelta(days=30)
+        ).count()
+        
+        # Calculate average completion based on completed contents
+        # Since we don't have completed_qcms field, we'll use progress_percentage
+        avg_completion = subscriptions.aggregate(
+            avg_progress=Avg('progress_percentage')
+        )['avg_progress'] or 0
+
+        return Response({
+            'total_subscriptions': total,
+            'active_subscriptions': active,
+            'inactive_subscriptions': total - active,
+            'recent_subscriptions_30d': recent_subscriptions,
+            'average_progress_percentage': round(avg_completion, 2),
+            'completion_rate': round((active / total * 100) if total > 0 else 0, 2)
+        })
+class CourseLeaderboard(APIView):
+    def get(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        
+        # Get top subscribers by score
+        leaderboard = course.course_subscriptions.filter(
+            is_active=True
+        ).order_by('-score', '-progress_percentage')[:10]
+        
+        serializer = SubscriptionWithProgressSerializer(leaderboard, many=True)
+        
+        return Response({
+            'course': course.title_of_course,
+            'leaderboard': serializer.data
+        })
+
+class MyProgress(APIView):
+    def get(self, request, pk):
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        
+        try:
+            subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            serializer = SubscriptionWithProgressSerializer(subscription)
+            return Response(serializer.data)
+            
+        except Subscription.DoesNotExist:
+            return Response(
+                {'error': 'You are not subscribed to this course'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+# Admin Dashboard Views
+class IsSuperUser(IsAuthenticated):
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) or request.user.privilege == 'A'
+
+class AdminDashboardView(APIView):
+    permission_classes = [IsSuperUser]
+    
+    def get(self, request):
+        total_users = CustomUser.objects.count()
+        total_courses = Course.objects.count()
+        total_subscriptions = Subscription.objects.filter(is_active=True).count()
+        
+        week_ago = timezone.now() - timedelta(days=7)
+        recent_users = CustomUser.objects.filter(date_joined__gte=week_ago).count()
+        recent_courses = Course.objects.filter(created_at__gte=week_ago).count()
+        
+        user_distribution = CustomUser.objects.values('privilege').annotate(
+            count=Count('id')
+        )
+        
+        user_registration_data = self.get_user_registration_chart_data()
+        course_stats = self.get_course_statistics()
+        
+        return Response({
+            'overview': {
+                'total_users': total_users,
+                'total_courses': total_courses,
+                'active_subscriptions': total_subscriptions,
+                'recent_users': recent_users,
+                'recent_courses': recent_courses,
+            },
+            'user_distribution': list(user_distribution),
+            'user_registration_chart': user_registration_data,
+            'course_statistics': course_stats,
+            'timestamp': timezone.now()
+        })
+    
+    def get_user_registration_chart_data(self):
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        
+        registration_data = (
+            CustomUser.objects
+            .filter(date_joined__gte=thirty_days_ago)
+            .annotate(date=TruncDate('date_joined'))
+            .values('date')
+            .annotate(count=Count('id'))
+            .order_by('date')
+        )
+        
         return {
-            'labels': ['Auth', 'Courses', 'Content', 'QCM'],
-            'data': [120, 250, 180, 300]  # response times in ms
+            'labels': [item['date'].strftime('%Y-%m-%d') for item in registration_data],
+            'data': [item['count'] for item in registration_data]
         }
     
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status
-from django.db.models import Q
-from .models import Course, Subscription
-from .serializers import CourseSerializer
+    def get_course_statistics(self):
+        courses = Course.objects.all()
+        course_data = []
 
+        for course in courses:
+            subscriptions = course.course_subscriptions.filter(is_active=True)
+            total_subscribers = subscriptions.count()
+
+            # Calculate total QCMs in course
+            total_qcms = QCM.objects.filter(course_content__module__course=course).count()
+            
+            completed_count = 0
+            for subscription in subscriptions:
+                # Calculate completed QCMs for this subscription
+                completed_qcms = subscription.completed_qcms.count()
+                progress_percentage = (completed_qcms / total_qcms * 100) if total_qcms > 0 else 0
+
+                if progress_percentage == 100:
+                    completed_count += 1
+
+            completion_rate = round((completed_count / total_subscribers * 100) if total_subscribers > 0 else 0)
+
+            try:
+                result = subscriptions.aggregate(avg=Avg('total_score'))
+                avg_value = result['avg']
+                average_score = round(avg_value) if avg_value is not None else 0
+            except Exception as e:
+                print('Error calculating average score:', e)
+                average_score = 0
+
+            course_data.append({
+                'id': course.id,
+                'title': course.title_of_course,
+                'creator': course.creator.username,
+                'created_at': course.created_at,
+                'total_subscribers': total_subscribers,
+                'completed_count': completed_count,
+                'completion_rate': completion_rate,
+                'average_score': average_score,
+                'total_qcms': total_qcms
+            })
+
+        return course_data
+
+# Course ViewSet for additional functionality
 class CourseViewSet(viewsets.ModelViewSet):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
@@ -2272,62 +2275,8 @@ class CourseViewSet(viewsets.ModelViewSet):
                 {'error': f'Failed to fetch recommended courses: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
-    @action(detail=False, methods=['get'], url_path='by-department')
-    def courses_by_department(self, request):
-        """Get all courses organized by department"""
-        try:
-            # Get the department parameter from query string
-            department = request.query_params.get('department', None)
-            
-            if department:
-                # Filter courses by specific department
-                courses = Course.objects.select_related('creator').filter(
-                    Q(creator__department=department) |
-                    Q(target_departments__icontains=department)
-                ).distinct().order_by('-created_at')
-            else:
-                # Return all courses organized by creator's department
-                courses = Course.objects.select_related('creator').order_by(
-                    'creator__department', '-created_at'
-                )
-            
-            # Get user's subscribed course IDs
-            subscribed_course_ids = set(
-                Subscription.objects.filter(
-                    user=request.user,
-                    is_active=True
-                ).values_list('course_id', flat=True)
-            )
-            
-            # Serialize and add subscription status
-            serializer = self.get_serializer(courses, many=True)
-            
-            for course_data in serializer.data:
-                course_data['is_subscribed'] = course_data['id'] in subscribed_course_ids
-            
-            # If no specific department requested, group by department
-            if not department:
-                courses_by_dept = {}
-                for course in serializer.data:
-                    dept = course.get('creator_department', 'Unknown')
-                    if dept not in courses_by_dept:
-                        courses_by_dept[dept] = []
-                    courses_by_dept[dept].append(course)
-                
-                return Response(courses_by_dept, status=status.HTTP_200_OK)
-            
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response(
-                {'error': f'Failed to fetch courses by department: {str(e)}'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
-# Alternative class-based views if you prefer
-from rest_framework.views import APIView
-
+# Alternative class-based views
 class MyCoursesView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -2400,3 +2349,179 @@ class RecommendedCoursesView(APIView):
                 {'error': f'Failed to fetch recommended courses: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+# views.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.db.models import Count, Avg, Q
+from django.utils import timezone
+from datetime import timedelta
+from .models import Course, Enrollment, ContentProgress
+from .serializers import CourseStatsSerializer
+
+class CourseStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        try:
+            course = Course.objects.get(id=pk)
+
+            # Check if user has permission to view stats (creator or admin)
+            if course.creator != request.user and not request.user.is_staff:
+                return Response({"error": "Permission denied"}, status=403)
+
+            # Get enrollment statistics
+            enrollments = Enrollment.objects.filter(course=course)
+            total_enrollments = enrollments.count()
+            completed_enrollments = enrollments.filter(completed=True).count()
+            average_progress = enrollments.aggregate(avg_progress=Avg('progress'))['avg_progress'] or 0
+
+            # Get recent enrollments (last 30 days)
+            thirty_days_ago = timezone.now() - timedelta(days=30)
+            recent_enrollments = enrollments.filter(
+                enrolled_at__gte=thirty_days_ago
+            ).order_by('-enrolled_at')[:10]
+
+            # For now, return empty content engagement until you have the Content model
+            content_engagement = []
+
+            stats_data = {
+                'total_enrollments': total_enrollments,
+                'completed_enrollments': completed_enrollments,
+                'average_progress': int(average_progress),
+                'recent_enrollments': recent_enrollments,
+                'content_engagement': content_engagement
+            }
+
+            serializer = CourseStatsSerializer(stats_data)
+            return Response(serializer.data)
+
+        except Course.DoesNotExist:
+            return Response({"error": "Course not found"}, status=404)
+
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.shortcuts import get_object_or_404
+from django.db import models
+from .models import Course, Module, CourseContent, Subscription
+from .serializers import ModuleSerializer, ModuleWithContentsSerializer
+
+class ModuleDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def get_object(self, course_id, module_id):
+        course = get_object_or_404(Course, id=course_id)
+        return get_object_or_404(Module, id=module_id, course=course)
+    
+    def get(self, request, course_id, module_id):
+        module = self.get_object(course_id, module_id)
+        
+        # Get user subscription for progress tracking
+        subscription = None
+        if request.user and request.user.is_authenticated:
+            subscription = Subscription.objects.filter(
+                user=request.user,
+                course_id=course_id,
+                is_active=True
+            ).first()
+        
+        # Use prefetch_related for optimal performance
+        module = Module.objects.prefetch_related(
+            'contents__content_type',
+            'contents__video_content',
+            'contents__pdf_content', 
+            'contents__qcm__options'
+        ).get(id=module_id, course_id=course_id)
+        print('6666666666666666666666666666666666', module)
+        serializer = ModuleWithContentsSerializer(
+            module, 
+            context={'request': request, 'subscription': subscription}
+        )
+        return Response(serializer.data)
+    
+    def put(self, request, course_id, module_id):
+        module = self.get_object(course_id, module_id)
+        course = get_object_or_404(Course, id=course_id)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You do not have permission to edit this module'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = ModuleSerializer(module, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, course_id, module_id):
+        module = self.get_object(course_id, module_id)
+        course = get_object_or_404(Course, id=course_id)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You do not have permission to delete this module'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        module.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ModuleListCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, course_id):
+        course = get_object_or_404(Course, id=course_id)
+        
+        # Get user subscription for progress tracking
+        subscription = None
+        if request.user and request.user.is_authenticated:
+            subscription = Subscription.objects.filter(
+                user=request.user,
+                course=course,
+                is_active=True
+            ).first()
+        # Optimize query with prefetch_related
+        modules = Module.objects.filter(course=course).prefetch_related(
+            'contents__content_type',
+            'contents__video_content',
+            'contents__pdf_content',
+            'contents__qcm__options'
+        ).order_by('order')
+        
+        serializer = ModuleWithContentsSerializer(
+            modules, 
+            many=True,
+            context={'request': request, 'subscription': subscription}
+        )
+        # print('++++++++++++++sssssssssssssssssssssssssssssssssssss', serializer.data)
+        return Response(serializer.data)
+    
+    def post(self, request, course_id):
+        course = get_object_or_404(Course, id=course_id)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You do not have permission to add modules to this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = ModuleSerializer(data=request.data)
+        print('Creating module...') # Debug print
+        
+        if serializer.is_valid():
+            serializer.save(course=course)
+            print('Module created successfully!')
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        print('Validation errors:', serializer.errors) # Debug print
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

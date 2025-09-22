@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.conf import settings
+
 PRIVILEGE_CHOICES = [
     ('A', 'Admin'),
     ('AP', 'Apprenant'),
@@ -48,28 +49,66 @@ class Course(models.Model):
     )
 
     def __str__(self):
-        # More robust string representation
         creator_name = self.creator.get_full_name() or self.creator.username
         return f"{self.title_of_course} by {creator_name}"
+class Enrollment(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='enrollments')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+    completed = models.BooleanField(default=False)
+    progress = models.IntegerField(default=0)  # 0-100 percentage
+    
+    class Meta:
+        unique_together = ['user', 'course']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.course.title_of_course}"
+
 class ContentType(models.Model):
-    name = models.CharField(max_length=50)  # 'video' or 'qcm'
+    name = models.CharField(max_length=50)  # 'video', 'qcm', or 'pdf'
     
     def __str__(self):
         return self.name
+
+class Module(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='modules')
+    title = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)  # for ordering modules within a course
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return f"{self.course.title_of_course} - {self.title}"
 class CourseContent(models.Model):
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='contents')
+    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='contents', null=True, blank=True)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     title = models.CharField(max_length=100)
     caption = models.CharField(max_length=200, blank=True)
-    order = models.PositiveIntegerField(default=0)  # for ordering content
-    is_completed = models.BooleanField(default=False)
-    
+    order = models.PositiveIntegerField(default=0)  # for ordering content within a module
     
     class Meta:
         ordering = ['order']
     
     def __str__(self):
         return f"{self.content_type}: {self.title}"
+class ContentProgress(models.Model):
+    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, related_name='content_progress')
+    content = models.ForeignKey(CourseContent, on_delete=models.CASCADE)  # Adjust based on your Content model
+    completed = models.BooleanField(default=False)
+    viewed_at = models.DateTimeField(auto_now_add=True)
+    time_spent = models.IntegerField(default=0)  # in seconds
+    
+    class Meta:
+        unique_together = ['enrollment', 'content']
+    
+    def __str__(self):
+        return f"{self.enrollment.user.username} - {self.content.title}"
+
+
+
+
 class QCM(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='qcm')
     question = models.TextField()
@@ -80,6 +119,20 @@ class QCM(models.Model):
 
     def __str__(self):
         return f"QCM: {self.question} ({self.points} points)"
+
+class VideoContent(models.Model):
+    course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='video_content')
+    video_file = models.FileField(upload_to='videos/%y')
+    
+    def __str__(self):
+        return self.course_content.title
+
+class PDFContent(models.Model):
+    course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='pdf_content')
+    pdf_file = models.FileField(upload_to='pdfs/')
+    
+    def __str__(self):
+        return self.course_content.title
 class Subscription(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='course_subscriptions')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='course_subscriptions')
@@ -101,15 +154,25 @@ class Subscription(models.Model):
     
     def can_access_content(self, content):
         """Check if user can access specific content based on prerequisites"""
-        if content.order == 1:  
+        # Get all contents in the same module
+        module_contents = CourseContent.objects.filter(module=content.module).order_by('order')
+        
+        # Find the position of the current content
+        content_position = None
+        for i, module_content in enumerate(module_contents):
+            if module_content.id == content.id:
+                content_position = i
+                break
+        
+        # If it's the first content in the module, allow access
+        if content_position == 0:
             return True
         
-        previous_content = CourseContent.objects.filter(
-            course=content.course, 
-            order=content.order - 1
-        ).first()
+        # Check if previous content is completed
+        previous_content = module_contents[content_position - 1]
         
-        if previous_content and previous_content.content_type.name == 'QCM':
+        # If previous content is a QCM, check if it's passed
+        if previous_content.content_type.name == 'QCM':
             qcm = previous_content.qcm
             completion = QCMCompletion.objects.filter(
                 subscription=self, 
@@ -118,7 +181,9 @@ class Subscription(models.Model):
             ).exists()
             return completion
         
-        return True
+        # For non-QCM content, check if it's marked as completed
+        return self.completed_contents.filter(id=previous_content.id).exists()
+
 class QCMCompletion(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
     qcm = models.ForeignKey(QCM, on_delete=models.CASCADE)
@@ -130,26 +195,6 @@ class QCMCompletion(models.Model):
 
     class Meta:
         unique_together = ['subscription', 'qcm']
-
-
-
-class VideoContent(models.Model):
-    course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='video_content')
-    video_file = models.FileField(upload_to='videos/%y')
-    # is_completed = models.BooleanField(default=False)  # Fixed: default=False
-    
-    def __str__(self):
-        return self.course_content.title
-
-class PDFContent(models.Model):
-    course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='pdf_content')
-    pdf_file = models.FileField(upload_to='pdfs/')
-    # is_completed = models.BooleanField(default=False)  # Fixed: default=False
-    
-    def __str__(self):
-        return self.course_content.title
-
-
 
 class QCMOption(models.Model):
     qcm = models.ForeignKey(QCM, on_delete=models.CASCADE, related_name='options')
@@ -188,7 +233,7 @@ class QCMAttempt(models.Model):
         self.save()
         return self.score
 
-# Add this to your models.py
+# Signals for creating folders
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 import os
