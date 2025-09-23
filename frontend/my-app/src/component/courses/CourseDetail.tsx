@@ -31,13 +31,30 @@ interface Module {
     content_stats?: ContentStats;
 }
 
+interface QCMOption {
+    id: number;
+    text: string;
+    is_correct: boolean;
+}
+
+interface QCMData {
+    id: number;
+    question: string;
+    question_type: 'single' | 'multiple';
+    options: QCMOption[];
+    points: number;
+    passing_score: number;
+    max_attempts: number;
+    time_limit: number;
+}
+
 interface CourseContent {
     id: number;
     title: string;
     caption: string;
     order: number;
-    content_type: string;
-    content_type_name: string;
+    content_type: string; // This might be the actual field from backend
+    content_type_name: string; // This might be the display name
     module: number;
     pdf_content?: {
         id: number;
@@ -47,25 +64,11 @@ interface CourseContent {
         id: number;
         video_file: string;
     };
-    qcm?: {
-        id: number;
-        question: string;
-        options: QCMOption[];
-        points: number;
-        passing_score: number;
-        max_attempts: number;
-        time_limit: number;
-    };
+    qcm?: QCMData;
     created_at: string;
     updated_at: string;
     is_completed?: boolean;
     can_access?: boolean;
-}
-
-interface QCMOption {
-    id: number;
-    text: string;
-    is_correct: boolean;
 }
 
 interface ContentStats {
@@ -123,18 +126,260 @@ interface QuizState {
     showResults: boolean;
 }
 
-const getImageUrl = (imageUrl: string) => {
-    if (!imageUrl) return '/group.avif';
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
-    if (imageUrl.startsWith('/media/')) return `http://localhost:8000${imageUrl}`;
-    return `http://localhost:8000/media/${imageUrl}`;
-};
+// View Content Modal Component
+interface ViewContentModalProps {
+    content: CourseContent;
+    onClose: () => void;
+    onEdit: () => void;
+}
 
-const getFileUrl = (fileUrl: string) => {
-    if (!fileUrl) return '';
-    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
-    if (fileUrl.startsWith('/media/')) return `http://localhost:8000${fileUrl}`;
-    return `http://localhost:8000/media/${fileUrl}`;
+const ViewContentModal: React.FC<ViewContentModalProps> = ({ content, onClose, onEdit }) => {
+    const [pdfError, setPdfError] = useState(false);
+    const [videoError, setVideoError] = useState(false);
+
+    const getFileUrl = (fileUrl: string) => {
+        if (!fileUrl) return '';
+        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
+        if (fileUrl.startsWith('/media/')) return fileUrl;
+        return `/media/${fileUrl}`;
+    };
+
+    // Improved content type detection
+    const getActualContentType = (content: CourseContent): string => {
+        // First check if we have specific content data
+        if (content.pdf_content) return 'pdf';
+        if (content.video_content) return 'video';
+        if (content.qcm) return 'qcm';
+        
+        // Then check content_type_name
+        if (content.content_type_name) {
+            return content.content_type_name.toLowerCase();
+        }
+        
+        // Finally check content_type
+        if (content.content_type) {
+            const type = content.content_type.toLowerCase();
+            if (type.includes('pdf')) return 'pdf';
+            if (type.includes('video')) return 'video';
+            if (type.includes('qcm') || type.includes('quiz')) return 'qcm';
+            return type;
+        }
+        
+        return 'unknown';
+    };
+
+    const getContentIcon = (contentType: string) => {
+        switch (contentType) {
+            case 'pdf': return 'fas fa-file-pdf text-danger';
+            case 'video': return 'fas fa-video text-success';
+            case 'qcm': return 'fas fa-question-circle text-warning';
+            default: return 'fas fa-file text-secondary';
+        }
+    };
+
+    const handlePdfError = () => {
+        setPdfError(true);
+    };
+
+    const handleVideoError = () => {
+        setVideoError(true);
+    };
+
+    const renderContent = () => {
+        const contentType = getActualContentType(content);
+        
+        switch (contentType) {
+            case 'pdf':
+                return (
+                    <div className="text-center">
+                        <i className="fas fa-file-pdf fa-5x text-danger mb-3"></i>
+                        <h5>{content.title}</h5>
+                        {content.caption && <p className="text-muted">{content.caption}</p>}
+                        {content.pdf_content && !pdfError ? (
+                            <div className="mt-4">
+                                <iframe
+                                    src={getFileUrl(content.pdf_content.pdf_file)}
+                                    width="100%"
+                                    height="600px"
+                                    style={{ border: 'none' }}
+                                    onError={handlePdfError}
+                                    title={content.title}
+                                >
+                                    Your browser does not support PDFs. 
+                                    <a href={getFileUrl(content.pdf_content.pdf_file)} download>
+                                        Download PDF instead
+                                    </a>
+                                </iframe>
+                                <div className="mt-2">
+                                    <a 
+                                        href={getFileUrl(content.pdf_content.pdf_file)} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="btn btn-primary"
+                                    >
+                                        <i className="fas fa-download me-2"></i>
+                                        Download PDF
+                                    </a>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="alert alert-warning mt-3">
+                                <i className="fas fa-exclamation-triangle me-2"></i>
+                                Unable to load PDF. The file may be missing or inaccessible.
+                            </div>
+                        )}
+                    </div>
+                );
+            
+            case 'video':
+                return (
+                    <div>
+                        <h5>{content.title}</h5>
+                        {content.caption && <p className="text-muted">{content.caption}</p>}
+                        {content.video_content && !videoError ? (
+                            <div className="mt-3">
+                                <video 
+                                    controls 
+                                    className="w-100"
+                                    style={{ maxHeight: '400px' }}
+                                    onError={handleVideoError}
+                                >
+                                    <source src={getFileUrl(content.video_content.video_file)} type="video/mp4" />
+                                    <source src={getFileUrl(content.video_content.video_file)} type="video/webm" />
+                                    <source src={getFileUrl(content.video_content.video_file)} type="video/ogg" />
+                                    Your browser does not support the video tag.
+                                </video>
+                                <div className="mt-2">
+                                    <a 
+                                        href={getFileUrl(content.video_content.video_file)} 
+                                        download
+                                        className="btn btn-primary"
+                                    >
+                                        <i className="fas fa-download me-2"></i>
+                                        Download Video
+                                    </a>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="alert alert-warning mt-3">
+                                <i className="fas fa-exclamation-triangle me-2"></i>
+                                Unable to load video. The file may be missing or in an unsupported format.
+                            </div>
+                        )}
+                    </div>
+                );
+            
+            case 'qcm':
+                return (
+                    <div>
+                        <h5>{content.title}</h5>
+                        {content.caption && <p className="text-muted">{content.caption}</p>}
+                        {content.qcm ? (
+                            <div className="mt-3">
+                                <div className="alert alert-info">
+                                    <h6>Quiz Details</h6>
+                                    <ul className="list-unstyled mb-0">
+                                        <li><strong>Question:</strong> {content.qcm.question}</li>
+                                        <li><strong>Type:</strong> {content.qcm.question_type === 'single' ? 'Single Choice' : 'Multiple Choice'}</li>
+                                        <li><strong>Points:</strong> {content.qcm.points}</li>
+                                        <li><strong>Passing Score:</strong> {content.qcm.passing_score}%</li>
+                                        <li><strong>Max Attempts:</strong> {content.qcm.max_attempts}</li>
+                                        {content.qcm.time_limit > 0 && (
+                                            <li><strong>Time Limit:</strong> {content.qcm.time_limit} minutes</li>
+                                        )}
+                                    </ul>
+                                </div>
+                                
+                                <h6 className="mt-3">Options:</h6>
+                                <div className="list-group">
+                                    {content.qcm.options.map((option, index) => (
+                                        <div key={option.id} className="list-group-item">
+                                            <div className="d-flex align-items-center">
+                                                <span className="me-3">{index + 1}.</span>
+                                                <span className="flex-grow-1">{option.text}</span>
+                                                {option.is_correct && (
+                                                    <span className="badge bg-success">
+                                                        <i className="fas fa-check me-1"></i>
+                                                        Correct
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-3">
+                                    <button className="btn btn-warning">
+                                        <i className="fas fa-play me-2"></i>
+                                        Take Quiz
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="alert alert-warning">
+                                <i className="fas fa-exclamation-triangle me-2"></i>
+                                Quiz content not available.
+                            </div>
+                        )}
+                    </div>
+                );
+            
+            default:
+                return (
+                    <div className="text-center">
+                        <i className="fas fa-file fa-5x text-secondary mb-3"></i>
+                        <h5>{content.title}</h5>
+                        {content.caption && <p className="text-muted">{content.caption}</p>}
+                        
+                        {/* Debug information */}
+                        <div className="alert alert-info mt-3">
+                            <h6>Content Information</h6>
+                            <ul className="list-unstyled">
+                                <li><strong>Content Type:</strong> {content.content_type}</li>
+                                <li><strong>Content Type Name:</strong> {content.content_type_name}</li>
+                                <li><strong>Has PDF:</strong> {content.pdf_content ? 'Yes' : 'No'}</li>
+                                <li><strong>Has Video:</strong> {content.video_content ? 'Yes' : 'No'}</li>
+                                <li><strong>Has QCM:</strong> {content.qcm ? 'Yes' : 'No'}</li>
+                            </ul>
+                        </div>
+                        
+                        <div className="alert alert-warning">
+                            <i className="fas fa-info-circle me-2"></i>
+                            This content type ({contentType}) is not directly viewable here.
+                        </div>
+                    </div>
+                );
+        }
+    };
+
+    const contentType = getActualContentType(content);
+
+    return (
+        <div className="modal fade show d-block">
+            <div className="modal-dialog modal-lg">
+                <div className="modal-content">
+                    <div className="modal-header bg-primary text-white">
+                        <h5 className="modal-title">
+                            <i className={`${getContentIcon(contentType)} me-2`}></i>
+                            View Content: {content.title}
+                        </h5>
+                        <button type="button" className="btn-close btn-close-white" onClick={onClose}></button>
+                    </div>
+                    <div className="modal-body">
+                        {renderContent()}
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" onClick={onClose}>
+                            Close
+                        </button>
+                        <button type="button" className="btn btn-primary" onClick={onEdit}>
+                            <i className="fas fa-edit me-1"></i>
+                            Edit Content
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // Circular Progress Component
@@ -447,6 +692,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     const [selectedContentType, setSelectedContentType] = useState<'pdf' | 'video' | 'qcm' | null>(null);
     const [selectedModule, setSelectedModule] = useState<number | null>(null);
     const [selectedQuizContent, setSelectedQuizContent] = useState<CourseContent | null>(null);
+    const [viewContentModal, setViewContentModal] = useState<CourseContent | null>(null);
 
     const [newContentData, setNewContentData] = useState({
         title: '',
@@ -477,6 +723,61 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     const [moduleEditMode, setModuleEditMode] = useState(false);
     const [expandedModules, setExpandedModules] = useState<number[]>([]);
 
+    const getImageUrl = (imageUrl: string) => {
+        if (!imageUrl) return '/group.avif';
+        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
+        if (imageUrl.startsWith('/media/')) return imageUrl;
+        return `/media/${imageUrl}`;
+    };
+
+    const getFileUrl = (fileUrl: string) => {
+        if (!fileUrl) return '';
+        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
+        if (fileUrl.startsWith('/media/')) return fileUrl;
+        return `/media/${fileUrl}`;
+    };
+
+    // Improved content type detection for the main component
+    const getActualContentType = (content: CourseContent): string => {
+        if (content.pdf_content) return 'pdf';
+        if (content.video_content) return 'video';
+        if (content.qcm) return 'qcm';
+        
+        if (content.content_type_name) {
+            return content.content_type_name.toLowerCase();
+        }
+        
+        if (content.content_type) {
+            const type = content.content_type.toLowerCase();
+            if (type.includes('pdf')) return 'pdf';
+            if (type.includes('video')) return 'video';
+            if (type.includes('qcm') || type.includes('quiz')) return 'qcm';
+            return type;
+        }
+        
+        return 'unknown';
+    };
+
+    const getContentIcon = (content: CourseContent) => {
+        const contentType = getActualContentType(content);
+        switch (contentType) {
+            case 'pdf': return 'fas fa-file-pdf text-danger';
+            case 'video': return 'fas fa-video text-success';
+            case 'qcm': return 'fas fa-question-circle text-warning';
+            default: return 'fas fa-file text-secondary';
+        }
+    };
+
+    const getContentTypeDisplayName = (content: CourseContent): string => {
+        const contentType = getActualContentType(content);
+        switch (contentType) {
+            case 'pdf': return 'PDF Document';
+            case 'video': return 'Video Content';
+            case 'qcm': return 'Quiz (QCM)';
+            default: return content.content_type_name || content.content_type || 'Content';
+        }
+    };
+
     useEffect(() => {
         const fetchCourseData = async () => {
             if (!courseId) return;
@@ -490,6 +791,11 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
                 setCourse(courseResponse.data);
                 setModules(modulesResponse.data);
+                
+                // Debug: log the structure of the first module's contents
+                if (modulesResponse.data.length > 0 && modulesResponse.data[0].contents) {
+                    console.log('Content structure:', modulesResponse.data[0].contents[0]);
+                }
             } catch (error: any) {
                 console.error('Failed to fetch course data:', error);
                 setError('Failed to load course details');
@@ -500,8 +806,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
         fetchCourseData();
     }, [courseId]);
-
-    // ALL THE MISSING FUNCTIONS ADDED BELOW:
 
     const fetchModules = async () => {
         if (!courseId) return;
@@ -618,6 +922,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     order: 1,
                     module: selectedModule,
                     qcm_question: newContentData.questions[0].question,
+                    question_type: newContentData.questions[0].question_type,
                     qcm_options: newContentData.questions[0].options.map((option: any) => ({
                         text: option.text,
                         is_correct: option.is_correct
@@ -674,10 +979,13 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         try {
             if (!selectedContent || !courseId) return;
 
+            // Determine the actual content type for editing
+            const actualContentType = getActualContentType(selectedContent);
+            
             let endpoint = '';
             let requestData: any;
 
-            if (selectedContent.content_type === 'pdf' || selectedContent.content_type_name === 'pdf') {
+            if (actualContentType === 'pdf') {
                 endpoint = `courses/${courseId}/contents/pdf/${selectedContent.id}/`;
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
@@ -688,12 +996,24 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 }
 
                 requestData = formData;
-            } else if (selectedContent.content_type === 'qcm' || selectedContent.content_type_name === 'qcm') {
+            } else if (actualContentType === 'video') {
+                endpoint = `courses/${courseId}/contents/video/${selectedContent.id}/`;
+                const formData = new FormData();
+                formData.append('title', newContentData.title);
+                formData.append('caption', newContentData.caption);
+
+                if (newContentData.file) {
+                    formData.append('video_file', newContentData.file);
+                }
+
+                requestData = formData;
+            } else if (actualContentType === 'qcm') {
                 endpoint = `courses/${courseId}/contents/qcm/${selectedContent.id}/`;
                 requestData = {
                     title: newContentData.title,
                     caption: newContentData.caption,
                     qcm_question: newContentData.questions[0].question,
+                    question_type: newContentData.questions[0].question_type,
                     qcm_options: newContentData.questions[0].options.map((option: any) => ({
                         text: option.text,
                         is_correct: option.is_correct
@@ -706,7 +1026,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             }
 
             let response;
-            if (selectedContent.content_type === 'qcm' || selectedContent.content_type_name === 'qcm') {
+            if (actualContentType === 'qcm') {
                 response = await api.put(endpoint, requestData, {
                     headers: { 'Content-Type': 'application/json' },
                 });
@@ -747,6 +1067,12 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     };
 
     const handleContentClick = (content: CourseContent) => {
+        setViewContentModal(content);
+    };
+
+    const handleEditContent = (content: CourseContent) => {
+        const actualContentType = getActualContentType(content);
+        
         setSelectedContent(content);
         setNewContentData({
             title: content.title,
@@ -754,7 +1080,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             file: null,
             questions: content.qcm ? [{
                 question: content.qcm.question,
-                question_type: 'single',
+                question_type: content.qcm.question_type || 'single',
                 options: content.qcm.options
             }] : [{
                 question: '',
@@ -771,7 +1097,14 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         });
         setShowNewContentModal(true);
         setEditMode(true);
-        setSelectedContentType((content.content_type_name || content.content_type) as 'pdf' | 'video' | 'qcm');
+        setSelectedContentType(actualContentType as 'pdf' | 'video' | 'qcm');
+    };
+
+    const handleViewContentEdit = () => {
+        if (viewContentModal) {
+            handleEditContent(viewContentModal);
+            setViewContentModal(null);
+        }
     };
 
     const handleModuleClick = (module: Module) => {
@@ -875,7 +1208,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         if (!selectedQuizContent || !courseId) return;
 
         try {
-            // Submit quiz results to backend
             const response = await api.post(`courses/${courseId}/contents/qcm/${selectedQuizContent.id}/attempt/`, {
                 score: score,
                 passed: passed,
@@ -884,8 +1216,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
             alert(`Quiz completed! Score: ${score} - ${passed ? 'Passed' : 'Failed'}`);
             setSelectedQuizContent(null);
-            
-            // Refresh modules to update completion status
             await fetchModules();
         } catch (error) {
             console.error('Failed to submit quiz results:', error);
@@ -893,16 +1223,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         }
     };
 
-    const getContentIcon = (contentType: string) => {
-        switch (contentType) {
-            case 'pdf': return 'fas fa-file-pdf text-danger';
-            case 'video': return 'fas fa-video text-success';
-            case 'qcm': return 'fas fa-question-circle text-warning';
-            default: return 'fas fa-file text-secondary';
-        }
-    };
-
-    // Calculate overall course stats
     const overallCourseStats = modules.reduce((acc: CourseStats, module) => {
         if (module.content_stats) {
             acc.total_users_enrolled = module.content_stats.total_users_enrolled;
@@ -968,7 +1288,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
     return (
         <div className="container-fluid mt-4">
-            {/* ... (the rest of your JSX remains the same) */}
             <div className="row">
                 <div className="col-12">
                     <div className="card mb-4">
@@ -1099,10 +1418,14 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                     <div className="row">
                                                                         {moduleContents.sort((a, b) => a.order - b.order).map((content) => (
                                                                             <div key={content.id} className="col-md-6 mb-3">
-                                                                                <div className="card h-100">
+                                                                                <div 
+                                                                                    className="card h-100 cursor-pointer"
+                                                                                    style={{ cursor: 'pointer' }}
+                                                                                    onClick={() => handleContentClick(content)}
+                                                                                >
                                                                                     <div className="card-body">
                                                                                         <div className="d-flex align-items-start">
-                                                                                            <i className={`${getContentIcon(content.content_type_name || content.content_type)} me-3 fs-3 mt-1`}></i>
+                                                                                            <i className={`${getContentIcon(content)} me-3 fs-3 mt-1`}></i>
                                                                                             <div className="flex-grow-1">
                                                                                                 <h6 className="card-title mb-1">{content.title}</h6>
                                                                                                 {content.caption && (
@@ -1110,10 +1433,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                                                 )}
                                                                                                 <div className="d-flex justify-content-between align-items-center">
                                                                                                     <small className="text-muted">
-                                                                                                        {content.content_type_name || content.content_type} • Order: {content.order}
+                                                                                                        {getContentTypeDisplayName(content)} • Order: {content.order}
                                                                                                     </small>
-                                                                                                    <div>
-                                                                                                        {content.content_type_name === 'qcm' && (
+                                                                                                    <div onClick={(e) => e.stopPropagation()}>
+                                                                                                        {getActualContentType(content) === 'qcm' && (
                                                                                                             <button
                                                                                                                 className="btn btn-sm btn-warning me-1"
                                                                                                                 onClick={() => handleTakeQuiz(content)}
@@ -1124,7 +1447,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                                                         )}
                                                                                                         <button
                                                                                                             className="btn btn-sm btn-outline-primary me-1"
-                                                                                                            onClick={() => handleContentClick(content)}
+                                                                                                            onClick={() => handleEditContent(content)}
                                                                                                             title="Edit Content"
                                                                                                         >
                                                                                                             <i className="fas fa-edit"></i>
@@ -1159,6 +1482,18 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     </div>
                 </div>
             </div>
+
+            {/* View Content Modal */}
+            {viewContentModal && (
+                <>
+                    <ViewContentModal 
+                        content={viewContentModal}
+                        onClose={() => setViewContentModal(null)}
+                        onEdit={handleViewContentEdit}
+                    />
+                    <div className="modal-backdrop fade show"></div>
+                </>
+            )}
 
             {/* Quiz Modal */}
             {selectedQuizContent && (
@@ -1333,6 +1668,21 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                             {selectedContentType === 'qcm' && (
                                                 <div>
                                                     <div className="row mb-3">
+                                                        <div className="col-md-6">
+                                                            <label className="form-label">Question Type *</label>
+                                                            <select
+                                                                className="form-select"
+                                                                value={newContentData.questions[0].question_type}
+                                                                onChange={(e) => {
+                                                                    const newQuestions = [...newContentData.questions];
+                                                                    newQuestions[0].question_type = e.target.value as 'single' | 'multiple';
+                                                                    setNewContentData({ ...newContentData, questions: newQuestions });
+                                                                }}
+                                                            >
+                                                                <option value="single">Single Choice</option>
+                                                                <option value="multiple">Multiple Choice</option>
+                                                            </select>
+                                                        </div>
                                                         <div className="col-md-3">
                                                             <label className="form-label">Points</label>
                                                             <input
@@ -1354,7 +1704,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                 max="100"
                                                             />
                                                         </div>
-                                                        <div className="col-md-3">
+                                                    </div>
+                                                    <div className="row mb-3">
+                                                        <div className="col-md-6">
                                                             <label className="form-label">Max Attempts</label>
                                                             <input
                                                                 type="number"
@@ -1364,7 +1716,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                 min="1"
                                                             />
                                                         </div>
-                                                        <div className="col-md-3">
+                                                        <div className="col-md-6">
                                                             <label className="form-label">Time Limit (min)</label>
                                                             <input
                                                                 type="number"
@@ -1421,14 +1773,20 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                             />
                                                                             <div className="input-group-text">
                                                                                 <input
-                                                                                    type="radio"
+                                                                                    type={question.question_type === 'single' ? 'radio' : 'checkbox'}
                                                                                     name={`question-${qIndex}`}
                                                                                     checked={option.is_correct}
-                                                                                    onChange={() => {
+                                                                                    onChange={(e) => {
                                                                                         const newQuestions = [...newContentData.questions];
-                                                                                        newQuestions[qIndex].options.forEach((opt, idx) => {
-                                                                                            opt.is_correct = idx === oIndex;
-                                                                                        });
+                                                                                        
+                                                                                        if (question.question_type === 'single') {
+                                                                                            newQuestions[qIndex].options.forEach((opt, idx) => {
+                                                                                                opt.is_correct = idx === oIndex;
+                                                                                            });
+                                                                                        } else {
+                                                                                            newQuestions[qIndex].options[oIndex].is_correct = e.target.checked;
+                                                                                        }
+                                                                                        
                                                                                         setNewContentData({ ...newContentData, questions: newQuestions });
                                                                                     }}
                                                                                 />
@@ -1494,6 +1852,13 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 }
                 .transition-all {
                     transition: all 0.3s ease;
+                }
+                .cursor-pointer {
+                    cursor: pointer;
+                }
+                .cursor-pointer:hover {
+                    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+                    transition: box-shadow 0.15s ease-in-out;
                 }
             `}</style>
         </div>
