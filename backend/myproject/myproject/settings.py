@@ -61,7 +61,7 @@ if USE_SSL or PRODUCTION:
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
     
     # X-Frame-Options
-    X_FRAME_OPTIONS = 'DENY'
+    X_FRAME_OPTIONS = 'SAMEORIGIN'
 else:
     # Development settings
     SECURE_SSL_REDIRECT = False
@@ -412,19 +412,6 @@ MEDIA_SUBFOLDERS = {
 }
 
 
-# Channels Configuration
-# CHANNEL_LAYERS = {
-#     'default': {
-#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#         'CONFIG': {
-#             "hosts": [{
-#                 "address": f"redis://:{REDIS_PASSWORD}@redis:6379/0",
-#                 "timeout": 30,
-#             }],
-#             "prefix": "course_app",
-#         },
-#     },
-# }
 
 # Celery Configuration
 CELERY_BROKER_URL = REDIS_URL

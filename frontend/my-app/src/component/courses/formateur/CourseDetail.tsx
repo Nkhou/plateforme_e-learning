@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../api/api';
+import api from '../../../api/api';
+import ViewContentModal from './ViewContentModal'
+import CircularStatsDisplay from './CircularStatsDisplay'
+import QuizComponent from './QuizComponent'
 
 interface CourseDetailProps {
     courseId: number | null;
@@ -28,7 +31,7 @@ interface Module {
     created_at: string;
     updated_at: string;
     contents?: CourseContent[];
-    content_stats?: ContentStats;
+    content_stats?: CourseStats;
 }
 
 interface QCMOption {
@@ -48,13 +51,13 @@ interface QCMData {
     time_limit: number;
 }
 
-interface CourseContent {
+export interface CourseContent {
     id: number;
     title: string;
     caption: string;
     order: number;
-    content_type: string; // This might be the actual field from backend
-    content_type_name: string; // This might be the display name
+    content_type: string;
+    content_type_name: string;
     module: number;
     pdf_content?: {
         id: number;
@@ -71,33 +74,20 @@ interface CourseContent {
     can_access?: boolean;
 }
 
-interface ContentStats {
+export interface CourseStats {
     total_users_enrolled: number;
     total_users_completed: number;
     total_courses_completed: number;
     total_modules: number;
-    total_contents: number;
+    total_contents_course: number;
     completion_rate: number;
     average_progress: number;
+    total_contents_module: number;
     pdf_count: number;
     video_count: number;
     qcm_count: number;
 }
 
-interface CourseStats {
-    total_users_enrolled: number;
-    total_users_completed: number;
-    total_courses_completed: number;
-    total_modules: number;
-    total_contents: number;
-    completion_rate: number;
-    average_progress: number;
-    pdf_count: number;
-    video_count: number;
-    qcm_count: number;
-}
-
-// Quiz Interfaces
 interface QuizAttempt {
     id: number;
     user: number;
@@ -116,571 +106,6 @@ interface QuizAnswer {
     is_correct: boolean;
 }
 
-interface QuizState {
-    currentQuestionIndex: number;
-    selectedOptions: number[];
-    timeRemaining: number;
-    isCompleted: boolean;
-    score: number;
-    attempts: number;
-    showResults: boolean;
-}
-
-// View Content Modal Component
-interface ViewContentModalProps {
-    content: CourseContent;
-    onClose: () => void;
-    onEdit: () => void;
-}
-
-const ViewContentModal: React.FC<ViewContentModalProps> = ({ content, onClose, onEdit }) => {
-    const [pdfError, setPdfError] = useState(false);
-    const [videoError, setVideoError] = useState(false);
-
-    const getFileUrl = (fileUrl: string) => {
-        if (!fileUrl) return '';
-        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
-        if (fileUrl.startsWith('/media/')) return fileUrl;
-        return `/media/${fileUrl}`;
-    };
-
-    // Improved content type detection
-    const getActualContentType = (content: CourseContent): string => {
-        // First check if we have specific content data
-        if (content.pdf_content) return 'pdf';
-        if (content.video_content) return 'video';
-        if (content.qcm) return 'qcm';
-        
-        // Then check content_type_name
-        if (content.content_type_name) {
-            return content.content_type_name.toLowerCase();
-        }
-        
-        // Finally check content_type
-        if (content.content_type) {
-            const type = content.content_type.toLowerCase();
-            if (type.includes('pdf')) return 'pdf';
-            if (type.includes('video')) return 'video';
-            if (type.includes('qcm') || type.includes('quiz')) return 'qcm';
-            return type;
-        }
-        
-        return 'unknown';
-    };
-
-    const getContentIcon = (contentType: string) => {
-        switch (contentType) {
-            case 'pdf': return 'fas fa-file-pdf text-danger';
-            case 'video': return 'fas fa-video text-success';
-            case 'qcm': return 'fas fa-question-circle text-warning';
-            default: return 'fas fa-file text-secondary';
-        }
-    };
-
-    const handlePdfError = () => {
-        setPdfError(true);
-    };
-
-    const handleVideoError = () => {
-        setVideoError(true);
-    };
-
-    const renderContent = () => {
-        const contentType = getActualContentType(content);
-        
-        switch (contentType) {
-            case 'pdf':
-                return (
-                    <div className="text-center">
-                        <i className="fas fa-file-pdf fa-5x text-danger mb-3"></i>
-                        <h5>{content.title}</h5>
-                        {content.caption && <p className="text-muted">{content.caption}</p>}
-                        {content.pdf_content && !pdfError ? (
-                            <div className="mt-4">
-                                <iframe
-                                    src={getFileUrl(content.pdf_content.pdf_file)}
-                                    width="100%"
-                                    height="600px"
-                                    style={{ border: 'none' }}
-                                    onError={handlePdfError}
-                                    title={content.title}
-                                >
-                                    Your browser does not support PDFs. 
-                                    <a href={getFileUrl(content.pdf_content.pdf_file)} download>
-                                        Download PDF instead
-                                    </a>
-                                </iframe>
-                                <div className="mt-2">
-                                    <a 
-                                        href={getFileUrl(content.pdf_content.pdf_file)} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="btn btn-primary"
-                                    >
-                                        <i className="fas fa-download me-2"></i>
-                                        Download PDF
-                                    </a>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="alert alert-warning mt-3">
-                                <i className="fas fa-exclamation-triangle me-2"></i>
-                                Unable to load PDF. The file may be missing or inaccessible.
-                            </div>
-                        )}
-                    </div>
-                );
-            
-            case 'video':
-                return (
-                    <div>
-                        <h5>{content.title}</h5>
-                        {content.caption && <p className="text-muted">{content.caption}</p>}
-                        {content.video_content && !videoError ? (
-                            <div className="mt-3">
-                                <video 
-                                    controls 
-                                    className="w-100"
-                                    style={{ maxHeight: '400px' }}
-                                    onError={handleVideoError}
-                                >
-                                    <source src={getFileUrl(content.video_content.video_file)} type="video/mp4" />
-                                    <source src={getFileUrl(content.video_content.video_file)} type="video/webm" />
-                                    <source src={getFileUrl(content.video_content.video_file)} type="video/ogg" />
-                                    Your browser does not support the video tag.
-                                </video>
-                                <div className="mt-2">
-                                    <a 
-                                        href={getFileUrl(content.video_content.video_file)} 
-                                        download
-                                        className="btn btn-primary"
-                                    >
-                                        <i className="fas fa-download me-2"></i>
-                                        Download Video
-                                    </a>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="alert alert-warning mt-3">
-                                <i className="fas fa-exclamation-triangle me-2"></i>
-                                Unable to load video. The file may be missing or in an unsupported format.
-                            </div>
-                        )}
-                    </div>
-                );
-            
-            case 'qcm':
-                return (
-                    <div>
-                        <h5>{content.title}</h5>
-                        {content.caption && <p className="text-muted">{content.caption}</p>}
-                        {content.qcm ? (
-                            <div className="mt-3">
-                                <div className="alert alert-info">
-                                    <h6>Quiz Details</h6>
-                                    <ul className="list-unstyled mb-0">
-                                        <li><strong>Question:</strong> {content.qcm.question}</li>
-                                        <li><strong>Type:</strong> {content.qcm.question_type === 'single' ? 'Single Choice' : 'Multiple Choice'}</li>
-                                        <li><strong>Points:</strong> {content.qcm.points}</li>
-                                        <li><strong>Passing Score:</strong> {content.qcm.passing_score}%</li>
-                                        <li><strong>Max Attempts:</strong> {content.qcm.max_attempts}</li>
-                                        {content.qcm.time_limit > 0 && (
-                                            <li><strong>Time Limit:</strong> {content.qcm.time_limit} minutes</li>
-                                        )}
-                                    </ul>
-                                </div>
-                                
-                                <h6 className="mt-3">Options:</h6>
-                                <div className="list-group">
-                                    {content.qcm.options.map((option, index) => (
-                                        <div key={option.id} className="list-group-item">
-                                            <div className="d-flex align-items-center">
-                                                <span className="me-3">{index + 1}.</span>
-                                                <span className="flex-grow-1">{option.text}</span>
-                                                {option.is_correct && (
-                                                    <span className="badge bg-success">
-                                                        <i className="fas fa-check me-1"></i>
-                                                        Correct
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="mt-3">
-                                    <button className="btn btn-warning">
-                                        <i className="fas fa-play me-2"></i>
-                                        Take Quiz
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="alert alert-warning">
-                                <i className="fas fa-exclamation-triangle me-2"></i>
-                                Quiz content not available.
-                            </div>
-                        )}
-                    </div>
-                );
-            
-            default:
-                return (
-                    <div className="text-center">
-                        <i className="fas fa-file fa-5x text-secondary mb-3"></i>
-                        <h5>{content.title}</h5>
-                        {content.caption && <p className="text-muted">{content.caption}</p>}
-                        
-                        {/* Debug information */}
-                        <div className="alert alert-info mt-3">
-                            <h6>Content Information</h6>
-                            <ul className="list-unstyled">
-                                <li><strong>Content Type:</strong> {content.content_type}</li>
-                                <li><strong>Content Type Name:</strong> {content.content_type_name}</li>
-                                <li><strong>Has PDF:</strong> {content.pdf_content ? 'Yes' : 'No'}</li>
-                                <li><strong>Has Video:</strong> {content.video_content ? 'Yes' : 'No'}</li>
-                                <li><strong>Has QCM:</strong> {content.qcm ? 'Yes' : 'No'}</li>
-                            </ul>
-                        </div>
-                        
-                        <div className="alert alert-warning">
-                            <i className="fas fa-info-circle me-2"></i>
-                            This content type ({contentType}) is not directly viewable here.
-                        </div>
-                    </div>
-                );
-        }
-    };
-
-    const contentType = getActualContentType(content);
-
-    return (
-        <div className="modal fade show d-block">
-            <div className="modal-dialog modal-lg">
-                <div className="modal-content">
-                    <div className="modal-header bg-primary text-white">
-                        <h5 className="modal-title">
-                            <i className={`${getContentIcon(contentType)} me-2`}></i>
-                            View Content: {content.title}
-                        </h5>
-                        <button type="button" className="btn-close btn-close-white" onClick={onClose}></button>
-                    </div>
-                    <div className="modal-body">
-                        {renderContent()}
-                    </div>
-                    <div className="modal-footer">
-                        <button type="button" className="btn btn-secondary" onClick={onClose}>
-                            Close
-                        </button>
-                        <button type="button" className="btn btn-primary" onClick={onEdit}>
-                            <i className="fas fa-edit me-1"></i>
-                            Edit Content
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Circular Progress Component
-interface CircularProgressProps {
-    value: number;
-    max: number;
-    label: string;
-    color: string;
-    size?: number;
-    strokeWidth?: number;
-}
-
-const CircularProgress: React.FC<CircularProgressProps> = ({ 
-    value, 
-    max, 
-    label, 
-    color, 
-    size = 80, 
-    strokeWidth = 8 
-}) => {
-    const radius = (size - strokeWidth) / 2;
-    const circumference = radius * 2 * Math.PI;
-    const progress = max > 0 ? (value / max) * 100 : 0;
-    const strokeDashoffset = circumference - (progress / 100) * circumference;
-
-    return (
-        <div className="text-center">
-            <div className="position-relative d-inline-block">
-                <svg width={size} height={size} className="rotate-270">
-                    <circle
-                        cx={size / 2}
-                        cy={size / 2}
-                        r={radius}
-                        stroke="#e9ecef"
-                        strokeWidth={strokeWidth}
-                        fill="none"
-                    />
-                    <circle
-                        cx={size / 2}
-                        cy={size / 2}
-                        r={radius}
-                        stroke={color}
-                        strokeWidth={strokeWidth}
-                        fill="none"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={strokeDashoffset}
-                        strokeLinecap="round"
-                        className="transition-all duration-300"
-                    />
-                </svg>
-                <div 
-                    className="position-absolute top-50 start-50 translate-middle text-center"
-                    style={{ width: size - strokeWidth * 2, height: size - strokeWidth * 2 }}
-                >
-                    <div className="h-100 d-flex flex-column justify-content-center">
-                        <strong className="fs-6">{value}</strong>
-                        <small className="text-muted">{max > 1000 ? 'k' : ''}</small>
-                    </div>
-                </div>
-            </div>
-            <div className="mt-2">
-                <small className="text-muted d-block">{label}</small>
-            </div>
-        </div>
-    );
-};
-
-// Circular Statistic Display Component
-interface CircularStatsDisplayProps {
-    stats: ContentStats;
-    type: 'course' | 'module';
-}
-
-const CircularStatsDisplay: React.FC<CircularStatsDisplayProps> = ({ stats, type }) => {
-    const statItems = type === 'course' ? [
-        { value: stats.total_contents, max: Math.max(stats.total_contents, 50), label: 'Total Contents', color: '#007bff' },
-        { value: stats.total_modules, max: Math.max(stats.total_modules, 10), label: 'Modules', color: '#17a2b8' },
-        { value: stats.total_users_enrolled, max: Math.max(stats.total_users_enrolled, 100), label: 'Enrolled', color: '#6c757d' },
-        { value: stats.completion_rate, max: 100, label: 'Completion %', color: '#28a745' },
-        { value: stats.average_progress, max: 100, label: 'Avg Progress', color: '#ffc107' },
-        { value: stats.total_users_completed, max: Math.max(stats.total_users_completed, 50), label: 'Completed', color: '#343a40' }
-    ] : [
-        { value: stats.total_contents, max: Math.max(stats.total_contents, 20), label: 'Contents', color: '#007bff' },
-        { value: stats.pdf_count, max: Math.max(stats.total_contents, 1), label: 'PDFs', color: '#dc3545' },
-        { value: stats.video_count, max: Math.max(stats.total_contents, 1), label: 'Videos', color: '#28a745' },
-        { value: stats.qcm_count, max: Math.max(stats.total_contents, 1), label: 'QCMs', color: '#ffc107' }
-    ];
-
-    return (
-        <div className={`stats-container ${type === 'course' ? 'course-stats' : 'module-stats'}`}>
-            <h6 className="mb-3">{type === 'course' ? 'Course Statistics' : 'Module Statistics'}</h6>
-            <div className="row g-3 justify-content-center">
-                {statItems.map((stat, index) => (
-                    <div key={index} className="col-4 col-sm-3">
-                        <CircularProgress
-                            value={stat.value}
-                            max={stat.max}
-                            label={stat.label}
-                            color={stat.color}
-                            size={type === 'course' ? 70 : 60}
-                            strokeWidth={type === 'course' ? 6 : 5}
-                        />
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// Quiz Component
-interface QuizProps {
-    content: CourseContent;
-    onClose: () => void;
-    onComplete: (score: number, passed: boolean) => void;
-}
-
-const QuizComponent: React.FC<QuizProps> = ({ content, onClose, onComplete }) => {
-    const [quizState, setQuizState] = useState<QuizState>({
-        currentQuestionIndex: 0,
-        selectedOptions: [],
-        timeRemaining: content.qcm?.time_limit ? content.qcm.time_limit * 60 : 0,
-        isCompleted: false,
-        score: 0,
-        attempts: 0,
-        showResults: false
-    });
-
-    const [userAnswers, setUserAnswers] = useState<number[][]>([]);
-    const [quizStarted, setQuizStarted] = useState(false);
-
-    useEffect(() => {
-        let timer: NodeJS.Timeout;
-        if (quizStarted && quizState.timeRemaining > 0 && !quizState.isCompleted) {
-            timer = setInterval(() => {
-                setQuizState(prev => ({
-                    ...prev,
-                    timeRemaining: prev.timeRemaining - 1
-                }));
-            }, 1000);
-        } else if (quizState.timeRemaining === 0 && !quizState.isCompleted) {
-            handleQuizComplete();
-        }
-        return () => clearInterval(timer);
-    }, [quizState.timeRemaining, quizState.isCompleted, quizStarted]);
-
-    const startQuiz = () => {
-        setQuizStarted(true);
-        setUserAnswers([]);
-    };
-
-    const handleOptionSelect = (optionId: number) => {
-        if (content.qcm?.options) {
-            const currentOptions = [...quizState.selectedOptions];
-            const optionIndex = currentOptions.indexOf(optionId);
-            
-            if (optionIndex > -1) {
-                currentOptions.splice(optionIndex, 1);
-            } else {
-                currentOptions.push(optionId);
-            }
-            
-            setQuizState(prev => ({ ...prev, selectedOptions: currentOptions }));
-        }
-    };
-
-    const handleQuizComplete = () => {
-        if (content.qcm?.options) {
-            const finalAnswers = [...userAnswers, quizState.selectedOptions];
-            const correctAnswers = content.qcm.options
-                .filter(opt => opt.is_correct)
-                .map(opt => opt.id);
-            
-            const isCorrect = JSON.stringify([...finalAnswers[0]].sort()) === JSON.stringify([...correctAnswers].sort());
-            const score = isCorrect ? content.qcm.points : 0;
-            const passed = score >= content.qcm.passing_score;
-
-            setQuizState(prev => ({
-                ...prev,
-                isCompleted: true,
-                score,
-                showResults: true,
-                attempts: prev.attempts + 1
-            }));
-
-            onComplete(score, passed);
-        }
-    };
-
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
-    if (!content.qcm) return null;
-
-    return (
-        <div className="modal fade show d-block">
-            <div className="modal-dialog modal-lg">
-                <div className="modal-content">
-                    <div className="modal-header bg-primary text-white">
-                        <h5 className="modal-title">
-                            <i className="fas fa-question-circle me-2"></i>
-                            {content.title}
-                        </h5>
-                        <button type="button" className="btn-close btn-close-white" onClick={onClose}></button>
-                    </div>
-                    
-                    <div className="modal-body">
-                        {!quizStarted ? (
-                            <div className="text-center py-4">
-                                <div className="alert alert-info">
-                                    <h6>Quiz Instructions</h6>
-                                    <ul className="list-unstyled">
-                                        <li>• Points: {content.qcm.points}</li>
-                                        <li>• Passing Score: {content.qcm.passing_score}%</li>
-                                        <li>• Max Attempts: {content.qcm.max_attempts}</li>
-                                        {content.qcm.time_limit > 0 && (
-                                            <li>• Time Limit: {content.qcm.time_limit} minutes</li>
-                                        )}
-                                    </ul>
-                                </div>
-                                <button className="btn btn-primary btn-lg" onClick={startQuiz}>
-                                    Start Quiz
-                                </button>
-                            </div>
-                        ) : quizState.showResults ? (
-                            <div className="text-center py-4">
-                                <div className={`alert ${quizState.score >= content.qcm.passing_score ? 'alert-success' : 'alert-danger'}`}>
-                                    <i className={`fas ${quizState.score >= content.qcm.passing_score ? 'fa-check-circle' : 'fa-times-circle'} fa-3x mb-3`}></i>
-                                    <h4>{quizState.score >= content.qcm.passing_score ? 'Congratulations!' : 'Try Again'}</h4>
-                                    <p>Your score: {quizState.score}/{content.qcm.points} ({Math.round((quizState.score / content.qcm.points) * 100)}%)</p>
-                                    <p>{quizState.score >= content.qcm.passing_score ? 'You passed the quiz!' : `You need ${content.qcm.passing_score}% to pass.`}</p>
-                                </div>
-                                <button className="btn btn-primary" onClick={onClose}>
-                                    Close
-                                </button>
-                            </div>
-                        ) : (
-                            <div>
-                                <div className="d-flex justify-content-between align-items-center mb-4">
-                                    <div>
-                                        <span className="badge bg-primary">Question 1 of 1</span>
-                                    </div>
-                                    {content.qcm.time_limit > 0 && (
-                                        <div className="text-end">
-                                            <div className={`badge ${quizState.timeRemaining < 60 ? 'bg-danger' : 'bg-warning'}`}>
-                                                <i className="fas fa-clock me-1"></i>
-                                                {formatTime(quizState.timeRemaining)}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="card mb-4">
-                                    <div className="card-body">
-                                        <h6 className="card-title">{content.qcm.question}</h6>
-                                        <div className="mt-3">
-                                            {content.qcm.options.map((option) => (
-                                                <div key={option.id} className="form-check mb-3">
-                                                    <input
-                                                        className="form-check-input"
-                                                        type="checkbox"
-                                                        checked={quizState.selectedOptions.includes(option.id)}
-                                                        onChange={() => handleOptionSelect(option.id)}
-                                                        id={`option-${option.id}`}
-                                                    />
-                                                    <label className="form-check-label w-100" htmlFor={`option-${option.id}`}>
-                                                        {option.text}
-                                                    </label>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="d-flex justify-content-between">
-                                    <button 
-                                        className="btn btn-secondary" 
-                                        onClick={onClose}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button 
-                                        className="btn btn-primary"
-                                        onClick={handleQuizComplete}
-                                        disabled={quizState.selectedOptions.length === 0}
-                                    >
-                                        Submit Answers
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Main Component
 const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCourse }) => {
     const [course, setCourse] = useState<CourseDetailData | null>(null);
     const [modules, setModules] = useState<Module[]>([]);
@@ -689,7 +114,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
     const [showNewContentModal, setShowNewContentModal] = useState(false);
     const [showNewModuleModal, setShowNewModuleModal] = useState(false);
-    const [selectedContentType, setSelectedContentType] = useState<'pdf' | 'video' | 'qcm' | null>(null);
+    const [selectedContentType, setSelectedContentType] = useState<'pdf' | 'Video' | 'QCM' | null>(null);
     const [selectedModule, setSelectedModule] = useState<number | null>(null);
     const [selectedQuizContent, setSelectedQuizContent] = useState<CourseContent | null>(null);
     const [viewContentModal, setViewContentModal] = useState<CourseContent | null>(null);
@@ -725,56 +150,32 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
     const getImageUrl = (imageUrl: string) => {
         if (!imageUrl) return '/group.avif';
-        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
-        if (imageUrl.startsWith('/media/')) return imageUrl;
-        return `/media/${imageUrl}`;
+        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+            return imageUrl;
+        }
+        if (imageUrl.startsWith('/media/')) {
+            return `http://localhost:8000${imageUrl}`;
+        }
+        return `http://localhost:8000/media/${imageUrl}`;
     };
 
     const getFileUrl = (fileUrl: string) => {
         if (!fileUrl) return '';
-        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
-        if (fileUrl.startsWith('/media/')) return fileUrl;
-        return `/media/${fileUrl}`;
+        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+            return fileUrl;
+        }
+        if (fileUrl.startsWith('/media/')) {
+            return `http://localhost:8000${fileUrl}`;
+        }
+        return `http://localhost:8000/media/${fileUrl}`;
     };
 
-    // Improved content type detection for the main component
-    const getActualContentType = (content: CourseContent): string => {
-        if (content.pdf_content) return 'pdf';
-        if (content.video_content) return 'video';
-        if (content.qcm) return 'qcm';
-        
-        if (content.content_type_name) {
-            return content.content_type_name.toLowerCase();
-        }
-        
-        if (content.content_type) {
-            const type = content.content_type.toLowerCase();
-            if (type.includes('pdf')) return 'pdf';
-            if (type.includes('video')) return 'video';
-            if (type.includes('qcm') || type.includes('quiz')) return 'qcm';
-            return type;
-        }
-        
-        return 'unknown';
-    };
-
-    const getContentIcon = (content: CourseContent) => {
-        const contentType = getActualContentType(content);
+    const getContentIcon = (contentType: string) => {
         switch (contentType) {
             case 'pdf': return 'fas fa-file-pdf text-danger';
             case 'video': return 'fas fa-video text-success';
             case 'qcm': return 'fas fa-question-circle text-warning';
             default: return 'fas fa-file text-secondary';
-        }
-    };
-
-    const getContentTypeDisplayName = (content: CourseContent): string => {
-        const contentType = getActualContentType(content);
-        switch (contentType) {
-            case 'pdf': return 'PDF Document';
-            case 'video': return 'Video Content';
-            case 'qcm': return 'Quiz (QCM)';
-            default: return content.content_type_name || content.content_type || 'Content';
         }
     };
 
@@ -791,11 +192,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
                 setCourse(courseResponse.data);
                 setModules(modulesResponse.data);
-                
-                // Debug: log the structure of the first module's contents
-                if (modulesResponse.data.length > 0 && modulesResponse.data[0].contents) {
-                    console.log('Content structure:', modulesResponse.data[0].contents[0]);
-                }
             } catch (error: any) {
                 console.error('Failed to fetch course data:', error);
                 setError('Failed to load course details');
@@ -898,7 +294,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 }
 
                 requestData = formData;
-            } else if (selectedContentType === 'video') {
+            } else if (selectedContentType === 'Video') {
                 endpoint = `courses/${courseId}/modules/${selectedModule}/contents/video/`;
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
@@ -914,7 +310,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 }
 
                 requestData = formData;
-            } else if (selectedContentType === 'qcm') {
+            } else if (selectedContentType === 'QCM') {
                 endpoint = `courses/${courseId}/modules/${selectedModule}/contents/qcm/`;
                 requestData = {
                     title: newContentData.title,
@@ -935,7 +331,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             }
 
             let response;
-            if (selectedContentType === 'qcm') {
+            if (selectedContentType === 'QCM') {
                 response = await api.post(endpoint, requestData, {
                     headers: { 'Content-Type': 'application/json' },
                 });
@@ -976,113 +372,83 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     };
 
     const handleUpdateContent = async () => {
-        try {
-            if (!selectedContent || !courseId) return;
+    try {
+        if (!selectedContent || !courseId) return;
 
-            // Determine the actual content type for editing
-            const actualContentType = getActualContentType(selectedContent);
-            
-            let endpoint = '';
-            let requestData: any;
+        let endpoint = '';
+        let requestData: any;
 
-            if (actualContentType === 'pdf') {
-                endpoint = `courses/${courseId}/contents/pdf/${selectedContent.id}/`;
-                const formData = new FormData();
-                formData.append('title', newContentData.title);
-                formData.append('caption', newContentData.caption);
+        const contentType = selectedContent.content_type_name || selectedContent.content_type;
 
-                if (newContentData.file) {
-                    formData.append('pdf_file', newContentData.file);
-                }
+        // FIX: Use consistent case comparison
+        if (contentType.toLowerCase() === 'pdf') {
+            endpoint = `courses/${courseId}/contents/pdf/${selectedContent.id}/`;
+            const formData = new FormData();
+            formData.append('title', newContentData.title);
+            formData.append('caption', newContentData.caption);
 
-                requestData = formData;
-            } else if (actualContentType === 'video') {
-                endpoint = `courses/${courseId}/contents/video/${selectedContent.id}/`;
-                const formData = new FormData();
-                formData.append('title', newContentData.title);
-                formData.append('caption', newContentData.caption);
-
-                if (newContentData.file) {
-                    formData.append('video_file', newContentData.file);
-                }
-
-                requestData = formData;
-            } else if (actualContentType === 'qcm') {
-                endpoint = `courses/${courseId}/contents/qcm/${selectedContent.id}/`;
-                requestData = {
-                    title: newContentData.title,
-                    caption: newContentData.caption,
-                    qcm_question: newContentData.questions[0].question,
-                    question_type: newContentData.questions[0].question_type,
-                    qcm_options: newContentData.questions[0].options.map((option: any) => ({
-                        text: option.text,
-                        is_correct: option.is_correct
-                    })),
-                    points: newContentData.points,
-                    passing_score: newContentData.passing_score,
-                    max_attempts: newContentData.max_attempts,
-                    time_limit: newContentData.time_limit
-                };
+            if (newContentData.file) {
+                formData.append('pdf_file', newContentData.file);
             }
 
-            let response;
-            if (actualContentType === 'qcm') {
-                response = await api.put(endpoint, requestData, {
-                    headers: { 'Content-Type': 'application/json' },
-                });
-            } else {
-                response = await api.put(endpoint, requestData, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                });
+            requestData = formData;
+        } else if (contentType.toLowerCase() === 'qcm') { // Changed to lowercase comparison
+            endpoint = `courses/${courseId}/contents/qcm/${selectedContent.id}/`;
+            requestData = {
+                title: newContentData.title,
+                caption: newContentData.caption,
+                qcm_question: newContentData.questions[0].question,
+                question_type: newContentData.questions[0].question_type,
+                qcm_options: newContentData.questions[0].options.map((option: any) => ({
+                    text: option.text,
+                    is_correct: option.is_correct
+                })),
+                points: newContentData.points,
+                passing_score: newContentData.passing_score,
+                max_attempts: newContentData.max_attempts,
+                time_limit: newContentData.time_limit
+            };
+        } else if (contentType.toLowerCase() === 'video') { // Add video support for updates
+            endpoint = `courses/${courseId}/contents/video/${selectedContent.id}/`;
+            const formData = new FormData();
+            formData.append('title', newContentData.title);
+            formData.append('caption', newContentData.caption);
+
+            if (newContentData.file) {
+                formData.append('video_file', newContentData.file);
             }
 
-            alert('Content updated successfully!');
-            await fetchModules();
-
-            setShowNewContentModal(false);
-            setEditMode(false);
-            setSelectedContent(null);
-            setNewContentData({
-                title: '',
-                caption: '',
-                file: null,
-                questions: [{
-                    question: '',
-                    question_type: 'single',
-                    options: [
-                        { text: '', is_correct: false },
-                        { text: '', is_correct: false }
-                    ]
-                }],
-                points: 1,
-                passing_score: 80,
-                max_attempts: 3,
-                time_limit: 0
-            });
-
-        } catch (error) {
-            console.error('Failed to update content:', error);
-            alert('Failed to update content. Please try again.');
+            requestData = formData;
         }
-    };
 
-    const handleContentClick = (content: CourseContent) => {
-        setViewContentModal(content);
-    };
+        // FIX: Add proper error handling for unsupported content types
+        if (!endpoint) {
+            alert(`Update not supported for content type: ${contentType}`);
+            return;
+        }
 
-    const handleEditContent = (content: CourseContent) => {
-        const actualContentType = getActualContentType(content);
-        
-        setSelectedContent(content);
+        let response;
+        if (contentType.toLowerCase() === 'qcm') {
+            response = await api.put(endpoint, requestData, {
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            response = await api.put(endpoint, requestData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+        }
+
+        alert('Content updated successfully!');
+        await fetchModules();
+
+        setShowNewContentModal(false);
+        setEditMode(false);
+        setSelectedContent(null);
         setNewContentData({
-            title: content.title,
-            caption: content.caption || '',
+            title: '',
+            caption: '',
             file: null,
-            questions: content.qcm ? [{
-                question: content.qcm.question,
-                question_type: content.qcm.question_type || 'single',
-                options: content.qcm.options
-            }] : [{
+            questions: [{
                 question: '',
                 question_type: 'single',
                 options: [
@@ -1090,15 +456,57 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     { text: '', is_correct: false }
                 ]
             }],
-            points: content.qcm?.points || 1,
-            passing_score: content.qcm?.passing_score || 80,
-            max_attempts: content.qcm?.max_attempts || 3,
-            time_limit: content.qcm?.time_limit || 0
+            points: 1,
+            passing_score: 80,
+            max_attempts: 3,
+            time_limit: 0
         });
-        setShowNewContentModal(true);
-        setEditMode(true);
-        setSelectedContentType(actualContentType as 'pdf' | 'video' | 'qcm');
+
+    } catch (error: any) { // Added error type for better debugging
+        console.error('Failed to update content:', error);
+        console.error('Error details:', error.response?.data);
+        alert(`Failed to update content: ${error.response?.data?.message || error.message}`);
+    }
+};
+
+    const handleContentClick = (content: CourseContent) => {
+        setViewContentModal(content);
     };
+
+    const handleEditContent = (content: CourseContent) => {
+    setSelectedContent(content);
+    const contentType = content.content_type_name || content.content_type;
+    
+    // FIX: Normalize content type to match your state
+    const normalizedType = contentType.toLowerCase() === 'qcm' ? 'QCM' : 
+                          contentType.toLowerCase() === 'pdf' ? 'pdf' : 
+                          contentType.toLowerCase() === 'video' ? 'Video' : null;
+    
+    setNewContentData({
+        title: content.title,
+        caption: content.caption || '',
+        file: null,
+        questions: content.qcm ? [{
+            question: content.qcm.question,
+            question_type: content.qcm.question_type || 'single',
+            options: content.qcm.options
+        }] : [{
+            question: '',
+            question_type: 'single',
+            options: [
+                { text: '', is_correct: false },
+                { text: '', is_correct: false }
+            ]
+        }],
+        points: content.qcm?.points || 1,
+        passing_score: content.qcm?.passing_score || 80,
+        max_attempts: content.qcm?.max_attempts || 3,
+        time_limit: content.qcm?.time_limit || 0
+    });
+    setShowNewContentModal(true);
+    setEditMode(true);
+    setSelectedContentType(normalizedType as 'pdf' | 'Video' | 'QCM');
+};
 
     const handleViewContentEdit = () => {
         if (viewContentModal) {
@@ -1225,13 +633,17 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
     const overallCourseStats = modules.reduce((acc: CourseStats, module) => {
         if (module.content_stats) {
-            acc.total_users_enrolled = module.content_stats.total_users_enrolled;
-            acc.total_users_completed = module.content_stats.total_users_completed;
-            acc.total_courses_completed = module.content_stats.total_courses_completed;
-            acc.total_modules = module.content_stats.total_modules;
-            acc.completion_rate = module.content_stats.completion_rate;
-            acc.average_progress = module.content_stats.average_progress;
-            acc.total_contents += module.content_stats.total_contents;
+            if (acc.total_users_enrolled === 0) {
+                acc.total_users_enrolled = module.content_stats.total_users_enrolled;
+                acc.total_users_completed = module.content_stats.total_users_completed;
+                acc.total_courses_completed = module.content_stats.total_courses_completed;
+                acc.total_modules = module.content_stats.total_modules;
+                acc.completion_rate = module.content_stats.completion_rate;
+                acc.average_progress = module.content_stats.average_progress;
+                acc.total_contents_course = module.content_stats.total_contents_course;
+            }
+            
+            acc.total_contents_module += module.content_stats.total_contents_module;
             acc.pdf_count += module.content_stats.pdf_count;
             acc.video_count += module.content_stats.video_count;
             acc.qcm_count += module.content_stats.qcm_count;
@@ -1242,9 +654,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         total_users_completed: 0,
         total_courses_completed: 0,
         total_modules: 0,
-        total_contents: 0,
+        total_contents_course: 0,
         completion_rate: 0,
         average_progress: 0,
+        total_contents_module: 0,
         pdf_count: 0,
         video_count: 0,
         qcm_count: 0
@@ -1303,9 +716,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                     </button>
                                     <button className="btn btn-success me-2" onClick={() => setShowNewModuleModal(true)}>
                                         <i className="fas fa-folder-plus me-1"></i> Add Module
-                                    </button>
-                                    <button className="btn btn-secondary" onClick={onClose}>
-                                        <i className="fas fa-arrow-left me-1"></i> Back
                                     </button>
                                 </div>
                             </div>
@@ -1425,7 +835,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                                 >
                                                                                     <div className="card-body">
                                                                                         <div className="d-flex align-items-start">
-                                                                                            <i className={`${getContentIcon(content)} me-3 fs-3 mt-1`}></i>
+                                                                                            <i className={`${getContentIcon(content.content_type_name || content.content_type)} me-3 fs-3 mt-1`}></i>
                                                                                             <div className="flex-grow-1">
                                                                                                 <h6 className="card-title mb-1">{content.title}</h6>
                                                                                                 {content.caption && (
@@ -1433,10 +843,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                                                 )}
                                                                                                 <div className="d-flex justify-content-between align-items-center">
                                                                                                     <small className="text-muted">
-                                                                                                        {getContentTypeDisplayName(content)} • Order: {content.order}
+                                                                                                        {content.content_type_name || content.content_type} • Order: {content.order}
                                                                                                     </small>
                                                                                                     <div onClick={(e) => e.stopPropagation()}>
-                                                                                                        {getActualContentType(content) === 'qcm' && (
+                                                                                                        {content.content_type_name === 'qcm' && (
                                                                                                             <button
                                                                                                                 className="btn btn-sm btn-warning me-1"
                                                                                                                 onClick={() => handleTakeQuiz(content)}
@@ -1605,10 +1015,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                 <button className="btn btn-outline-primary" onClick={() => setSelectedContentType('pdf')}>
                                                     <i className="fas fa-file-pdf me-2"></i> PDF
                                                 </button>
-                                                <button className="btn btn-outline-primary" onClick={() => setSelectedContentType('video')}>
+                                                <button className="btn btn-outline-primary" onClick={() => setSelectedContentType('Video')}>
                                                     <i className="fas fa-video me-2"></i> Video
                                                 </button>
-                                                <button className="btn btn-outline-primary" onClick={() => setSelectedContentType('qcm')}>
+                                                <button className="btn btn-outline-primary" onClick={() => setSelectedContentType('QCM')}>
                                                     <i className="fas fa-question-circle me-2"></i> QCM Quiz
                                                 </button>
                                             </div>
@@ -1651,7 +1061,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                 </div>
                                             )}
 
-                                            {selectedContentType === 'video' && (
+                                            {selectedContentType === 'Video' && (
                                                 <div className="mb-3">
                                                     <label className="form-label">Upload Video File *</label>
                                                     <input
@@ -1665,7 +1075,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                 </div>
                                             )}
 
-                                            {selectedContentType === 'qcm' && (
+                                            {selectedContentType === 'QCM' && (
                                                 <div>
                                                     <div className="row mb-3">
                                                         <div className="col-md-6">
@@ -1828,8 +1238,8 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                         <button type="button" className="btn btn-primary" onClick={editMode ? handleUpdateContent : handleCreateContent} disabled={
                                             !newContentData.title ||
                                             (selectedContentType === 'pdf' && !newContentData.file && !editMode) ||
-                                            (selectedContentType === 'video' && !newContentData.file && !editMode) ||
-                                            (selectedContentType === 'qcm' && (
+                                            (selectedContentType === 'Video' && !newContentData.file && !editMode) ||
+                                            (selectedContentType === 'QCM' && (
                                                 !newContentData.questions[0]?.question ||
                                                 newContentData.questions[0]?.options.length < 2 ||
                                                 newContentData.questions[0]?.options.filter((opt: any) => opt.is_correct).length === 0

@@ -1525,16 +1525,18 @@ class CheckSubscription(APIView):
         return Response(response_data)
 
 class MySubscriptions(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
-        try:
-            user = request.user
-            subscriptions = Subscription.objects.filter(user=user, is_active=True)
-            courses = [sub.course for sub in subscriptions]
-            serializer = CourseSerializer(courses, many=True)
-            return Response(serializer.data)
-        except Exception as e:
-            print(f"Error retrieving subscriptions: {str(e)}")
-            return Response({"error": str(e)}, status=400)
+        # Get courses where user has active subscription
+        subscriptions = Subscription.objects.filter(user=request.user, is_active=True)
+        courses = [subscription.course for subscription in subscriptions]
+        
+        serializer = CourseSerializer(
+            courses, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
 
 # QCM Views
 class SubmitQCM(APIView):
@@ -1553,6 +1555,13 @@ class SubmitQCM(APIView):
             qcm = content.qcm
             if not qcm:
                 return Response({'error': 'QCM not found for this content'}, status=404)
+            
+            # Get or create subscription
+            subscription, created = Subscription.objects.get_or_create(
+                user=user,
+                course=course,
+                defaults={'is_active': True}
+            )
             
             serializer = QCMAttemptSerializer(data=request.data)
             
@@ -1573,30 +1582,57 @@ class SubmitQCM(APIView):
                 attempt.completed_at = timezone.now()
                 attempt.calculate_score()
                 
+                # Update or create QCMCompletion
+                qcm_completion, created = QCMCompletion.objects.get_or_create(
+                    subscription=subscription,
+                    qcm=qcm,
+                    defaults={
+                        'best_score': attempt.score,
+                        'points_earned': attempt.points_earned,
+                        'is_passed': attempt.is_passed,
+                        'attempts_count': 1
+                    }
+                )
+                
+                # Update existing completion if this attempt is better
+                if not created:
+                    qcm_completion.attempts_count += 1
+                    if attempt.score > qcm_completion.best_score:
+                        qcm_completion.best_score = attempt.score
+                        qcm_completion.points_earned = attempt.points_earned
+                        qcm_completion.is_passed = attempt.is_passed
+                    qcm_completion.save()
+                
                 # Update subscription progress if passed
                 if attempt.is_passed:
-                    try:
-                        subscription = Subscription.objects.get(user=user, course=course, is_active=True)
-                        subscription.completed_contents.add(content)
-                        
-                        # Update progress percentage
-                        total_contents = CourseContent.objects.filter(module__course=course).count()
-                        completed_count = subscription.completed_contents.count()
-                        progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
-                        
-                        subscription.progress_percentage = progress_percentage
-                        subscription.save()
-                        
-                        response_data = QCMAttemptSerializer(attempt).data
-                        response_data['progress_percentage'] = progress_percentage
-                        response_data['completed_contents'] = list(subscription.completed_contents.values_list('id', flat=True))
-                        
-                        return Response(response_data, status=201)
-                    except Subscription.DoesNotExist:
-                        # Return attempt data but without subscription info
-                        return Response(QCMAttemptSerializer(attempt).data, status=201)
+                    # Add to completed contents
+                    subscription.completed_contents.add(content)
+                    
+                    # Update progress percentage
+                    total_contents = CourseContent.objects.filter(module__course=course).count()
+                    completed_count = subscription.completed_contents.count()
+                    progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+                    
+                    subscription.progress_percentage = progress_percentage
+                    subscription.save()
+                    
+                    # Update total score
+                    subscription.update_total_score()
+                    
+                    response_data = QCMAttemptSerializer(attempt).data
+                    response_data['progress_percentage'] = progress_percentage
+                    response_data['completed_contents'] = list(subscription.completed_contents.values_list('id', flat=True))
+                    response_data['qcm_completion_id'] = qcm_completion.id
+                    response_data['qcm_completed'] = True
+                    response_data['total_score'] = subscription.total_score
+                    
+                    return Response(response_data, status=201)
                 else:
-                    return Response(QCMAttemptSerializer(attempt).data, status=201)
+                    response_data = QCMAttemptSerializer(attempt).data
+                    response_data['qcm_completion_id'] = qcm_completion.id
+                    response_data['qcm_completed'] = False
+                    response_data['total_score'] = subscription.total_score
+                    return Response(response_data, status=201)
             else:
                 return Response(serializer.errors, status=400)
                 
@@ -1609,7 +1645,6 @@ class SubmitQCM(APIView):
     def get_next_attempt_number(self, user, qcm):
         last_attempt = QCMAttempt.objects.filter(user=user, qcm=qcm).order_by('-attempt_number').first()
         return last_attempt.attempt_number + 1 if last_attempt else 1
-
 class QCMProgress(APIView):
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)
@@ -1802,6 +1837,11 @@ class CourseSubscribersListViewSet(viewsets.ViewSet):
             'results': page.object_list
         })
 
+from django.db.models import Q, Count, Avg, Max, Min
+from django.utils import timezone
+from datetime import timedelta
+from django.db.models.functions import TruncMonth
+
 class CourseStatisticsView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1841,64 +1881,92 @@ class CourseStatisticsView(APIView):
             progress_percentage=100
         ).count()
         
-        # Get QCM completion statistics
-        qcm_stats = QCMCompletion.objects.filter(
+        completion_rate = (completed_count / active_subscriptions * 100) if active_subscriptions > 0 else 0
+        
+        # Get QCM performance statistics
+        qcm_completions = QCMCompletion.objects.filter(
             subscription__course=course,
             subscription__is_active=True
-        ).aggregate(
+        )
+        
+        qcm_stats = qcm_completions.aggregate(
             avg_attempts=Avg('attempts_count'),
             avg_score=Avg('best_score'),
             pass_rate=Avg('is_passed', output_field=models.FloatField()) * 100
         )
         
+        # Get total QCM attempts for the course
+        total_qcm_attempts = QCMAttempt.objects.filter(
+            qcm__course_content__module__course=course
+        ).count()
+        
         # Get recent activity (last 7 days)
         week_ago = timezone.now() - timedelta(days=7)
         recent_activity = course.course_subscriptions.filter(
             is_active=True,
-            last_activity__gte=week_ago
+            last_activity__gte=week_ago  # Make sure your Subscription model has last_activity field
         ).count()
         
-        # Get enrollment trend (monthly)
-        enrollment_trend = course.course_subscriptions.annotate(
+        # Alternative recent activity based on QCM attempts if no last_activity field
+        if not hasattr(Subscription, 'last_activity'):
+            recent_activity = QCMAttempt.objects.filter(
+                qcm__course_content__module__course=course,
+                completed_at__gte=week_ago
+            ).values('user').distinct().count()
+        
+        # Get enrollment trend (monthly for last 6 months)
+        six_months_ago = timezone.now() - timedelta(days=180)
+        enrollment_trend = course.course_subscriptions.filter(
+            subscribed_at__gte=six_months_ago
+        ).annotate(
             month=TruncMonth('subscribed_at')
         ).values('month').annotate(
             count=Count('id')
         ).order_by('month')
         
-        return Response({
+        # Format enrollment trend data
+        formatted_enrollment_trend = [
+            {'month': entry['month'].strftime('%Y-%m'), 'count': entry['count']}
+            for entry in enrollment_trend
+        ]
+        
+        data = {
             'course': {
                 'id': course.id,
                 'title': course.title_of_course,
-                'creator': course.creator.get_full_name() if course.creator else 'Unknown',
-                'created_at': course.created_at
+                'creator': course.creator.get_full_name() or course.creator.username,
+                'created_at': course.created_at.isoformat() if course.created_at else None
             },
             'subscriptions': {
                 'total': total_subscriptions,
                 'active': active_subscriptions,
                 'inactive': inactive_subscriptions,
-                'completion_rate': (completed_count / active_subscriptions * 100) if active_subscriptions > 0 else 0
+                'completion_rate': round(completion_rate, 2)
             },
             'progress': {
-                'average': progress_stats['avg_progress'] or 0,
-                'maximum': progress_stats['max_progress'] or 0,
-                'minimum': progress_stats['min_progress'] or 0,
+                'average': round(progress_stats['avg_progress'] or 0, 2),
+                'maximum': round(progress_stats['max_progress'] or 0, 2),
+                'minimum': round(progress_stats['min_progress'] or 0, 2),
                 'completed': completed_count
             },
             'scores': {
-                'average': score_stats['avg_score'] or 0,
+                'average': round(score_stats['avg_score'] or 0, 2),
                 'maximum': score_stats['max_score'] or 0,
                 'minimum': score_stats['min_score'] or 0
             },
             'qcm_performance': {
-                'average_attempts': qcm_stats['avg_attempts'] or 0,
-                'average_score': qcm_stats['avg_score'] or 0,
-                'pass_rate': qcm_stats['pass_rate'] or 0
+                'average_attempts': round(qcm_stats['avg_attempts'] or 0, 2),
+                'average_score': round(qcm_stats['avg_score'] or 0, 2),
+                'pass_rate': round(qcm_stats['pass_rate'] or 0, 2),
+                'total_attempts': total_qcm_attempts
             },
             'activity': {
                 'recent_activity': recent_activity,
-                'enrollment_trend': list(enrollment_trend)
+                'enrollment_trend': formatted_enrollment_trend
             }
-        })
+        }
+        
+        return Response(data)
 class CourseProgressOverviewView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -2525,3 +2593,165 @@ class ModuleListCreateAPIView(APIView):
         
         print('Validation errors:', serializer.errors) # Debug print
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# views.py - Add these update views
+
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+# from .models import Course, CourseContent, PDFContent, VideoContent, QCM, QCMOption
+# from .serializers import PDFContentSerializer, VideoContentSerializer
+
+class UpdatePDFContentView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def put(self, request, course_id, content_id):
+        try:
+            course = get_object_or_404(Course, id=course_id)
+            
+            # Check if user is course creator
+            if course.creator != request.user:
+                return Response(
+                    {'error': 'You are not authorized to update this content'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            content = get_object_or_404(CourseContent, id=content_id, module__course=course)
+            pdf_content = get_object_or_404(PDFContent, course_content=content)
+            
+            serializer = PDFContentSerializer(
+                pdf_content, 
+                data=request.data, 
+                partial=True,
+                context={'request': request}
+            )
+            
+            if serializer.is_valid():
+                # Update the main content
+                content.title = request.data.get('title', content.title)
+                content.caption = request.data.get('caption', content.caption)
+                content.order = request.data.get('order', content.order)
+                content.save()
+                
+                serializer.save()
+                
+                return Response({
+                    'message': 'PDF content updated successfully',
+                    'content': serializer.data
+                })
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UpdateVideoContentView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def put(self, request, course_id, content_id):
+        try:
+            course = get_object_or_404(Course, id=course_id)
+            
+            # Check if user is course creator
+            if course.creator != request.user:
+                return Response(
+                    {'error': 'You are not authorized to update this content'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            content = get_object_or_404(CourseContent, id=content_id, module__course=course)
+            video_content = get_object_or_404(VideoContent, course_content=content)
+            
+            serializer = VideoContentSerializer(
+                video_content, 
+                data=request.data, 
+                partial=True,
+                context={'request': request}
+            )
+            
+            if serializer.is_valid():
+                # Update the main content
+                content.title = request.data.get('title', content.title)
+                content.caption = request.data.get('caption', content.caption)
+                content.order = request.data.get('order', content.order)
+                content.save()
+                
+                serializer.save()
+                
+                return Response({
+                    'message': 'Video content updated successfully',
+                    'content': serializer.data
+                })
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UpdateQCMContentView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def put(self, request, course_id, content_id):
+        try:
+            course = get_object_or_404(Course, id=course_id)
+            
+            # Check if user is course creator
+            if course.creator != request.user:
+                return Response(
+                    {'error': 'You are not authorized to update this content'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            content = get_object_or_404(CourseContent, id=content_id, module__course=course)
+            qcm_content = get_object_or_404(QCM, course_content=content)
+            
+            serializer = QCMSerializer(
+                qcm_content, 
+                data=request.data, 
+                partial=True,
+                context={'request': request}
+            )
+            
+            if serializer.is_valid():
+                # Update the main content
+                content.title = request.data.get('title', content.title)
+                content.caption = request.data.get('caption', content.caption)
+                content.order = request.data.get('order', content.order)
+                content.save()
+                
+                # Update QCM options
+                if 'qcm_options' in request.data:
+                    # Delete existing options
+                    QCMOption.objects.filter(qcm=qcm_content).delete()
+                    
+                    # Create new options
+                    for option_data in request.data['qcm_options']:
+                        QCMOption.objects.create(
+                            qcm=qcm_content,
+                            text=option_data['text'],
+                            is_correct=option_data['is_correct']
+                        )
+                
+                serializer.save()
+                
+                return Response({
+                    'message': 'QCM content updated successfully',
+                    'content': serializer.data
+                })
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

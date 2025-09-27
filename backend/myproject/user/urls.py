@@ -10,7 +10,7 @@ from .views import (
 from .views import (
     AdminDashboardView, UserManagementView, CourseManagementView,
     SystemAnalyticsView, ContentManagementView, UserDetailView,
-    SystemHealthView, RecommendedCoursesView
+    SystemHealthView, RecommendedCoursesView, UpdatePDFContentView, UpdateVideoContentView, UpdateQCMContentView
 )
 from .views import SubmitQCM
 
@@ -80,7 +80,9 @@ urlpatterns = [
     path('courses/<int:pk>/submit-qcm/', views.SubmitQCM.as_view(), name='submit-qcm'),
     path('courses/<int:pk>/qcm-progress/', views.QCMProgress.as_view(), name='qcm-progress'),
     path('courses/<int:pk>/check-access/', views.CheckContentAccess.as_view(), name='check-access'),
-    
+    path('courses/<int:course_id>/contents/pdf/<int:content_id>/', UpdatePDFContentView.as_view(), name='update-pdf-content'),
+    path('courses/<int:course_id>/contents/video/<int:content_id>/', UpdateVideoContentView.as_view(), name='update-video-content'),
+    path('courses/<int:course_id>/contents/qcm/<int:content_id>/', UpdateQCMContentView.as_view(), name='update-qcm-content'),
     # Admin endpoints
     path('admin/dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
     path('admin/users/', UserManagementView.as_view(), name='admin-users'),

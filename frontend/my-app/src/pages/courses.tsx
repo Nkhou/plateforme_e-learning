@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import '../css/cours.css';
 import NewCours from '../component/courses/new_courses';
 import api from '../api/api';
-import CourseDetail from "../component/courses/CourseDetail";
+import CourseDetail from "../component/courses/formateur/CourseDetail";
 import CourseImage from '../component/courses/CourseImage'; // Import the CourseImage component
 
 // In your React component file or a types file

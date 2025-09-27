@@ -70,24 +70,127 @@ class QCMOptionCreateSerializer(serializers.ModelSerializer):
         model = QCMOption
         fields = ['text', 'is_correct']
 
+# class QCMSerializer(serializers.ModelSerializer):
+#     options = QCMOptionSerializer(many=True, read_only=True)
+    
+#     class Meta:
+#         model = QCM
+#         fields = ['id', 'question', 'options', 'points', 'passing_score', 'max_attempts', 'time_limit']
+
+# class VideoContentSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = VideoContent
+#         fields = ['id', 'video_file'] 
+
+# class PDFContentSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = PDFContent
+#         fields = ['id', 'pdf_file']
+#         read_only_fields = ['id', 'pdf_file'] 
+
+
+class PDFContentSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source='course_content.title', required=False)
+    caption = serializers.CharField(source='course_content.caption', required=False)
+    order = serializers.IntegerField(source='course_content.order', required=False)
+    
+    class Meta:
+        model = PDFContent
+        fields = ['id', 'pdf_file', 'title', 'caption', 'order']
+        read_only_fields = ['id']
+    
+    def update(self, instance, validated_data):
+        # Update course content if provided
+        content_data = validated_data.pop('course_content', {})
+        if content_data:
+            content = instance.course_content
+            for attr, value in content_data.items():
+                setattr(content, attr, value)
+            content.save()
+        
+        return super().update(instance, validated_data)
+
+class VideoContentSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source='course_content.title', required=False)
+    caption = serializers.CharField(source='course_content.caption', required=False)
+    order = serializers.IntegerField(source='course_content.order', required=False)
+    
+    class Meta:
+        model = VideoContent
+        fields = ['id', 'video_file', 'title', 'caption', 'order']
+        read_only_fields = ['id']
+    
+    def update(self, instance, validated_data):
+        # Update course content if provided
+        content_data = validated_data.pop('course_content', {})
+        if content_data:
+            content = instance.course_content
+            for attr, value in content_data.items():
+                setattr(content, attr, value)
+            content.save()
+        
+        return super().update(instance, validated_data)
+
+# class QCMOptionSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = QCMOption
+#         fields = ['id', 'text', 'is_correct']
+
 class QCMSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source='course_content.title', required=False)
+    caption = serializers.CharField(source='course_content.caption', required=False)
+    order = serializers.IntegerField(source='course_content.order', required=False)
+    
+    # FIX: Try the most likely relationship names
+    # If your QCMOption model has: qcm = models.ForeignKey(QCM, related_name='options')
     options = QCMOptionSerializer(many=True, read_only=True)
+    
+    # Alternative if the above doesn't work, try:
+    # options = QCMOptionSerializer(source='qcm_options', many=True, read_only=True)
+    # or
+    # options = QCMOptionSerializer(source='qcmoption_set', many=True, read_only=True)
     
     class Meta:
         model = QCM
-        fields = ['id', 'question', 'options', 'points', 'passing_score', 'max_attempts', 'time_limit']
-
-class VideoContentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = VideoContent
-        fields = ['id', 'video_file'] 
-
-class PDFContentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PDFContent
-        fields = ['id', 'pdf_file']
-        read_only_fields = ['id', 'pdf_file'] 
-
+        fields = [
+            'id', 'question', 'points', 'passing_score', 'max_attempts', 'time_limit',
+            'title', 'caption', 'order', 'options'
+        ]
+        read_only_fields = ['id']
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        
+        # Debug: Print available relationships
+        print(f"QCM {instance.id} available attributes:")
+        qcm_attrs = [attr for attr in dir(instance) if not attr.startswith('_')]
+        option_related = [attr for attr in qcm_attrs if 'option' in attr.lower()]
+        print(f"Option-related attributes: {option_related}")
+        
+        # Check different possible sources
+        options_count = 0
+        if hasattr(instance, 'options'):
+            options_count = instance.options.count()
+            print(f"instance.options count: {options_count}")
+        if hasattr(instance, 'qcm_options'):
+            options_count = instance.qcm_options.count()
+            print(f"instance.qcm_options count: {options_count}")
+        if hasattr(instance, 'qcmoption_set'):
+            options_count = instance.qcmoption_set.count()
+            print(f"instance.qcmoption_set count: {options_count}")
+            
+        print(f"Final options in representation: {len(representation.get('options', []))}")
+        return representation
+    
+    def update(self, instance, validated_data):
+        content_data = validated_data.pop('course_content', {})
+        if content_data:
+            content = instance.course_content
+            for attr, value in content_data.items():
+                setattr(content, attr, value)
+            content.save()
+        
+        return super().update(instance, validated_data)
 # class ModuleSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = Module
@@ -152,36 +255,54 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
         ).data
     def get_content_stats(self, obj):
         course = obj.course
-        total_enrolled = Enrollment.objects.filter(course=course).count()
-        total_completed = Enrollment.objects.filter(course=course, completed=True).count()
+        
+        # Use Subscription model instead of Enrollment
+        total_enrolled = Subscription.objects.filter(course=course, is_active=True).count()
+        total_completed = Subscription.objects.filter(
+            course=course, 
+            is_active=True, 
+            progress_percentage=100
+        ).count()
+        
         total_modules = Module.objects.filter(course=course).count()
-        total_contents = CourseContent.objects.filter(module__course=course).count()
-
+        total_contents_course = CourseContent.objects.filter(module__course=course).count()  # Renamed
+    
         completion_rate = 0
         if total_enrolled > 0:
             completion_rate = round((total_completed / total_enrolled) * 100, 2)
         
-        # Calculate average progress
-        average_progress = Enrollment.objects.filter(course=course).aggregate(
-            avg_progress=Avg('progress')
-        )['avg_progress'] or 0
+        # Calculate average progress from Subscription model
+        progress_stats = Subscription.objects.filter(
+            course=course, 
+            is_active=True
+        ).aggregate(
+            avg_progress=Avg('progress_percentage')
+        )
+        average_progress = progress_stats['avg_progress'] or 0
+        
+        # Get content type counts for THIS MODULE only
         if hasattr(obj, 'prefetched_contents'):
             contents = obj.prefetched_contents
         else:
             contents = obj.contents.all()
+        
+        pdf_count = contents.filter(content_type__name='pdf').count()
+        video_count = contents.filter(content_type__name='Video').count()
+        qcm_count = contents.filter(content_type__name='QCM').count()
+        total_contents_module = contents.count()  # Module-specific count
         
         return {
             'total_users_enrolled': total_enrolled,
             'total_users_completed': total_completed,
             'total_courses_completed': total_completed,
             'total_modules': total_modules,
-            'total_contents': total_contents,
+            'total_contents_course': total_contents_course,  # Course total
             'completion_rate': completion_rate,
             'average_progress': round(average_progress, 2),
-            'total_contents': len(contents),
-            'pdf_count': sum(1 for c in contents if c.content_type.name == 'pdf'),
-            'video_count': sum(1 for c in contents if c.content_type.name == 'Video'),
-            'qcm_count': sum(1 for c in contents if c.content_type.name == 'QCM'),
+            'total_contents_module': total_contents_module,  # Module total
+            'pdf_count': pdf_count,
+            'video_count': video_count,
+            'qcm_count': qcm_count,
         }
 class CourseContentSerializer(serializers.ModelSerializer):
     video_content = VideoContentSerializer(read_only=True)
@@ -201,8 +322,13 @@ class CourseContentSerializer(serializers.ModelSerializer):
 
         if not user or not user.is_authenticated:
             return False
-
         if obj.content_type.name.lower() == 'qcm' and obj.qcm:
+            print("------------------", QCMCompletion.objects.filter(
+                subscription__user=user,
+                subscription__course=obj.module.course,
+                qcm=obj.qcm,
+                is_passed=True
+            ).exists())
             return QCMCompletion.objects.filter(
                 subscription__user=user,
                 subscription__course=obj.module.course,
@@ -226,18 +352,73 @@ class CourseContentSerializer(serializers.ModelSerializer):
 
 class CourseSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    progress_percentage = serializers.SerializerMethodField()
+    is_subscribed = serializers.SerializerMethodField()
+    creator_username = serializers.SerializerMethodField()
+    creator_first_name = serializers.SerializerMethodField()
+    creator_last_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Course
-        fields = ['id', 'title_of_course', 'description', 'image_url', 'department', 'created_at']
+        fields = [
+            'id', 
+            'title_of_course', 
+            'description', 
+            'image_url', 
+            'department', 
+            'created_at',
+            'progress_percentage',  # This will now be available
+            'is_subscribed',
+            'creator_username',
+            'creator_first_name',
+            'creator_last_name'
+        ]
     
     def get_image_url(self, obj):
         if obj.image:
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(obj.image.url)
-            return f"{settings.BASE_URL}{obj.image.url}" if hasattr(settings, 'BASE_URL') else obj.image.url
+            return obj.image.url
         return None
+    
+    def get_progress_percentage(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            try:
+                # Get user's subscription for this course
+                subscription = Subscription.objects.filter(
+                    user=request.user, 
+                    course=obj, 
+                    is_active=True
+                ).first()
+                
+                if subscription:
+                    return subscription.progress_percentage
+                    
+            except Subscription.DoesNotExist:
+                pass
+        
+        return 0.0
+    
+    def get_is_subscribed(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return Subscription.objects.filter(
+                user=request.user, 
+                course=obj, 
+                is_active=True
+            ).exists()
+        return False
+    
+    def get_creator_username(self, obj):
+        return obj.creator.username
+    
+    def get_creator_first_name(self, obj):
+        return obj.creator.first_name
+    
+    def get_creator_last_name(self, obj):
+        return obj.creator.last_name
 
 class CourseDetailSerializer(serializers.ModelSerializer):
     modules = serializers.SerializerMethodField()

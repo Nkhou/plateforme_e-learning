@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import "./dashboard.css";
 import '../../css/cours.css';
 import api from '../../api/api';
-import CourseDetailShow from "../courses/CourseDetailShow";
+import CourseDetailShow from "../courses/apprent/CourseDetailShow";
 import CourseImage from "../courses/CourseImage";
 
 interface Course {
@@ -18,6 +18,7 @@ interface Course {
     updated_at?: string;
     department?: string;
     is_subscribed?: boolean;
+    progress_percentage?: number;
 }
 
 const Dashboard = () => {
@@ -31,6 +32,7 @@ const Dashboard = () => {
     const [myCourses, setMyCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [courseFilter, setCourseFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
 
     // Fetch courses from backend
     const fetchCourses = async () => {
@@ -94,6 +96,19 @@ const Dashboard = () => {
         setShowCourseDetail(false);
     };
 
+    // Filter courses based on progress
+    const filteredMyCourses = myCourses.filter(course => {
+        switch (courseFilter) {
+            case 'completed':
+                return course.progress_percentage === 100;
+            case 'in-progress':
+                return course.progress_percentage !== undefined && course.progress_percentage > 0 && course.progress_percentage < 100;
+            case 'all':
+            default:
+                return true;
+        }
+    });
+
     if (loading) return <p>Loading...</p>;
     if (error) return <p className="alert alert-danger">{error}</p>;
 
@@ -102,12 +117,35 @@ const Dashboard = () => {
             {!showCourseDetail ? (
                 <div className="dashboard-wrapper">
                     {/* My Subscribed Courses Section */}
-                    <h4 className="mb-4">My Courses</h4>
-                    {myCourses.length > 0 ? (
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h4>My Courses</h4>
+                        <div className="btn-group">
+                            <button 
+                                className={`btn btn-sm ${courseFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                onClick={() => setCourseFilter('all')}
+                            >
+                                All Courses
+                            </button>
+                            <button 
+                                className={`btn btn-sm ${courseFilter === 'in-progress' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                onClick={() => setCourseFilter('in-progress')}
+                            >
+                                In Progress
+                            </button>
+                            <button 
+                                className={`btn btn-sm ${courseFilter === 'completed' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                onClick={() => setCourseFilter('completed')}
+                            >
+                                Completed
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {filteredMyCourses.length > 0 ? (
                         <div className="carousel-container">
                             <button className="carousel-nav left" onClick={() => scrollLeft(trackRef2, setCurrentPosition2)}>&lt;</button>
                             <div className="carousel-track" ref={trackRef2} style={{ transform: `translateX(${currentPosition2}px)` }}>
-                                {myCourses.map(course => (
+                                {filteredMyCourses.map(course => (
                                     <div className="card-carousel card-hover" key={course.id} onClick={() => handleCardClick(course.id)} style={{ cursor: 'pointer' }}>
                                         <CourseImage
                                             src={course.image_url || course.image}
@@ -123,7 +161,20 @@ const Dashboard = () => {
                                                 <small className="text-muted">
                                                     By: {course.creator_first_name} {course.creator_last_name}
                                                 </small>
-                                                <div className="badge badge-success">Subscribed</div>
+                                                <div className="progress mt-2" style={{height: '8px'}}>
+                                                    <div 
+                                                        className={`progress-bar ${
+                                                            course.progress_percentage === 100 ? 'bg-success' : 'bg-primary'
+                                                        }`} 
+                                                        style={{width: `${course.progress_percentage || 0}%`}}
+                                                    ></div>
+                                                </div>
+                                                <div className="d-flex justify-content-between align-items-center mt-1">
+                                                    <small className="text-muted">
+                                                        {course.progress_percentage === 100 ? 'Completed' : `${course.progress_percentage || 0}% Complete`}
+                                                    </small>
+                                                    <div className="badge badge-success">Subscribed</div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -133,7 +184,12 @@ const Dashboard = () => {
                         </div>
                     ) : (
                         <div className="alert alert-info">
-                            You haven't subscribed to any courses yet. Check out the recommended courses below!
+                            {courseFilter === 'completed' 
+                                ? "You haven't completed any courses yet."
+                                : courseFilter === 'in-progress'
+                                ? "You don't have any courses in progress."
+                                : "You haven't subscribed to any courses yet. Check out the recommended courses below!"
+                            }
                         </div>
                     )}
 

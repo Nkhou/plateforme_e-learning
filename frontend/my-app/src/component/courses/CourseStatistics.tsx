@@ -52,6 +52,7 @@ const CourseStatistics: React.FC<CourseStatisticsProps> = ({ courseId }) => {
         setLoading(true);
         const response = await api.get(`courses/${courseId}/statistics/`);
         setStatistics(response.data);
+        console.log('Statistics( +++++++++++++++++++++++++', statistics)
       } catch (err) {
         setError('Failed to load statistics');
         console.error('Error fetching statistics:', err);
