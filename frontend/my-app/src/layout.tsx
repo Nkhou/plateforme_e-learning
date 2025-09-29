@@ -65,7 +65,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
       <div className="d-flex" style={{ minHeight: '100vh' }}>
         {/* Sidebar */}
-        {/* <div className={`border-end ${sidebarOpen ? 'd-block' : 'd-none'} d-md-block`} style={{ width: '260px', minHeight: '100vh', background: 'rgba(5, 44, 101, 0.9)' }}>
+        <div className={`border-end ${sidebarOpen ? 'd-block' : 'd-none'} d-md-block`} style={{ width: '260px', minHeight: '100vh', background: 'rgba(5, 44, 101, 0.9)' }}>
           <div className="p-3">
             <h5 className="text-white">platform</h5>
             <ul className="nav flex-column">
@@ -115,7 +115,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               </li>
             </ul>
           </div>
-        </div> */}
+        </div>
 
         {/* Main Content */}
         <div className="flex-grow-1">
