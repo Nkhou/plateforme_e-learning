@@ -501,19 +501,19 @@ transition: transform 0.3s ease, box-shadow 0.3s ease;
     cursor: pointer;
   }
   
-  .search-form:hover {
+  .search-form {
     width: 300px;
     cursor: pointer;
   }
   
-  .search-form:hover .search-input {
+  .search-input {
     opacity: 1;
     width: calc(100% - 42px);
   }
   
-  .search-form:hover .search-icon {
+  .search-form .search-icon {
     background: #466e96;
-    color: white;
+    /* color: white; */
   }
 /* end search bar */
 
