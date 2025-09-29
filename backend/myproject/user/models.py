@@ -3,6 +3,11 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.conf import settings
 
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
+from django.conf import settings
+
 PRIVILEGE_CHOICES = [
     ('A', 'Admin'),
     ('AP', 'Apprenant'),
@@ -17,12 +22,47 @@ DEPARTMENT_CHOICES = [
     ('S', 'Sales'),
 ]
 
+# Ajouter le choix de statut
+USER_STATUS_CHOICES = [
+    (1, 'Actif'),
+    (2, 'Suspendu'),
+]
+
 class CustomUser(AbstractUser):
     privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
     department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
+    status = models.IntegerField(choices=USER_STATUS_CHOICES, default=1)  # Nouveau champ statut
+    suspended_at = models.DateTimeField(null=True, blank=True)  # Date de suspension
+    suspension_reason = models.TextField(blank=True, null=True)  # Raison de la suspension
 
     def __str__(self):
         return self.username
+
+    @property
+    def is_active_user(self):
+        """Vérifie si l'utilisateur est actif"""
+        return self.status == 1
+
+    def suspend_user(self, reason=""):
+        """Suspendre un utilisateur"""
+        self.status = 2
+        self.suspended_at = timezone.now()
+        self.suspension_reason = reason
+        self.save()
+
+    def activate_user(self):
+        """Réactiver un utilisateur"""
+        self.status = 1
+        self.suspended_at = None
+        self.suspension_reason = None
+        self.save()
+
+# Ajouter le choix de statut pour les cours
+COURSE_STATUS_CHOICES = [
+    (0, 'Brouillon'),
+    (1, 'Actif'),
+    (2, 'Archivé'),
+]
 
 class Course(models.Model):
     title_of_course = models.CharField(max_length=100, blank=False, null=False)
@@ -41,6 +81,7 @@ class Course(models.Model):
     )    
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=0)  # Nouveau champ statut
     subscribers = models.ManyToManyField(
         settings.AUTH_USER_MODEL, 
         through='Subscription', 
@@ -51,6 +92,33 @@ class Course(models.Model):
     def __str__(self):
         creator_name = self.creator.get_full_name() or self.creator.username
         return f"{self.title_of_course} by {creator_name}"
+
+    @property
+    def is_draft(self):
+        return self.status == 0
+
+    @property
+    def is_active(self):
+        return self.status == 1
+
+    @property
+    def is_archived(self):
+        return self.status == 2
+
+    def activate_course(self):
+        """Activer le cours"""
+        self.status = 1
+        self.save()
+
+    def archive_course(self):
+        """Archiver le cours"""
+        self.status = 2
+        self.save()
+
+    def set_draft(self):
+        """Remettre en brouillon"""
+        self.status = 0
+        self.save()
 class Enrollment(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='enrollments')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')

@@ -127,7 +127,12 @@ class LoginView(APIView):
                     {"error": "Invalid credentials."}, 
                     status=status.HTTP_401_UNAUTHORIZED
                 )
-            
+            if user.status == 2:
+                return Response(
+                    {"error": "Votre compte est suspendu. Contactez l'administrateur."}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
             
@@ -166,6 +171,51 @@ class LogoutView(APIView):
         response.delete_cookie('accessToken')
         return response
 
+class CourseStatusManagementView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        """Changer le statut d'un cours"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        # Vérifier que l'utilisateur est le créateur du cours ou un admin
+        if course.creator != request.user and request.user.privilege != 'A':
+            return Response(
+                {'error': 'Vous n\'êtes pas autorisé à modifier ce cours'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        action = request.data.get('action')  # 'activate', 'archive', 'draft'
+        
+        if action == 'activate':
+            course.status = 1
+            course.save()
+            return Response({
+                'message': f'Cours "{course.title_of_course}" activé avec succès',
+                'status': 'active',
+                'status_display': 'Actif'
+            })
+        elif action == 'archive':
+            course.status = 2
+            course.save()
+            return Response({
+                'message': f'Cours "{course.title_of_course}" archivé avec succès',
+                'status': 'archived',
+                'status_display': 'Archivé'
+            })
+        elif action == 'draft':
+            course.status = 0
+            course.save()
+            return Response({
+                'message': f'Cours "{course.title_of_course}" mis en brouillon avec succès',
+                'status': 'draft',
+                'status_display': 'Brouillon'
+            })
+        else:
+            return Response(
+                {'error': 'Action non valide. Utilisez "activate", "archive" ou "draft".'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 class CheckAuthentificationView(APIView):
     def get(self, request):
         try:
@@ -185,6 +235,13 @@ class CheckAuthentificationView(APIView):
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
             UserById_ = CustomUser.objects.filter(id=payload.get('user_id')).first()
 
+            # Vérifier si l'utilisateur est suspendu
+            if UserById_ and UserById_.status == 2:  # Suspendu
+                return Response({
+                    'authenticated': False,
+                    'message': 'Votre compte est suspendu'
+                }, status=status.HTTP_403_FORBIDDEN)
+
             user = {
                 "user_id": payload.get('user_id'),
                 "username": UserById_.username,
@@ -193,7 +250,9 @@ class CheckAuthentificationView(APIView):
                 "email": UserById_.email,
                 "privilege": UserById_.privilege,
                 "department": UserById_.department,
-                "department_display": UserById_.get_department_display()
+                "department_display": UserById_.get_department_display(),
+                "status": UserById_.status,
+                "status_display": "Actif" if UserById_.status == 1 else "Suspendu"
             }
             
             return Response({
@@ -212,7 +271,6 @@ class CheckAuthentificationView(APIView):
                 'authenticated': False, 
                 'message': 'Invalid token'
             }, status=status.HTTP_401_UNAUTHORIZED)
-
 class DashboardView(APIView):
     def get(self, request):
         token = request.COOKIES.get('accessToken')
@@ -245,11 +303,30 @@ class UserView(APIView):
             logger.error(f"Errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def delete(self, request, pk):
+    # REMPLACER la méthode delete par patch pour changer le statut
+    def patch(self, request, pk):
         user = get_object_or_404(CustomUser, pk=pk)
-        user.delete()
-        return Response({'message': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
-
+        action = request.data.get('action')  # 'suspend' ou 'activate'
+        
+        if action == 'suspend':
+            user.status = 2  # Suspendu
+            user.save()
+            return Response({
+                'message': f'Utilisateur {user.username} suspendu avec succès',
+                'status': 'suspended'
+            })
+        elif action == 'activate':
+            user.status = 1  # Actif
+            user.save()
+            return Response({
+                'message': f'Utilisateur {user.username} activé avec succès',
+                'status': 'active'
+            })
+        else:
+            return Response(
+                {'error': 'Action non valide. Utilisez "suspend" ou "activate".'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 # Add this to your user/views.py
 from rest_framework.parsers import MultiPartParser
 import csv
@@ -399,6 +476,22 @@ class RegisterwithoutFileView(APIView):
 class CourseList(APIView):
     permission_classes = [AllowAny]
     
+    def get(self, request):
+        # Filtrer les cours selon le statut et le privilège de l'utilisateur
+        user = request.user
+        
+        # Par défaut, montrer seulement les cours actifs
+        base_query = Q(status=1)  # Cours actifs
+        
+        if user.is_authenticated:
+            if user.privilege in ['F', 'A']:  # Formateurs et Admins voient plus
+                base_query = Q(status__in=[0, 1])  # Brouillon + Actif
+            # Les apprenants (AP) voient seulement les cours actifs
+        
+        courses = Course.objects.filter(base_query).select_related('creator')
+        serializer = CourseSerializer(courses, many=True, context={'request': request})
+        return Response(serializer.data)
+    
     def post(self, request):
         data = request.data.copy()
         
@@ -407,6 +500,10 @@ class CourseList(APIView):
         
         if 'department' not in data:
             data['department'] = 'F'
+        
+        # Les nouveaux cours sont créés en brouillon par défaut
+        if 'status' not in data:
+            data['status'] = 0  # Brouillon
         
         serializer = CourseCreateSerializer(
             data=data, 
@@ -424,7 +521,6 @@ class CourseList(APIView):
                 )
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class CourseDetail(APIView):
     permission_classes = [AllowAny]
     
@@ -433,6 +529,16 @@ class CourseDetail(APIView):
     
     def get(self, request, pk):
         course = self.get_object(pk)
+        
+        # Vérifier si l'utilisateur peut voir le cours
+        user = request.user
+        if course.status == 0 and not (user.is_authenticated and 
+                                      (user.privilege in ['F', 'A'] or user == course.creator)):
+            return Response(
+                {'error': 'Ce cours est en brouillon et non accessible'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         serializer = CourseDetailSerializer(course, context={'request': request})
         return Response(serializer.data)
     
@@ -446,12 +552,50 @@ class CourseDetail(APIView):
     
     def patch(self, request, pk):
         course = self.get_object(pk)
-        serializer = CourseCreateSerializer(course, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Vérifier les permissions
+        if course.creator != request.user and request.user.privilege != 'A':
+            return Response(
+                {'error': 'Vous n\'êtes pas autorisé à modifier ce cours'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        action = request.data.get('action')
+        
+        if action == 'activate':
+            course.status = 1
+            course.save()
+            return Response({
+                'message': 'Cours activé avec succès',
+                'status': 'active'
+            })
+        elif action == 'archive':
+            course.status = 2
+            course.save()
+            return Response({
+                'message': 'Cours archivé avec succès',
+                'status': 'archived'
+            })
+        elif action == 'draft':
+            course.status = 0
+            course.save()
+            return Response({
+                'message': 'Cours remis en brouillon avec succès',
+                'status': 'draft'
+            })
+        else:
+            # Si pas d'action spécifique, faire un update normal
+            serializer = CourseCreateSerializer(course, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    # SUPPRIMER la méthode delete pour éviter la suppression
+    # def delete(self, request, pk):
+    #     course = self.get_object(pk)
+    #     course.delete()
+    #     return Response(status=status.HTTP_204_NO_CONTENT)    
     def delete(self, request, pk):
         course = self.get_object(pk)
         course.delete()
@@ -462,6 +606,7 @@ class MyCourses(APIView):
         if not request.user.is_authenticated:
             return Response([], status=status.HTTP_200_OK)
         
+        # Les formateurs voient tous leurs cours (même brouillons et archivés)
         courses = Course.objects.filter(creator=request.user)
         serializer = CourseSerializer(courses, many=True, context={'request': request})
         return Response(serializer.data)
@@ -511,7 +656,13 @@ class UserManagementView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        users = CustomUser.objects.all().order_by('-date_joined')
+        # Filtrer par statut si spécifié
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            users = CustomUser.objects.filter(status=status_filter).order_by('-date_joined')
+        else:
+            users = CustomUser.objects.all().order_by('-date_joined')
+        
         user_data = []
         
         for user in users:
@@ -524,6 +675,8 @@ class UserManagementView(APIView):
                 'privilege_display': user.get_privilege_display(),
                 'department': user.department,
                 'department_display': user.get_department_display(),
+                'status': user.status,
+                'status_display': 'Actif' if user.status == 1 else 'Suspendu',
                 'date_joined': user.date_joined,
                 'last_login': user.last_login,
                 'is_active': user.is_active,
@@ -540,57 +693,6 @@ class UserManagementView(APIView):
             'users': user_data,
             'user_growth': user_growth
         })
-    
-    def get_user_growth_stats(self):
-        """Calculate user growth statistics"""
-        now = timezone.now()
-        
-        # Get users registered in the last 30 days
-        thirty_days_ago = now - timedelta(days=30)
-        last_30_days = CustomUser.objects.filter(
-            date_joined__gte=thirty_days_ago
-        ).count()
-        
-        # Get users registered in the previous 30 days (for comparison)
-        sixty_days_ago = now - timedelta(days=60)
-        previous_30_days = CustomUser.objects.filter(
-            date_joined__gte=sixty_days_ago,
-            date_joined__lt=thirty_days_ago
-        ).count()
-        
-        # Calculate growth percentage
-        if previous_30_days > 0:
-            growth_percentage = ((last_30_days - previous_30_days) / previous_30_days) * 100
-        else:
-            growth_percentage = 100 if last_30_days > 0 else 0
-        
-        # Get daily user registrations for the last 7 days
-        daily_growth = []
-        for i in range(7):
-            day = now - timedelta(days=i)
-            day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = day_start + timedelta(days=1)
-            
-            daily_count = CustomUser.objects.filter(
-                date_joined__gte=day_start,
-                date_joined__lt=day_end
-            ).count()
-            
-            daily_growth.append({
-                'date': day_start.strftime('%Y-%m-%d'),
-                'count': daily_count
-            })
-        
-        # Reverse to get chronological order
-        daily_growth.reverse()
-        
-        return {
-            'total_users': CustomUser.objects.count(),
-            'new_users_last_30_days': last_30_days,
-            'growth_percentage': round(growth_percentage, 2),
-            'daily_growth': daily_growth,
-            'active_users': CustomUser.objects.filter(is_active=True).count(),
-        }
 
 # Add these to your user/views.py if you need them
 # Add this at the top of your views.py file, near the other imports
@@ -600,48 +702,55 @@ class IsSuperUser(IsAuthenticated):
 from django.db.models import Count, Avg, Q, F, Sum
 from django.db.models.functions import TruncMonth, TruncWeek, TruncDate
 from datetime import timedelta, datetime
-class CourseManagementView(APIView):
-    permission_classes = [IsSuperUser]
+class RecommendedCoursesView(APIView):
+    permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        courses = Course.objects.all().select_related('creator')
-        
-        # Create course data manually since CourseWithSubscribersSerializer might not exist
-        course_data = []
-        for course in courses:
-            subscription_count = course.course_subscriptions.filter(is_active=True).count()
-            course_data.append({
-                'id': course.id,
-                'title': course.title_of_course,
-                'description': course.description,
-                'creator': course.creator.username if course.creator else 'Unknown',
-                'department': course.department,
-                'created_at': course.created_at,
-                'subscriber_count': subscription_count,
-                'image_url': request.build_absolute_uri(course.image.url) if course.image else None
-            })
-        
-        # Course enrollment statistics
-        enrollment_stats = self.get_enrollment_stats()
-        
-        return Response({
-            'courses': course_data,
-            'enrollment_stats': enrollment_stats
-        })
-    
-    def get_enrollment_stats(self):
-        # Course popularity by enrollment count
-        popular_courses = (
-            Course.objects
-            .annotate(enrollment_count=Count('course_subscriptions', filter=Q(course_subscriptions__is_active=True)))
-            .order_by('-enrollment_count')[:10]
-            .values('title_of_course', 'enrollment_count')
-        )
-        
-        return {
-            'labels': [course['title_of_course'] for course in popular_courses],
-            'data': [course['enrollment_count'] for course in popular_courses]
-        }
+        """Get recommended courses based on user's department, excluding subscribed courses"""
+        try:
+            user_department = request.user.department
+            
+            # Get user's subscribed course IDs first
+            subscribed_course_ids = Subscription.objects.filter(
+                user=request.user,
+                is_active=True
+            ).values_list('course_id', flat=True)
+            
+            # Base query - seulement les cours actifs pour les apprenants
+            base_query = Q(status=1)  # Seulement cours actifs
+            
+            if request.user.privilege in ['F', 'A']:
+                # Les formateurs et admin voient aussi les brouillons
+                base_query = Q(status__in=[0, 1])
+            
+            if not user_department:
+                courses = Course.objects.filter(base_query).exclude(
+                    id__in=subscribed_course_ids
+                ).order_by('-created_at')[:20]
+            else:
+                courses = Course.objects.filter(
+                    base_query & Q(creator__department=user_department)
+                ).exclude(
+                    id__in=subscribed_course_ids
+                ).order_by('-created_at')
+                
+                if not courses.exists():
+                    courses = Course.objects.filter(base_query).exclude(
+                        id__in=subscribed_course_ids
+                    ).order_by('-created_at')[:20]
+            
+            serializer = CourseSerializer(courses, many=True, context={'request': request})
+            
+            for course_data in serializer.data:
+                course_data['is_subscribed'] = False
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch recommended courses: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 class SystemAnalyticsView(APIView):
     permission_classes = [IsSuperUser]
     

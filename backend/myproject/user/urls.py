@@ -4,11 +4,11 @@ from .views import UserView, LoginView, LogoutView, CheckAuthentificationView, R
 from .views import DashboardView, CourseContentsView
 from . import views
 from .views import (
-    AdminDashboardView, UserManagementView, CourseManagementView,
+    AdminDashboardView, UserManagementView, CourseStatusManagementView,
     SystemAnalyticsView, ContentManagementView, UserDetailView, CourseSubscribersListViewSet, MySubscriptions, CourseStatsView, ModuleDetailAPIView, ModuleListCreateAPIView
 )
 from .views import (
-    AdminDashboardView, UserManagementView, CourseManagementView,
+    AdminDashboardView, UserManagementView, CourseStatusManagementView,
     SystemAnalyticsView, ContentManagementView, UserDetailView,
     SystemHealthView, RecommendedCoursesView, UpdatePDFContentView, UpdateVideoContentView, UpdateQCMContentView
 )
@@ -87,7 +87,7 @@ urlpatterns = [
     path('admin/dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
     path('admin/users/', UserManagementView.as_view(), name='admin-users'),
     path('admin/users/<int:user_id>/', UserDetailView.as_view(), name='admin-user-detail'),
-    path('admin/courses/', CourseManagementView.as_view(), name='admin-courses'),
+    path('admin/courses/', CourseStatusManagementView.as_view(), name='admin-courses'),
     path('admin/analytics/', SystemAnalyticsView.as_view(), name='admin-analytics'),
     path('admin/contents/', ContentManagementView.as_view(), name='admin-contents'),
     path('admin/system-health/', SystemHealthView.as_view(), name='system-health'),
