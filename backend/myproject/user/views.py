@@ -596,10 +596,10 @@ class CourseDetail(APIView):
     #     course = self.get_object(pk)
     #     course.delete()
     #     return Response(status=status.HTTP_204_NO_CONTENT)    
-    def delete(self, request, pk):
-        course = self.get_object(pk)
-        course.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    # def delete(self, request, pk):
+    #     course = self.get_object(pk)
+    #     course.delete()
+    #     return Response(status=status.HTTP_204_NO_CONTENT)
 
 class MyCourses(APIView):
     def get(self, request):
@@ -685,14 +685,67 @@ class UserManagementView(APIView):
                 'course_count': user.created_courses.count(),
                 'subscription_count': user.course_subscriptions.filter(is_active=True).count()
             })
-        
         # User growth statistics
-        user_growth = self.get_user_growth_stats()
+        print('ggggggg')
+        user_growth = self.get_user_growth_stats(request)
+        print('user_growth', user_growth)
         
         return Response({
             'users': user_data,
-            'user_growth': user_growth
+            'user_growth': user_growth.data
         })
+    # @action(detail=False, methods=['get'])
+    def get_user_growth_stats(self, request):
+        """Get user growth statistics for the last 30 days"""
+        try:
+            # Calculate date 30 days ago
+            thirty_days_ago = timezone.now() - timedelta(days=30)
+            
+            # Get daily user registrations for the last 30 days
+            daily_stats = User.objects.filter(
+                date_joined__gte=thirty_days_ago
+            ).extra(
+                {'date_created': "date(date_joined)"}
+            ).values('date_created').annotate(
+                count=Count('id')
+            ).order_by('date_created')
+            
+            # Format the data for the frontend
+            growth_data = [
+                {
+                    'date': stat['date_created'].strftime('%Y-%m-%d'),
+                    'count': stat['count']
+                }
+                for stat in daily_stats
+            ]
+            
+            # Calculate total growth
+            total_users = User.objects.count()
+            users_30_days_ago = User.objects.filter(
+                date_joined__lt=thirty_days_ago
+            ).count()
+            growth_percentage = (
+                ((total_users - users_30_days_ago) / users_30_days_ago * 100) 
+                if users_30_days_ago > 0 else 100
+            )
+            print('success', True)
+            print('growth_data', growth_data)
+            print('total_users', total_users)
+            print('growth_percentage', round(growth_percentage, 2))
+            print('new_users', total_users - users_30_days_ago)
+            return Response({
+                'success': True,
+                'growth_data': growth_data,
+                'total_users': total_users,
+                'growth_percentage': round(growth_percentage, 2),
+                'new_users': total_users - users_30_days_ago
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
 
 # Add these to your user/views.py if you need them
 # Add this at the top of your views.py file, near the other imports
@@ -1350,7 +1403,15 @@ class CourseContentDetailView(APIView):
             return Response(CourseContentSerializer(content).data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+    def patch(self, request, course_pk, content_pk):
+        content = self.get_object(course_pk, content_pk)
+        
+        if content.module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
     def delete(self, request, course_pk, content_pk):
         content = self.get_object(course_pk, content_pk)
         
