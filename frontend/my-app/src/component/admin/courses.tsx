@@ -14,6 +14,7 @@ interface CoursesManagementProps {
 }
 
 const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses }) => {
+  console.log('llllllllllll', courses )
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -24,6 +25,11 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses }) => {
     },
   };
 
+  // Add defensive checks for enrollment_stats
+  const hasEnrollmentStats = courses?.enrollment_stats?.labels && courses?.enrollment_stats?.data;
+  const enrollmentLabels = hasEnrollmentStats ? courses.enrollment_stats.labels.slice(0, 8) : [];
+  const enrollmentData = hasEnrollmentStats ? courses.enrollment_stats.data.slice(0, 8) : [];
+
   return (
     <div>
       {/* Popular Courses Chart */}
@@ -32,29 +38,37 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses }) => {
           <h5 style={{ color: '#052c65' }}>Most Popular Courses (by Enrollment)</h5>
         </div>
         <div className="card-body" style={{ height: '300px' }}>
-          <Bar
-            data={{
-              labels: courses.enrollment_stats.labels.slice(0, 8),
-              datasets: [
-                {
-                  label: 'Enrollments',
-                  data: courses.enrollment_stats.data.slice(0, 8),
-                  backgroundColor: 'rgba(5, 44, 101, 0.7)',
-                },
-              ],
-            }}
-            options={{
-              ...chartOptions,
-              indexAxis: 'y' as const,
-            }}
-          />
+          {hasEnrollmentStats && enrollmentLabels.length > 0 ? (
+            <Bar
+              data={{
+                labels: enrollmentLabels,
+                datasets: [
+                  {
+                    label: 'Enrollments',
+                    data: enrollmentData,
+                    backgroundColor: 'rgba(5, 44, 101, 0.7)',
+                  },
+                ],
+              }}
+              options={{
+                ...chartOptions,
+                indexAxis: 'y' as const,
+              }}
+            />
+          ) : (
+            <div className="d-flex justify-content-center align-items-center h-100">
+              <p className="text-muted">No enrollment data available</p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* All Courses Table */}
       <div className="card shadow-sm">
         <div className="card-header bg-white d-flex justify-content-between align-items-center">
-          <h5 style={{ color: '#052c65', margin: '0' }}>All Courses ({courses.courses.length} courses)</h5>
+          <h5 style={{ color: '#052c65', margin: '0' }}>
+            All Courses ({courses?.courses?.length || 0} courses)
+          </h5>
         </div>
         <div className="card-body p-0">
           <div className="table-responsive">
@@ -69,14 +83,14 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses }) => {
                 </tr>
               </thead>
               <tbody>
-                {courses.courses.map((course) => (
+                {courses?.courses?.map((course) => (
                   <tr key={course.id}>
                     <td>{course.title_of_course}</td>
                     <td>{course.creator_username}</td>
                     <td>
-                      <span className="badge rounded-pill" style={{ 
-                        backgroundColor: 'rgba(5, 44, 101, 0.1)', 
-                        color: '#052c65' 
+                      <span className="badge rounded-pill" style={{
+                        backgroundColor: 'rgba(5, 44, 101, 0.1)',
+                        color: '#052c65'
                       }}>
                         {course.subscribers_count}
                       </span>
@@ -84,8 +98,8 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses }) => {
                     <td>{new Date(course.created_at).toLocaleDateString()}</td>
                     <td>
                       {course.image_url && (
-                        <img 
-                          src={course.image_url} 
+                        <img
+                          src={course.image_url}
                           alt={course.title_of_course}
                           style={{ width: '50px', height: '50px', objectFit: 'cover' }}
                           className="rounded"

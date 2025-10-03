@@ -15,6 +15,7 @@ export interface User {
   privilege: string;
 }
 
+
 const AuthGuard = ({ children }: AuthGuardProps) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -37,16 +38,17 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         if (!auth && location.pathname !== '/') {
           navigate('/');
         }
-        else if (auth && location.pathname === '/' && (user?.privilege === 'A' || user?.privilege === 'Admin')) {
-          navigate('/admin');
-        }
-        else if (auth && location.pathname === '/' && (user?.privilege === 'F' )) {
-          navigate('/cours');
-        }
         else if (auth && location.pathname === '/') {
+  const privilege = res.data.user?.privilege;
+  if (privilege === 'A' || privilege === 'Admin') {
+    navigate('/admin');
+  } else if (privilege === 'F') {
+    navigate('/cours');
+  } else {
+    navigate('/dashboard');
+  }
+}
 
-          navigate('/dashboard');
-        }
       })
       .catch(() => {
         setIsAuthenticated(false);
@@ -69,6 +71,20 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           <div className="p-3">
             <h5 className="text-white">platform</h5>
             <ul className="nav flex-column">
+              {(user?.privilege === 'A' || user?.privilege === 'Admin') && (
+  <>
+    <li className="nav-item">
+      <a href="/admin" className="nav-link text-white">
+        <img src="/dashboard.svg" alt="Dashboard" width="16" height="16" /> Dashboard admin
+      </a>
+    </li>
+    <li className="nav-item">
+      <a href="/signup" className="nav-link text-white">
+        <img src="/add-user.svg" alt="Dashboard" width="16" height="16" /> create new user
+      </a>
+    </li>
+  </>
+)}
               {user?.privilege !== 'A' && (
                 <>
                 {user?.privilege !== 'F' && (
@@ -88,21 +104,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 </>
               )}
 
-              {(user?.privilege === 'A' || user?.privilege === 'Admin') && (
-                <>
-                  <li className="nav-item">
-                    <a href="/admin" className="nav-link text-white">
-                      <img src="/dashboard.svg" alt="Dashboard" width="16" height="16" /> Dashboard
-                    </a>
-                  </li>
-                  <li className="nav-item">
-                    <a href="/signup" className="nav-link text-white">
-                      <img src="/add-user.svg" alt="Dashboard" width="16" height="16" /> create new user
-                    </a>
-                  </li>
-                </>
-              )
-              }
+
               <li className="nav-item">
                 <a href="/profile" className="nav-link text-white">
                   <img src="/profile.svg" alt="Profile" width="16" height="16" /> Profile

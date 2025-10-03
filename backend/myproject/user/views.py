@@ -174,10 +174,27 @@ class LogoutView(APIView):
 class CourseStatusManagementView(APIView):
     permission_classes = [IsAuthenticated]
     
+    def get(self, request):
+        """Récupérer tous les cours (pour l'admin)"""
+        # Vérifier les privilèges admin
+        if request.user.privilege != 'A':
+            return Response(
+                {'error': 'Accès non autorisé. Privilèges admin requis.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        courses = Course.objects.all()
+        serializer = CourseSerializer(courses, many=True)
+        print('hello')
+        enrollment_stats = self.get_enrollment_stats()
+        print('hello', serializer.data)
+        return Response({
+            'courses': serializer.data,
+            'enrollment_stats': enrollment_stats 
+                         })
     def post(self, request, pk):
         """Changer le statut d'un cours"""
         course = get_object_or_404(Course, pk=pk)
-        
         # Vérifier que l'utilisateur est le créateur du cours ou un admin
         if course.creator != request.user and request.user.privilege != 'A':
             return Response(
@@ -186,6 +203,7 @@ class CourseStatusManagementView(APIView):
             )
         
         action = request.data.get('action')  # 'activate', 'archive', 'draft'
+        print('9999999999999999999999999999999999999999')
         
         if action == 'activate':
             course.status = 1
@@ -216,6 +234,31 @@ class CourseStatusManagementView(APIView):
                 {'error': 'Action non valide. Utilisez "activate", "archive" ou "draft".'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+    def get_enrollment_stats(self):
+        """Get enrollment statistics for the chart"""
+        from django.db.models import Count
+        try:
+        # Get courses with their subscription counts
+            courses_with_subs = (
+                Course.objects
+                .annotate(enrollment_count=Count('subscribers'))  # Adjust 'subscription' to match your related_name
+                .order_by('-enrollment_count')[:10]
+                .values('title_of_course', 'enrollment_count')
+            )
+            print('hhhhhhhhhhhhh')
+            labels = [course['title_of_course'] for course in courses_with_subs]
+            data = [course['enrollment_count'] for course in courses_with_subs]
+            print('data', data)
+            return {
+                'labels': labels,
+                'data': data
+            }
+        except FieldError as e:
+            print(f"Field error: {e}")
+            return {'labels': [], 'data': []}
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            return {'labels': [], 'data': []}
 class CheckAuthentificationView(APIView):
     def get(self, request):
         try:
@@ -241,7 +284,7 @@ class CheckAuthentificationView(APIView):
                     'authenticated': False,
                     'message': 'Votre compte est suspendu'
                 }, status=status.HTTP_403_FORBIDDEN)
-
+            print('+-+++-++++-++--++', UserById_.privilege)
             user = {
                 "user_id": payload.get('user_id'),
                 "username": UserById_.username,
