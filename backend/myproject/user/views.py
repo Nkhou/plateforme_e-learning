@@ -184,6 +184,7 @@ class CourseStatusManagementView(APIView):
             )
         
         courses = Course.objects.all()
+        #  need to add subscriber
         serializer = CourseSerializer(courses, many=True)
         print('hello')
         enrollment_stats = self.get_enrollment_stats()
@@ -1331,6 +1332,69 @@ class SystemHealthView(APIView):
     def get_active_sessions(self):
         from django.contrib.sessions.models import Session
         return Session.objects.count()
+
+
+class ModuleStatusUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, course_id, module_id):
+        """Update module status (Brouillon, Actif, Archivé)"""
+        module = get_object_or_404(Module, id=module_id, course_id=course_id)
+        course = module.course
+        
+        # Check if user is the course creator
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        new_status = request.data.get('status')
+        if new_status not in [0, 1, 2]:  # Draft, Active, Archived
+            return Response(
+                {'error': 'Invalid status. Use: 0 (Draft), 1 (Active), or 2 (Archived)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        module.status = new_status
+        module.save()
+        
+        serializer = ModuleSerializer(module)
+        return Response({
+            'message': f'Module status updated to {module.get_status_display()}',
+            'module': serializer.data
+        })
+
+class ContentStatusUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, course_id, content_id):
+        """Update content status (Brouillon, Actif, Archivé)"""
+        content = get_object_or_404(CourseContent, id=content_id, module__course_id=course_id)
+        course = content.module.course
+        
+        # Check if user is the course creator
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        new_status = request.data.get('status')
+        if new_status not in [0, 1, 2]:  # Draft, Active, Archived
+            return Response(
+                {'error': 'Invalid status. Use: 0 (Draft), 1 (Active), or 2 (Archived)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        content.status = new_status
+        content.save()
+        
+        serializer = CourseContentSerializer(content)
+        return Response({
+            'message': f'Content status updated to {content.get_status_display()}',
+            'content': serializer.data
+        })
 class ModuleDetail(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1340,6 +1404,14 @@ class ModuleDetail(APIView):
     
     def get(self, request, course_pk, module_pk):
         module = self.get_object(course_pk, module_pk)
+        
+        # Check if module is accessible based on status
+        if module.status == 0 and module.course.creator != request.user:
+            return Response(
+                {'error': 'This module is in draft mode and not accessible'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         serializer = ModuleSerializer(module)
         return Response(serializer.data)
     
@@ -1358,6 +1430,40 @@ class ModuleDetail(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    def patch(self, request, course_pk, module_pk):
+        module = self.get_object(course_pk, module_pk)
+        
+        if module.course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Handle status updates
+        if 'status' in request.data:
+            new_status = request.data.get('status')
+            if new_status not in [0, 1, 2]:
+                return Response(
+                    {'error': 'Invalid status. Use: 0 (Draft), 1 (Active), or 2 (Archived)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            module.status = new_status
+            module.save()
+            
+            serializer = ModuleSerializer(module)
+            return Response({
+                'message': f'Module status updated to {module.get_status_display()}',
+                'module': serializer.data
+            })
+        else:
+            # Handle other PATCH updates
+            serializer = ModuleSerializer(module, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     def delete(self, request, course_pk, module_pk):
         module = self.get_object(course_pk, module_pk)
         
@@ -1367,8 +1473,19 @@ class ModuleDetail(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        module.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        # Archive the module instead of deleting
+        module.status = 2  # Archived
+        module.save()
+        
+        return Response(
+            {
+                'message': 'Module archived successfully',
+                'module_id': module.id,
+                'status': module.status,
+                'status_display': module.get_status_display()
+            },
+            status=status.HTTP_200_OK
+        )
 
 # Content Views
 class CourseContentsView(APIView):
@@ -1386,14 +1503,25 @@ class CourseContentsView(APIView):
                 is_active=True
             ).first()
             
+            # Build query for modules based on user privileges
+            module_query = Q(course=course)
+            if course.creator != user:
+                module_query &= Q(status=1)  # Only active modules for non-creators
+            
             # Get all modules with their contents
-            modules = course.modules.all().order_by('order')
+            modules = course.modules.filter(module_query).order_by('order')
             
             # Pass subscription to serializer context
             module_data = []
             for module in modules:
                 module_serializer = ModuleSerializer(module)
-                contents = module.contents.all().order_by('order')
+                
+                # Filter contents based on status
+                content_query = Q(module=module)
+                if course.creator != user:
+                    content_query &= Q(status=1)  # Only active contents for non-creators
+                
+                contents = module.contents.filter(content_query).order_by('order')
                 
                 content_serializer = CourseContentSerializer(
                     contents, 
@@ -1413,7 +1541,6 @@ class CourseContentsView(APIView):
             
         except Exception as e:
             return Response({'error': str(e)}, status=500)
-
 class CourseContentDetailView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -1425,6 +1552,14 @@ class CourseContentDetailView(APIView):
     def get(self, request, course_pk, content_pk):
         try:
             content = self.get_object(course_pk, content_pk)
+            
+            # Check if content is accessible based on status
+            if content.status == 0 and content.module.course.creator != request.user:
+                return Response(
+                    {'error': 'This content is in draft mode and not accessible'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
             serializer = CourseContentSerializer(content, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
@@ -1446,15 +1581,44 @@ class CourseContentDetailView(APIView):
             return Response(CourseContentSerializer(content).data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     def patch(self, request, course_pk, content_pk):
         content = self.get_object(course_pk, content_pk)
         
+        # Check if user is the course creator
         if content.module.course.creator != request.user:
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # Handle status updates
+        if 'status' in request.data:
+            new_status = request.data.get('status')
+            if new_status not in [0, 1, 2]:
+                return Response(
+                    {'error': 'Invalid status. Use: 0 (Draft), 1 (Active), or 2 (Archived)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            content.status = new_status
+            content.save()
+            
+            serializer = CourseContentSerializer(content)
+            return Response({
+                'message': f'Content status updated to {content.get_status_display()}',
+                'content': serializer.data
+            })
+        else:
+            # Handle other PATCH updates
+            serializer = CourseContentCreateSerializer(content, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                content = serializer.save()
+                return Response(CourseContentSerializer(content).data)
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     def delete(self, request, course_pk, content_pk):
         content = self.get_object(course_pk, content_pk)
         
@@ -1464,8 +1628,19 @@ class CourseContentDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        content.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        # Archive the content instead of deleting
+        content.status = 2  # Archived
+        content.save()
+        
+        return Response(
+            {
+                'message': 'Content archived successfully',
+                'content_id': content.id,
+                'status': content.status,
+                'status_display': content.get_status_display()
+            },
+            status=status.HTTP_200_OK
+        )
 
 class CreatePDFContentView(APIView):
     permission_classes = [IsAuthenticated]
@@ -2771,8 +2946,16 @@ class ModuleListCreateAPIView(APIView):
                 course=course,
                 is_active=True
             ).first()
+        
+        # Filter modules based on user privileges and status
+        base_query = Q(course=course)
+        
+        # If user is not the creator, only show active modules
+        if course.creator != request.user:
+            base_query &= Q(status=1)  # Only active modules
+        
         # Optimize query with prefetch_related
-        modules = Module.objects.filter(course=course).prefetch_related(
+        modules = Module.objects.filter(base_query).prefetch_related(
             'contents__content_type',
             'contents__video_content',
             'contents__pdf_content',
@@ -2784,7 +2967,6 @@ class ModuleListCreateAPIView(APIView):
             many=True,
             context={'request': request, 'subscription': subscription}
         )
-        # print('++++++++++++++sssssssssssssssssssssssssssssssssssss', serializer.data)
         return Response(serializer.data)
     
     def post(self, request, course_id):
@@ -2797,16 +2979,13 @@ class ModuleListCreateAPIView(APIView):
             )
         
         serializer = ModuleSerializer(data=request.data)
-        print('Creating module...') # Debug print
         
         if serializer.is_valid():
-            serializer.save(course=course)
-            print('Module created successfully!')
+            # New modules are created as draft by default
+            module = serializer.save(course=course, status=0)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         
-        print('Validation errors:', serializer.errors) # Debug print
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 # views.py - Add these update views
 

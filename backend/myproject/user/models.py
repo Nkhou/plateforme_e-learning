@@ -142,6 +142,7 @@ class Module(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='modules')
     title = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
+    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=0)  # Nouveau champ statut
     order = models.PositiveIntegerField(default=0)  # for ordering modules within a course
     
     class Meta:
@@ -154,6 +155,7 @@ class CourseContent(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     title = models.CharField(max_length=100)
     caption = models.CharField(max_length=200, blank=True)
+    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=1)  # Nouveau champ statut
     order = models.PositiveIntegerField(default=0)  # for ordering content within a module
     
     class Meta:

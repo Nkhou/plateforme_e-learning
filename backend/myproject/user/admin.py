@@ -10,8 +10,8 @@ from .models import (
 # Custom User Admin
 class CustomUserAdmin(UserAdmin):
     list_display = ('username', 'email', 'first_name', 'last_name', 
-                   'privilege', 'department', 'is_staff', 'is_active')
-    list_filter = ('privilege', 'department', 'is_staff', 'is_superuser', 'is_active')
+                   'privilege', 'department', 'status', 'suspended_at', 'is_staff', 'is_active')
+    list_filter = ('privilege', 'department', 'status', 'is_staff', 'is_superuser', 'is_active')
     search_fields = ('username', 'first_name', 'last_name', 'email')
     ordering = ('username',)
     fieldsets = (
@@ -21,36 +21,50 @@ class CustomUserAdmin(UserAdmin):
             'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
         }),
         (_('Important dates'), {'fields': ('last_login', 'date_joined')}),
-        (_('Additional info'), {'fields': ('privilege', 'department')}),
+        (_('Additional info'), {'fields': ('privilege', 'department', 'status', 'suspended_at', 'suspension_reason')}),
     )
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
             'fields': ('username', 'password1', 'password2', 'email', 
-                      'first_name', 'last_name', 'privilege', 'department'),
+                      'first_name', 'last_name', 'privilege', 'department', 'status'),
         }),
     )
+    
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+    get_status_display.short_description = 'Status'
 
 # Module Admin
+# Module Admin
 class ModuleAdmin(admin.ModelAdmin):
-    list_display = ('course', 'title', 'order')
-    list_filter = ('course',)
-    search_fields = ('title', 'course__title_of_course')
+    list_display = ('course', 'title', 'get_status_display', 'order')
+    list_filter = ('course', 'status')
+    search_fields = ('title', 'description', 'course__title_of_course')
     ordering = ('course', 'order')
+    fields = ('course', 'title', 'description', 'status', 'order')
+    
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+    get_status_display.short_description = 'Status'
 
 # Course Admin
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ('title_of_course', 'creator', 'created_at', 'updated_at')
-    list_filter = ('created_at', 'updated_at')
+    list_display = ('title_of_course', 'creator', 'get_status_display', 'department', 'created_at', 'updated_at')
+    list_filter = ('status', 'department', 'created_at', 'updated_at')
     search_fields = ('title_of_course', 'creator__username')
     readonly_fields = ('created_at', 'updated_at')
+    
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+    get_status_display.short_description = 'Status'
 
 # ContentType Admin
 class ContentTypeAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
 
-# CourseContent Admin (CORRECTED)
+# CourseContent Admin (FIXED - using existing fields only)
 class CourseContentAdmin(admin.ModelAdmin):
     list_display = ('get_course', 'module', 'content_type', 'title', 'order')
     list_filter = ('content_type', 'module__course')
@@ -70,14 +84,14 @@ class QCMAdmin(admin.ModelAdmin):
 
 # Subscription Admin
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('user', 'course', 'subscribed_at', 'is_active', 'total_score')
+    list_display = ('user', 'course', 'subscribed_at', 'is_active', 'total_score', 'progress_percentage')
     list_filter = ('is_active', 'subscribed_at')
     search_fields = ('user__username', 'course__title_of_course')
     readonly_fields = ('subscribed_at',)
 
 # QCMCompletion Admin
 class QCMCompletionAdmin(admin.ModelAdmin):
-    list_display = ('subscription', 'qcm', 'best_score', 'points_earned', 'is_passed', 'attempts_count')
+    list_display = ('subscription', 'qcm', 'best_score', 'points_earned', 'is_passed', 'attempts_count', 'last_attempt')
     list_filter = ('is_passed', 'last_attempt')
     readonly_fields = ('last_attempt',)
 
@@ -99,7 +113,7 @@ class QCMOptionAdmin(admin.ModelAdmin):
 
 # QCMAttempt Admin
 class QCMAttemptAdmin(admin.ModelAdmin):
-    list_display = ('user', 'qcm', 'score', 'points_earned', 'is_passed', 'attempt_number')
+    list_display = ('user', 'qcm', 'score', 'points_earned', 'is_passed', 'attempt_number', 'time_taken', 'started_at')
     list_filter = ('is_passed', 'started_at')
     readonly_fields = ('started_at', 'completed_at')
     search_fields = ('user__username', 'qcm__question')

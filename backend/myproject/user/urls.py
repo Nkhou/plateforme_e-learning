@@ -10,7 +10,7 @@ from .views import (
 from .views import (
     AdminDashboardView, UserManagementView, CourseStatusManagementView,
     SystemAnalyticsView, ContentManagementView, UserDetailView,
-    SystemHealthView, RecommendedCoursesView, UpdatePDFContentView, UpdateVideoContentView, UpdateQCMContentView
+    SystemHealthView, RecommendedCoursesView, UpdatePDFContentView, UpdateVideoContentView, UpdateQCMContentView, ModuleStatusUpdateView, ContentStatusUpdateView
 )
 from .views import SubmitQCM
 
@@ -55,6 +55,12 @@ urlpatterns = [
     path('courses/<int:course_id>/modules/<int:module_id>/contents/pdf/', views.CreatePDFContentView.as_view(), name='create-pdf-content'),
     path('courses/<int:course_id>/modules/<int:module_id>/contents/video/', views.CreateVideoContentView.as_view(), name='create-video-content'),
     path('courses/<int:course_id>/modules/<int:module_id>/contents/qcm/', views.CreateQCMContentView.as_view(), name='create-qcm-content'),
+     path('courses/<int:course_id>/modules/<int:module_id>/update-status/', 
+         views.ModuleStatusUpdateView.as_view(), name='module-update-status'),
+    
+    # Content status management  
+    path('courses/<int:course_id>/contents/<int:content_id>/update-status/', 
+         views.ContentStatusUpdateView.as_view(), name='content-update-status'),
     # Content completion endpoints
     path('courses/<int:pk>/completeVideo/', views.MarkVideoCompletedView.as_view(), name='mark_video_completed'),
     path('courses/<int:pk>/completePdf/', views.MarkPDFCompletedView.as_view(), name='mark_pdf_completed'),

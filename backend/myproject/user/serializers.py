@@ -198,19 +198,18 @@ class QCMSerializer(serializers.ModelSerializer):
 class ModuleSerializer(serializers.ModelSerializer):
     contents = serializers.SerializerMethodField()
     content_stats = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = Module
-        fields = ['id', 'title', 'description', 'order', 'contents', 'content_stats']
+        fields = ['id', 'title', 'description', 'order', 'status', 'status_display', 'contents', 'content_stats']
     
     def get_contents(self, obj):
-        # Use prefetched data if available for optimal performance
-        print('HELLOOOOOOOOO')
         if hasattr(obj, 'prefetched_contents'):
             contents = obj.prefetched_contents
         else:
             contents = obj.contents.all().order_by('order')
-        print('HELLOOOOOOOOO')
+        
         request = self.context.get('request')
         subscription = self.context.get('subscription')
         
@@ -238,10 +237,11 @@ from django.db.models import Avg
 class ModuleWithContentsSerializer(serializers.ModelSerializer):
     contents = serializers.SerializerMethodField()
     content_stats = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = Module
-        fields = ['id', 'title', 'description', 'order', 'contents', 'content_stats']
+        fields = ['id', 'title', 'description', 'order', 'status', 'status_display', 'contents', 'content_stats']
     
     def get_contents(self, obj):
         contents = obj.contents.all().order_by('order')
@@ -253,10 +253,10 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
             many=True, 
             context={'request': request, 'subscription': subscription}
         ).data
+    
     def get_content_stats(self, obj):
         course = obj.course
         
-        # Use Subscription model instead of Enrollment
         total_enrolled = Subscription.objects.filter(course=course, is_active=True).count()
         total_completed = Subscription.objects.filter(
             course=course, 
@@ -265,13 +265,12 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
         ).count()
         
         total_modules = Module.objects.filter(course=course).count()
-        total_contents_course = CourseContent.objects.filter(module__course=course).count()  # Renamed
+        total_contents_course = CourseContent.objects.filter(module__course=course).count()
     
         completion_rate = 0
         if total_enrolled > 0:
             completion_rate = round((total_completed / total_enrolled) * 100, 2)
         
-        # Calculate average progress from Subscription model
         progress_stats = Subscription.objects.filter(
             course=course, 
             is_active=True
@@ -280,7 +279,6 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
         )
         average_progress = progress_stats['avg_progress'] or 0
         
-        # Get content type counts for THIS MODULE only
         if hasattr(obj, 'prefetched_contents'):
             contents = obj.prefetched_contents
         else:
@@ -289,31 +287,33 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
         pdf_count = contents.filter(content_type__name='pdf').count()
         video_count = contents.filter(content_type__name='Video').count()
         qcm_count = contents.filter(content_type__name='QCM').count()
-        total_contents_module = contents.count()  # Module-specific count
+        total_contents_module = contents.count()
         
         return {
             'total_users_enrolled': total_enrolled,
             'total_users_completed': total_completed,
             'total_courses_completed': total_completed,
             'total_modules': total_modules,
-            'total_contents_course': total_contents_course,  # Course total
+            'total_contents_course': total_contents_course,
             'completion_rate': completion_rate,
             'average_progress': round(average_progress, 2),
-            'total_contents_module': total_contents_module,  # Module total
+            'total_contents_module': total_contents_module,
             'pdf_count': pdf_count,
             'video_count': video_count,
             'qcm_count': qcm_count,
         }
+
 class CourseContentSerializer(serializers.ModelSerializer):
     video_content = VideoContentSerializer(read_only=True)
     pdf_content = PDFContentSerializer(read_only=True)
     qcm = QCMSerializer(read_only=True)
     content_type_name = serializers.CharField(source='content_type.name', read_only=True)
     is_completed = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = CourseContent
-        fields = ['id', 'title', 'caption', 'order', 'content_type_name', 
+        fields = ['id', 'title', 'caption', 'order', 'status', 'status_display', 'content_type_name', 
                  'video_content', 'pdf_content', 'qcm', 'is_completed']
     
     def get_is_completed(self, obj):
@@ -322,13 +322,8 @@ class CourseContentSerializer(serializers.ModelSerializer):
 
         if not user or not user.is_authenticated:
             return False
+        
         if obj.content_type.name.lower() == 'qcm' and obj.qcm:
-            print("------------------", QCMCompletion.objects.filter(
-                subscription__user=user,
-                subscription__course=obj.module.course,
-                qcm=obj.qcm,
-                is_passed=True
-            ).exists())
             return QCMCompletion.objects.filter(
                 subscription__user=user,
                 subscription__course=obj.module.course,
@@ -336,7 +331,6 @@ class CourseContentSerializer(serializers.ModelSerializer):
                 is_passed=True
             ).exists()
 
-        # For video or PDF
         subscription = self.context.get('subscription')
         if not subscription:
             subscription = Subscription.objects.filter(
@@ -357,6 +351,7 @@ class CourseSerializer(serializers.ModelSerializer):
     creator_username = serializers.SerializerMethodField()
     creator_first_name = serializers.SerializerMethodField()
     creator_last_name = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = Course
@@ -366,8 +361,10 @@ class CourseSerializer(serializers.ModelSerializer):
             'description', 
             'image_url', 
             'department', 
+            'status',
+            'status_display',
             'created_at',
-            'progress_percentage',  # This will now be available
+            'progress_percentage',
             'is_subscribed',
             'creator_username',
             'creator_first_name',
@@ -386,7 +383,6 @@ class CourseSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             try:
-                # Get user's subscription for this course
                 subscription = Subscription.objects.filter(
                     user=request.user, 
                     course=obj, 
@@ -424,17 +420,17 @@ class CourseDetailSerializer(serializers.ModelSerializer):
     modules = serializers.SerializerMethodField()
     image_url = serializers.SerializerMethodField()
     creator_name = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = Course
-        fields = ['id', 'title_of_course', 'description', 'department', 'image_url', 
-                 'creator_name', 'created_at', 'modules']
+        fields = ['id', 'title_of_course', 'description', 'department', 'status', 'status_display', 
+                 'image_url', 'creator_name', 'created_at', 'modules']
     
     def get_modules(self, obj):
         modules = obj.modules.all().order_by('order')
         request = self.context.get('request')
         
-        # Get user subscription for progress tracking
         subscription = None
         user = getattr(request, 'user', None)
         if user and user.is_authenticated:
@@ -473,6 +469,7 @@ class CourseCreateSerializer(serializers.ModelSerializer):
             'title_of_course', 
             'description', 
             'department',
+            'status',
             'image',
             'creator_username',
             'creator_first_name',
@@ -767,7 +764,7 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CourseContent
         fields = [
-            'title', 'caption', 'order', 'content_type',
+            'title', 'caption', 'order', 'status', 'content_type',
             'pdf_file', 'video_file', 'qcm_question', 'qcm_options',
             'points', 'passing_score', 'max_attempts', 'time_limit'
         ]
@@ -787,14 +784,12 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
             if not data.get('qcm_options') or len(data.get('qcm_options', [])) < 2:
                 raise serializers.ValidationError("At least 2 QCM options are required")
             
-            # Additional QCM validation
             qcm_options = data.get('qcm_options', [])
             correct_options = sum(1 for option in qcm_options if option.get('is_correct', False))
             
             if correct_options == 0:
                 raise serializers.ValidationError("At least one QCM option must be correct")
         
-        # Validate that only one content type specific field is provided
         content_specific_fields = ['pdf_file', 'video_file', 'qcm_question']
         provided_fields = [field for field in content_specific_fields if data.get(field)]
         
@@ -807,12 +802,10 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
         content_type_name = validated_data.pop('content_type')
         content_type = get_object_or_404(ContentType, name=content_type_name)
         
-        # Get module from context - THIS IS THE KEY FIX
         module = self.context.get('module')
         if not module:
             raise serializers.ValidationError("Module is required to create content")
         
-        # Extract content-specific data
         pdf_file = validated_data.pop('pdf_file', None)
         video_file = validated_data.pop('video_file', None)
         qcm_question = validated_data.pop('qcm_question', None)
@@ -822,14 +815,12 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
         max_attempts = validated_data.pop('max_attempts', 3)
         time_limit = validated_data.pop('time_limit', 0)
 
-        # Create the base course content WITH THE CORRECT MODULE
         course_content = CourseContent.objects.create(
-            module=module,  # ← This ensures content goes to the right module
+            module=module,
             content_type=content_type,
             **validated_data
         )
 
-        # Create specific content based on type
         if content_type_name == 'pdf' and pdf_file:
             PDFContent.objects.create(course_content=course_content, pdf_file=pdf_file)
         
@@ -853,7 +844,7 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
 class ModuleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module
-        fields = ['title', 'description', 'order']
+        fields = ['title', 'description', 'order', 'status']
     
     def create(self, validated_data):
         course = self.context.get('course')

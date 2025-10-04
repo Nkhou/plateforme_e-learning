@@ -22,18 +22,6 @@ interface CourseDetailData {
     updated_at: string;
 }
 
-interface Module {
-    id: number;
-    title: string;
-    description: string;
-    order: number;
-    course: number;
-    created_at: string;
-    updated_at: string;
-    contents?: CourseContent[];
-    content_stats?: CourseStats;
-}
-
 interface QCMOption {
     id: number;
     text: string;
@@ -59,6 +47,8 @@ export interface CourseContent {
     content_type: string;
     content_type_name: string;
     module: number;
+    status: number; // 0: Draft, 1: Active, 2: Archived
+    status_display: string;
     pdf_content?: {
         id: number;
         pdf_file: string;
@@ -105,6 +95,38 @@ interface QuizAnswer {
     selected_options: number[];
     is_correct: boolean;
 }
+
+interface Module {
+    id: number;
+    title: string;
+    description: string;
+    order: number;
+    course: number;
+    status: number; // 0: Draft, 1: Active, 2: Archived
+    status_display: string;
+    created_at: string;
+    updated_at: string;
+    contents?: CourseContent[];
+    content_stats?: CourseStats;
+}
+
+// Status Badge Component
+const StatusBadge: React.FC<{ status: number; statusDisplay: string }> = ({ status, statusDisplay }) => {
+    const getStatusColor = (status: number) => {
+        switch (status) {
+            case 0: return 'bg-warning text-dark'; // Draft
+            case 1: return 'bg-success text-white'; // Active
+            case 2: return 'bg-secondary text-white'; // Archived
+            default: return 'bg-light text-dark';
+        }
+    };
+
+    return (
+        <span className={`badge ${getStatusColor(status)}`}>
+            {statusDisplay}
+        </span>
+    );
+};
 
 const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCourse }) => {
     const [course, setCourse] = useState<CourseDetailData | null>(null);
@@ -213,13 +235,62 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         }
     };
 
+    // Status Management Functions
+    const updateModuleStatus = async (moduleId: number, newStatus: number) => {
+        try {
+            const response = await api.patch(
+                `courses/${courseId}/modules/${moduleId}/update-status/`,
+                { status: newStatus }
+            );
+            
+            setModules(modules.map(module => 
+                module.id === moduleId 
+                    ? { ...module, status: newStatus, status_display: response.data.module.status_display }
+                    : module
+            ));
+            
+            alert(`Module status updated to ${response.data.module.status_display}`);
+            return response.data;
+        } catch (error) {
+            console.error('Error updating module status:', error);
+            alert('Failed to update module status');
+            throw error;
+        }
+    };
+
+    const updateContentStatus = async (contentId: number, newStatus: number) => {
+        try {
+            const response = await api.patch(
+                `courses/${courseId}/contents/${contentId}/update-status/`,
+                { status: newStatus }
+            );
+            
+            setModules(modules.map(module => ({
+                ...module,
+                contents: module.contents?.map(content => 
+                    content.id === contentId 
+                        ? { ...content, status: newStatus, status_display: response.data.content.status_display }
+                        : content
+                ) || []
+            })));
+            
+            alert(`Content status updated to ${response.data.content.status_display}`);
+            return response.data;
+        } catch (error) {
+            console.error('Error updating content status:', error);
+            alert('Failed to update content status');
+            throw error;
+        }
+    };
+
     const handleCreateModule = async () => {
         try {
             if (!courseId) return;
 
             const response = await api.post(`courses/${courseId}/modules/`, {
                 ...newModuleData,
-                order: modules.length + 1
+                order: modules.length + 1,
+                status: 0 // Draft by default
             });
 
             setModules([...modules, { ...response.data, contents: [] }]);
@@ -257,17 +328,17 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     };
 
     const handleDeleteModule = async (moduleId: number) => {
-        if (!window.confirm('Are you sure you want to delete this module? All contents within will also be deleted.')) {
+        if (!window.confirm('Are you sure you want to archive this module? It will be hidden from students but preserved for reporting.')) {
             return;
         }
 
         try {
-            await api.delete(`courses/${courseId}/modules/${moduleId}/`);
+            await updateModuleStatus(moduleId, 2); // Archive status
             setModules(modules.filter(module => module.id !== moduleId));
-            alert('Module deleted successfully!');
+            alert('Module archived successfully!');
         } catch (error) {
-            console.error('Failed to delete module:', error);
-            alert('Failed to delete module. Please try again.');
+            console.error('Failed to archive module:', error);
+            alert('Failed to archive module. Please try again.');
         }
     };
 
@@ -285,6 +356,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 formData.append('caption', newContentData.caption);
                 formData.append('order', '1');
                 formData.append('module', selectedModule.toString());
+                formData.append('status', '1'); // Active by default
 
                 if (newContentData.file) {
                     formData.append('pdf_file', newContentData.file);
@@ -301,6 +373,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 formData.append('caption', newContentData.caption);
                 formData.append('order', '1');
                 formData.append('module', selectedModule.toString());
+                formData.append('status', '1'); // Active by default
 
                 if (newContentData.file) {
                     formData.append('video_file', newContentData.file);
@@ -317,6 +390,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     caption: newContentData.caption,
                     order: 1,
                     module: selectedModule,
+                    status: 1, // Active by default
                     qcm_question: newContentData.questions[0].question,
                     question_type: newContentData.questions[0].question_type,
                     qcm_options: newContentData.questions[0].options.map((option: any) => ({
@@ -372,83 +446,122 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     };
 
     const handleUpdateContent = async () => {
-    try {
-        if (!selectedContent || !courseId) return;
+        try {
+            if (!selectedContent || !courseId) return;
 
-        let endpoint = '';
-        let requestData: any;
+            let endpoint = '';
+            let requestData: any;
 
-        const contentType = selectedContent.content_type_name || selectedContent.content_type;
+            const contentType = selectedContent.content_type_name || selectedContent.content_type;
 
-        // FIX: Use consistent case comparison
-        if (contentType.toLowerCase() === 'pdf') {
-            endpoint = `courses/${courseId}/contents/pdf/${selectedContent.id}/`;
-            const formData = new FormData();
-            formData.append('title', newContentData.title);
-            formData.append('caption', newContentData.caption);
+            if (contentType.toLowerCase() === 'pdf') {
+                endpoint = `courses/${courseId}/contents/pdf/${selectedContent.id}/`;
+                const formData = new FormData();
+                formData.append('title', newContentData.title);
+                formData.append('caption', newContentData.caption);
 
-            if (newContentData.file) {
-                formData.append('pdf_file', newContentData.file);
+                if (newContentData.file) {
+                    formData.append('pdf_file', newContentData.file);
+                }
+
+                requestData = formData;
+            } else if (contentType.toLowerCase() === 'qcm') {
+                endpoint = `courses/${courseId}/contents/qcm/${selectedContent.id}/`;
+                requestData = {
+                    title: newContentData.title,
+                    caption: newContentData.caption,
+                    qcm_question: newContentData.questions[0].question,
+                    question_type: newContentData.questions[0].question_type,
+                    qcm_options: newContentData.questions[0].options.map((option: any) => ({
+                        text: option.text,
+                        is_correct: option.is_correct
+                    })),
+                    points: newContentData.points,
+                    passing_score: newContentData.passing_score,
+                    max_attempts: newContentData.max_attempts,
+                    time_limit: newContentData.time_limit
+                };
+            } else if (contentType.toLowerCase() === 'video') {
+                endpoint = `courses/${courseId}/contents/video/${selectedContent.id}/`;
+                const formData = new FormData();
+                formData.append('title', newContentData.title);
+                formData.append('caption', newContentData.caption);
+
+                if (newContentData.file) {
+                    formData.append('video_file', newContentData.file);
+                }
+
+                requestData = formData;
             }
 
-            requestData = formData;
-        } else if (contentType.toLowerCase() === 'qcm') { // Changed to lowercase comparison
-            endpoint = `courses/${courseId}/contents/qcm/${selectedContent.id}/`;
-            requestData = {
-                title: newContentData.title,
-                caption: newContentData.caption,
-                qcm_question: newContentData.questions[0].question,
-                question_type: newContentData.questions[0].question_type,
-                qcm_options: newContentData.questions[0].options.map((option: any) => ({
-                    text: option.text,
-                    is_correct: option.is_correct
-                })),
-                points: newContentData.points,
-                passing_score: newContentData.passing_score,
-                max_attempts: newContentData.max_attempts,
-                time_limit: newContentData.time_limit
-            };
-        } else if (contentType.toLowerCase() === 'video') { // Add video support for updates
-            endpoint = `courses/${courseId}/contents/video/${selectedContent.id}/`;
-            const formData = new FormData();
-            formData.append('title', newContentData.title);
-            formData.append('caption', newContentData.caption);
-
-            if (newContentData.file) {
-                formData.append('video_file', newContentData.file);
+            if (!endpoint) {
+                alert(`Update not supported for content type: ${contentType}`);
+                return;
             }
 
-            requestData = formData;
-        }
+            let response;
+            if (contentType.toLowerCase() === 'qcm') {
+                response = await api.put(endpoint, requestData, {
+                    headers: { 'Content-Type': 'application/json' },
+                });
+            } else {
+                response = await api.put(endpoint, requestData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+            }
 
-        // FIX: Add proper error handling for unsupported content types
-        if (!endpoint) {
-            alert(`Update not supported for content type: ${contentType}`);
-            return;
-        }
+            alert('Content updated successfully!');
+            await fetchModules();
 
-        let response;
-        if (contentType.toLowerCase() === 'qcm') {
-            response = await api.put(endpoint, requestData, {
-                headers: { 'Content-Type': 'application/json' },
+            setShowNewContentModal(false);
+            setEditMode(false);
+            setSelectedContent(null);
+            setNewContentData({
+                title: '',
+                caption: '',
+                file: null,
+                questions: [{
+                    question: '',
+                    question_type: 'single',
+                    options: [
+                        { text: '', is_correct: false },
+                        { text: '', is_correct: false }
+                    ]
+                }],
+                points: 1,
+                passing_score: 80,
+                max_attempts: 3,
+                time_limit: 0
             });
-        } else {
-            response = await api.put(endpoint, requestData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+
+        } catch (error: any) {
+            console.error('Failed to update content:', error);
+            console.error('Error details:', error.response?.data);
+            alert(`Failed to update content: ${error.response?.data?.message || error.message}`);
         }
+    };
 
-        alert('Content updated successfully!');
-        await fetchModules();
+    const handleContentClick = (content: CourseContent) => {
+        setViewContentModal(content);
+    };
 
-        setShowNewContentModal(false);
-        setEditMode(false);
-        setSelectedContent(null);
+    const handleEditContent = (content: CourseContent) => {
+        setSelectedContent(content);
+        const contentType = content.content_type_name || content.content_type;
+        
+        const normalizedType = contentType.toLowerCase() === 'qcm' ? 'QCM' : 
+                              contentType.toLowerCase() === 'pdf' ? 'pdf' : 
+                              contentType.toLowerCase() === 'video' ? 'Video' : null;
+        
         setNewContentData({
-            title: '',
-            caption: '',
+            title: content.title,
+            caption: content.caption || '',
             file: null,
-            questions: [{
+            questions: content.qcm ? [{
+                question: content.qcm.question,
+                question_type: content.qcm.question_type || 'single',
+                options: content.qcm.options
+            }] : [{
                 question: '',
                 question_type: 'single',
                 options: [
@@ -456,57 +569,15 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     { text: '', is_correct: false }
                 ]
             }],
-            points: 1,
-            passing_score: 80,
-            max_attempts: 3,
-            time_limit: 0
+            points: content.qcm?.points || 1,
+            passing_score: content.qcm?.passing_score || 80,
+            max_attempts: content.qcm?.max_attempts || 3,
+            time_limit: content.qcm?.time_limit || 0
         });
-
-    } catch (error: any) { // Added error type for better debugging
-        console.error('Failed to update content:', error);
-        console.error('Error details:', error.response?.data);
-        alert(`Failed to update content: ${error.response?.data?.message || error.message}`);
-    }
-};
-
-    const handleContentClick = (content: CourseContent) => {
-        setViewContentModal(content);
+        setShowNewContentModal(true);
+        setEditMode(true);
+        setSelectedContentType(normalizedType as 'pdf' | 'Video' | 'QCM');
     };
-
-    const handleEditContent = (content: CourseContent) => {
-    setSelectedContent(content);
-    const contentType = content.content_type_name || content.content_type;
-    
-    // FIX: Normalize content type to match your state
-    const normalizedType = contentType.toLowerCase() === 'qcm' ? 'QCM' : 
-                          contentType.toLowerCase() === 'pdf' ? 'pdf' : 
-                          contentType.toLowerCase() === 'video' ? 'Video' : null;
-    
-    setNewContentData({
-        title: content.title,
-        caption: content.caption || '',
-        file: null,
-        questions: content.qcm ? [{
-            question: content.qcm.question,
-            question_type: content.qcm.question_type || 'single',
-            options: content.qcm.options
-        }] : [{
-            question: '',
-            question_type: 'single',
-            options: [
-                { text: '', is_correct: false },
-                { text: '', is_correct: false }
-            ]
-        }],
-        points: content.qcm?.points || 1,
-        passing_score: content.qcm?.passing_score || 80,
-        max_attempts: content.qcm?.max_attempts || 3,
-        time_limit: content.qcm?.time_limit || 0
-    });
-    setShowNewContentModal(true);
-    setEditMode(true);
-    setSelectedContentType(normalizedType as 'pdf' | 'Video' | 'QCM');
-};
 
     const handleViewContentEdit = () => {
         if (viewContentModal) {
@@ -526,13 +597,13 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     };
 
     const handleDeleteContent = async (contentId: number, moduleId: number) => {
-        if (!window.confirm('Are you sure you want to delete this content?')) {
+        if (!window.confirm('Are you sure you want to archive this content? It will be hidden from students but preserved for reporting.')) {
             return;
         }
 
         try {
-            await api.delete(`courses/${courseId}/contents/${contentId}/`);
-
+            await updateContentStatus(contentId, 2); // Archive status
+            
             setModules(modules.map(module => {
                 if (module.id === moduleId) {
                     return {
@@ -544,9 +615,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             }));
 
             setShowNewContentModal(false);
+            alert('Content archived successfully!');
         } catch (error) {
-            console.error('Failed to delete content:', error);
-            alert('Failed to delete content');
+            console.error('Failed to archive content:', error);
+            alert('Failed to archive content');
         }
     };
 
@@ -629,6 +701,113 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             console.error('Failed to submit quiz results:', error);
             alert('Failed to submit quiz results');
         }
+    };
+
+    // Status Dropdown Components
+    const ModuleStatusDropdown: React.FC<{ module: Module }> = ({ module }) => {
+        const [showDropdown, setShowDropdown] = useState(false);
+
+        const handleStatusChange = async (newStatus: number) => {
+            try {
+                await updateModuleStatus(module.id, newStatus);
+                setShowDropdown(false);
+            } catch (error) {
+                // Error handled in updateModuleStatus
+            }
+        };
+
+        return (
+            <div className="dropdown">
+                <button 
+                    className="btn btn-sm btn-outline-secondary dropdown-toggle"
+                    type="button"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                >
+                    <StatusBadge status={module.status} statusDisplay={module.status_display} />
+                </button>
+                {showDropdown && (
+                    <div className="dropdown-menu show">
+                        <button 
+                            className="dropdown-item" 
+                            onClick={() => handleStatusChange(0)}
+                            disabled={module.status === 0}
+                        >
+                            <span className="badge bg-warning text-dark me-2">Draft</span>
+                            Set as Draft
+                        </button>
+                        <button 
+                            className="dropdown-item" 
+                            onClick={() => handleStatusChange(1)}
+                            disabled={module.status === 1}
+                        >
+                            <span className="badge bg-success me-2">Active</span>
+                            Set as Active
+                        </button>
+                        <button 
+                            className="dropdown-item" 
+                            onClick={() => handleStatusChange(2)}
+                            disabled={module.status === 2}
+                        >
+                            <span className="badge bg-secondary me-2">Archived</span>
+                            Set as Archived
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const ContentStatusDropdown: React.FC<{ content: CourseContent; moduleId: number }> = ({ content, moduleId }) => {
+        const [showDropdown, setShowDropdown] = useState(false);
+
+        const handleStatusChange = async (newStatus: number) => {
+            try {
+                await updateContentStatus(content.id, newStatus);
+                setShowDropdown(false);
+            } catch (error) {
+                // Error handled in updateContentStatus
+            }
+        };
+
+        return (
+            <div className="dropdown">
+                <button 
+                    className="btn btn-sm btn-outline-secondary dropdown-toggle"
+                    type="button"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                >
+                    <StatusBadge status={content.status} statusDisplay={content.status_display} />
+                </button>
+                {showDropdown && (
+                    <div className="dropdown-menu show">
+                        <button 
+                            className="dropdown-item" 
+                            onClick={() => handleStatusChange(0)}
+                            disabled={content.status === 0}
+                        >
+                            <span className="badge bg-warning text-dark me-2">Draft</span>
+                            Set as Draft
+                        </button>
+                        <button 
+                            className="dropdown-item" 
+                            onClick={() => handleStatusChange(1)}
+                            disabled={content.status === 1}
+                        >
+                            <span className="badge bg-success me-2">Active</span>
+                            Set as Active
+                        </button>
+                        <button 
+                            className="dropdown-item" 
+                            onClick={() => handleStatusChange(2)}
+                            disabled={content.status === 2}
+                        >
+                            <span className="badge bg-secondary me-2">Archived</span>
+                            Set as Archived
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
     };
 
     const overallCourseStats = modules.reduce((acc: CourseStats, module) => {
@@ -792,7 +971,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                 <div className="d-flex align-items-center">
                                                                     <i className="fas fa-folder-open me-3 text-primary fs-4"></i>
                                                                     <div>
-                                                                        <h6 className="mb-1">Module {moduleIndex + 1}: {module.title}</h6>
+                                                                        <div className="d-flex align-items-center gap-2 mb-1">
+                                                                            <h6 className="mb-0">Module {moduleIndex + 1}: {module.title}</h6>
+                                                                            <StatusBadge status={module.status} statusDisplay={module.status_display} />
+                                                                        </div>
                                                                         {module.description && (
                                                                             <small className="text-muted">{module.description}</small>
                                                                         )}
@@ -803,6 +985,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                 </div>
                                                             </button>
                                                             <div className="btn-group ms-3">
+                                                                <ModuleStatusDropdown module={module} />
                                                                 <button className="btn btn-sm btn-outline-secondary" onClick={() => handleModuleClick(module)}>
                                                                     <i className="fas fa-edit"></i>
                                                                 </button>
@@ -837,7 +1020,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                                         <div className="d-flex align-items-start">
                                                                                             <i className={`${getContentIcon(content.content_type_name || content.content_type)} me-3 fs-3 mt-1`}></i>
                                                                                             <div className="flex-grow-1">
-                                                                                                <h6 className="card-title mb-1">{content.title}</h6>
+                                                                                                <div className="d-flex align-items-center gap-2 mb-1">
+                                                                                                    <h6 className="card-title mb-0">{content.title}</h6>
+                                                                                                    <StatusBadge status={content.status} statusDisplay={content.status_display} />
+                                                                                                </div>
                                                                                                 {content.caption && (
                                                                                                     <p className="card-text text-muted small mb-2">{content.caption}</p>
                                                                                                 )}
@@ -846,6 +1032,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                                                         {content.content_type_name || content.content_type} • Order: {content.order}
                                                                                                     </small>
                                                                                                     <div onClick={(e) => e.stopPropagation()}>
+                                                                                                        <ContentStatusDropdown content={content} moduleId={module.id} />
                                                                                                         {content.content_type_name === 'qcm' && (
                                                                                                             <button
                                                                                                                 className="btn btn-sm btn-warning me-1"
