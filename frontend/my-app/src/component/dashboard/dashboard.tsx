@@ -19,6 +19,8 @@ interface Course {
     department?: string;
     is_subscribed?: boolean;
     progress_percentage?: number;
+    status?: number; // 0: Draft, 1: Active, 2: Archived
+    status_display?: string;
 }
 
 const Dashboard = () => {
@@ -33,6 +35,11 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [courseFilter, setCourseFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
+
+    // Filter only active courses (status = 1)
+    const filterActiveCourses = (courses: Course[]): Course[] => {
+        return courses.filter(course => course.status === 1);
+    };
 
     // Fetch courses from backend
     const fetchCourses = async () => {
@@ -49,8 +56,12 @@ const Dashboard = () => {
             const recommendedRes = await api.get('courses/recommended/');
             console.log('++++++++++++++++++++++++++++++Recommended courses response:', recommendedRes.data);
 
-            setMyCourses(myCoursesRes.data);
-            setRecommendedCourses(recommendedRes.data);
+            // Filter to show only active courses
+            const activeMyCourses = filterActiveCourses(myCoursesRes.data);
+            const activeRecommendedCourses = filterActiveCourses(recommendedRes.data);
+
+            setMyCourses(activeMyCourses);
+            setRecommendedCourses(activeRecommendedCourses);
             setError('');
         } catch (error: any) {
             console.error("Detailed error information:", {
@@ -94,9 +105,11 @@ const Dashboard = () => {
     const handleCloseCourseDetail = () => {
         setSelectedCourseId(null);
         setShowCourseDetail(false);
+        // Refresh courses when returning from course detail
+        fetchCourses();
     };
 
-    // Filter courses based on progress
+    // Filter courses based on progress (only active courses)
     const filteredMyCourses = myCourses.filter(course => {
         switch (courseFilter) {
             case 'completed':
@@ -109,8 +122,21 @@ const Dashboard = () => {
         }
     });
 
-    if (loading) return <p>Loading...</p>;
-    if (error) return <p className="alert alert-danger">{error}</p>;
+    if (loading) return (
+        <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
+            <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    );
+    
+    if (error) return (
+        <div className="container mt-4">
+            <div className="alert alert-danger" role="alert">
+                {error}
+            </div>
+        </div>
+    );
 
     return (
         <>
@@ -118,7 +144,10 @@ const Dashboard = () => {
                 <div className="dashboard-wrapper">
                     {/* My Subscribed Courses Section */}
                     <div className="d-flex justify-content-between align-items-center mb-4">
-                        <h4>My Courses</h4>
+                        <div>
+                            <h4>My Courses</h4>
+                            <small className="text-muted">Showing only active courses</small>
+                        </div>
                         <div className="btn-group">
                             <button 
                                 className={`btn btn-sm ${courseFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
@@ -173,7 +202,7 @@ const Dashboard = () => {
                                                     <small className="text-muted">
                                                         {course.progress_percentage === 100 ? 'Completed' : `${course.progress_percentage || 0}% Complete`}
                                                     </small>
-                                                    <div className="badge badge-success">Subscribed</div>
+                                                    <div className="badge bg-success">Active</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -185,16 +214,21 @@ const Dashboard = () => {
                     ) : (
                         <div className="alert alert-info">
                             {courseFilter === 'completed' 
-                                ? "You haven't completed any courses yet."
+                                ? "You haven't completed any active courses yet."
                                 : courseFilter === 'in-progress'
-                                ? "You don't have any courses in progress."
-                                : "You haven't subscribed to any courses yet. Check out the recommended courses below!"
+                                ? "You don't have any active courses in progress."
+                                : "You haven't subscribed to any active courses yet. Check out the recommended courses below!"
                             }
                         </div>
                     )}
 
                     {/* Recommended Courses by Department Section */}
-                    <h4 className="mb-4 mt-5">Recommended Courses for Your Department</h4>
+                    <div className="d-flex justify-content-between align-items-center mb-4 mt-5">
+                        <div>
+                            <h4>Recommended Courses for Your Department</h4>
+                            <small className="text-muted">Showing only active courses</small>
+                        </div>
+                    </div>
                     {recommendedCourses.length > 0 ? (
                         <div className="carousel-container">
                             <button className="carousel-nav left" onClick={() => scrollLeft(trackRef1, setCurrentPosition1)}>&lt;</button>
@@ -215,11 +249,14 @@ const Dashboard = () => {
                                                 <small className="text-muted">
                                                     By: {course.creator_first_name} {course.creator_last_name}
                                                 </small>
-                                                {course.is_subscribed ? (
-                                                    <div className="badge badge-success">Subscribed</div>
-                                                ) : (
-                                                    <div className="badge badge-primary">Available</div>
-                                                )}
+                                                <div className="d-flex justify-content-between align-items-center mt-2">
+                                                    {course.is_subscribed ? (
+                                                        <div className="badge bg-success">Subscribed</div>
+                                                    ) : (
+                                                        <div className="badge bg-primary">Available</div>
+                                                    )}
+                                                    <div className="badge bg-info">Active</div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -229,7 +266,7 @@ const Dashboard = () => {
                         </div>
                     ) : (
                         <div className="alert alert-info">
-                            No recommended courses available for your department at the moment.
+                            No active recommended courses available for your department at the moment.
                         </div>
                     )}
                 </div>

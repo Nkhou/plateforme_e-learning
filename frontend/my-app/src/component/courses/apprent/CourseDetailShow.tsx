@@ -1,4 +1,3 @@
-// CourseDetail.tsx
 import React, { useEffect, useState } from 'react';
 import api from '../../../api/api';
 
@@ -28,6 +27,8 @@ interface Module {
   order: number;
   is_completed: boolean;
   is_locked: boolean;
+  status: number; // 0: Draft, 1: Active, 2: Archived
+  status_display: string;
   contents: CourseContent[];
 }
 
@@ -39,6 +40,8 @@ export interface CourseContent {
   content_type_name: string;
   is_completed: boolean;
   is_locked: boolean;
+  status: number; // 0: Draft, 1: Active, 2: Archived
+  status_display: string;
   pdf_content?: {
     pdf_file: string;
     is_completed: boolean;
@@ -137,9 +140,24 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
   const [expandedModules, setExpandedModules] = useState<number[]>([]);
   const [videoError, setVideoError] = useState(false);
 
-  // Function to calculate content locking logic
-  const calculateContentLockStatus = (modules: any[], isActive: boolean) => {
-    return modules.map((module: any, moduleIndex: number) => {
+  // Filter only active modules and active contents
+  const filterActiveModulesAndContents = (modules: Module[]) => {
+    return modules
+      .filter(module => module.status === 1) // Only active modules (status 1)
+      .map(module => ({
+        ...module,
+        contents: module.contents
+          ? module.contents.filter(content => content.status === 1) // Only active contents
+          : []
+      }))
+      .filter(module => module.contents.length > 0); // Only modules that have active contents
+  };
+
+  // Function to calculate content locking logic for active content only
+  const calculateContentLockStatus = (modules: Module[], isActive: boolean) => {
+    const activeModules = filterActiveModulesAndContents(modules);
+    
+    return activeModules.map((module: Module, moduleIndex: number) => {
       const moduleContents = module.contents || [];
       
       // Sort contents by order
@@ -166,7 +184,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         };
       });
 
-      // Calculate module completion status (all contents must be completed)
+      // Calculate module completion status (all active contents must be completed)
       const moduleCompleted = processedContents.length > 0 && 
         processedContents.every((content: CourseContent) => content.is_completed);
       
@@ -175,7 +193,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       // 1. User is not subscribed OR
       // 2. It's not the first module AND previous module is not completed
       const isFirstModule = moduleIndex === 0;
-      const prevModule = moduleIndex > 0 ? modules[moduleIndex - 1] : null;
+      const prevModule = moduleIndex > 0 ? activeModules[moduleIndex - 1] : null;
       const isPrevModuleDone = prevModule ? 
         prevModule.contents.every((c: CourseContent) => c.is_completed) : true;
       
@@ -217,11 +235,11 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           console.warn('Subscription fetch failed:', subErr);
         }
         
-        // Process modules and contents with proper locking logic
+        // Process modules and contents with proper locking logic - only active content
         const isActive = subscriptionData?.is_active || false;
         const processedModules = calculateContentLockStatus(rawModules, isActive);
 
-        console.log('Processed modules:', processedModules);
+        console.log('Processed modules (active only):', processedModules);
         setModules(processedModules);
       } catch (err: any) {
         console.error('Failed to fetch course data:', err);
@@ -492,12 +510,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               <h5>{activeContent.title}</h5>
               {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
               
-              {/* Debug info */}
-              <div className="alert alert-info small">
-                <strong>Debug:</strong> Original URL: {activeContent.pdf_content?.pdf_file}<br/>
-                <strong>Processed URL:</strong> {pdfUrl}
-              </div>
-              
               {pdfUrl ? (
                 <div className="mt-4">
                   <div className="alert alert-info">
@@ -549,13 +561,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               <h5>{activeContent.title}</h5>
               {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
               
-              {/* Debug info */}
-              <div className="alert alert-info small">
-                <strong>Debug:</strong> Original URL: {activeContent.video_content?.video_file}<br/>
-                <strong>Processed URL:</strong> {videoUrl}<br/>
-                <strong>Error State:</strong> {videoError ? 'Yes' : 'No'}
-              </div>
-              
               {videoUrl && !videoError ? (
                 <div className="mt-3">
                   <video 
@@ -564,8 +569,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     style={{ maxHeight: '400px' }}
                     onError={handleVideoError}
                     crossOrigin="anonymous"
-                    onLoadStart={() => console.log('Video load started')}
-                    onLoadedData={() => console.log('Video data loaded')}
                   >
                     <source src={videoUrl} type="video/mp4" />
                     <source src={videoUrl} type="video/webm" />
@@ -860,6 +863,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           <div className="card">
             <div className="card-header">
               <h5 className="mb-0">Course Modules</h5>
+              <small className="text-muted">Showing only active modules and content</small>
             </div>
             <div className="card-body">
               {contentLoading ? (
@@ -869,7 +873,16 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   </div>
                 </div>
               ) : modules.length === 0 ? (
-                <p className="text-muted">No modules available yet.</p>
+                <div className="text-center py-4">
+                  <i className="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                  <h5 className="text-muted">No active modules available</h5>
+                  <p className="text-muted">
+                    {course.is_subscribed 
+                      ? 'There are currently no active modules in this course.' 
+                      : 'Subscribe to the course to access available modules.'
+                    }
+                  </p>
+                </div>
               ) : (
                 <div className="accordion" id="modulesAccordion">
                   {modules.sort((a, b) => a.order - b.order).map((module, moduleIndex) => {
@@ -921,7 +934,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                           <div className="accordion-collapse collapse show">
                             <div className="accordion-body">
                               {module.contents.length === 0 ? (
-                                <p className="text-muted">No content available in this module.</p>
+                                <p className="text-muted">No active content available in this module.</p>
                               ) : (
                                 <div className="list-group">
                                   {module.contents.sort((a, b) => a.order - b.order).map((content, contentIndex) => (
