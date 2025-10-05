@@ -64,10 +64,16 @@ urlpatterns = [
     # Content completion endpoints
     path('courses/<int:pk>/completeVideo/', views.MarkVideoCompletedView.as_view(), name='mark_video_completed'),
     path('courses/<int:pk>/completePdf/', views.MarkPDFCompletedView.as_view(), name='mark_pdf_completed'),
-    
+    path('courses/<int:pk>/update-status/', views.CourseStatusUpdateView.as_view(), name='course-update-status'),
     # Recommended courses
     path('courses/recommended/', RecommendedCoursesView.as_view(), name='recommended-courses'),    
     
+
+        # Add these URLs
+    path('courses/<int:pk>/subscribers/', views.CourseSubscribersListView.as_view(), name='course-subscribers-list'),
+    path('chat/messages/<int:user_id>/', views.ChatMessageView.as_view(), name='chat-messages'),
+    path('chat/send/', views.ChatMessageView.as_view(), name='chat-send'),
+    path('chat/messages/<int:message_id>/read/', views.ChatMessageView.as_view(), name='mark-message-read'),
     # Subscription endpoints
     path('courses/<int:pk>/subscribers/', views.CourseSubscribers.as_view(), name='course-subscribers'),
     path('courses/<int:pk>/subscribe/', views.SubscribeToCourse.as_view(), name='subscribe'),

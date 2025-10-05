@@ -1541,6 +1541,100 @@ class CourseContentsView(APIView):
             
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+
+class CourseStatusUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, pk):
+        """Update course status (Brouillon, Actif, Archivé)"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        # Check if user is the course creator or admin
+        if course.creator != request.user and request.user.privilege != 'A':
+            return Response(
+                {'error': 'You are not authorized to update this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        new_status = request.data.get('status')
+        if new_status not in [0, 1, 2]:  # Draft, Active, Archived
+            return Response(
+                {'error': 'Invalid status. Use: 0 (Draft), 1 (Active), or 2 (Archived)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        course.status = new_status
+        course.save()
+        
+        serializer = CourseSerializer(course)
+        return Response({
+            'message': f'Course status updated to {course.get_status_display()}',
+            'course': serializer.data
+        })
+
+# Add this to your existing views
+class CourseSubscribersListView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get detailed list of subscribers with their progress"""
+        course = get_object_or_404(Course, pk=pk)
+        
+        if course.creator != request.user:
+            return Response(
+                {'error': 'You are not the creator of this course'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        subscribers = course.course_subscriptions.filter(is_active=True).select_related('user')
+        
+        subscriber_data = []
+        for subscription in subscribers:
+            # Calculate progress percentage
+            total_contents = CourseContent.objects.filter(module__course=course).count()
+            completed_count = subscription.completed_contents.count()
+            progress_percentage = (completed_count / total_contents * 100) if total_contents > 0 else 0
+            is_completed = progress_percentage == 100
+            
+            subscriber_data.append({
+                'id': subscription.id,
+                'user': {
+                    'id': subscription.user.id,
+                    'username': subscription.user.username,
+                    'email': subscription.user.email,
+                    'full_name': f"{subscription.user.first_name} {subscription.user.last_name}",
+                    'department': subscription.user.department,
+                    'department_display': subscription.user.get_department_display(),
+                },
+                'subscribed_at': subscription.subscribed_at,
+                'is_active': subscription.is_active,
+                'progress_percentage': round(progress_percentage, 2),
+                'total_score': subscription.total_score,
+                'completed_contents_count': completed_count,
+                'total_contents_count': total_contents,
+                'is_completed': is_completed
+            })
+        
+        return Response(subscriber_data)
+
+# Add chat endpoints (optional - for full functionality)
+class ChatMessageView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, user_id):
+        """Get chat messages with a specific user"""
+        # For now, return empty array - implement your chat logic here
+        return Response({'messages': []})
+    
+    def post(self, request):
+        """Send a message"""
+        # For now, return success - implement your chat logic here
+        return Response({'success': True, 'message': 'Message sent successfully'})
+    
+    def patch(self, request, message_id):
+        """Mark message as read"""
+        # For now, return success - implement your chat logic here
+        return Response({'success': True})
 class CourseContentDetailView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
