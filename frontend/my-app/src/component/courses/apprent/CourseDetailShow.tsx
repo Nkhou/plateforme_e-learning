@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../../../api/api';
 
 interface CourseDetailProps {
@@ -18,6 +18,8 @@ interface CourseDetailData {
   updated_at: string;
   is_subscribed: boolean;
   progress_percentage: number;
+  estimated_duration: number; // in minutes
+  min_required_time: number; // in minutes
 }
 
 interface Module {
@@ -42,6 +44,7 @@ export interface CourseContent {
   is_locked: boolean;
   status: number; // 0: Draft, 1: Active, 2: Archived
   status_display: string;
+  estimated_time?: number; // in minutes
   pdf_content?: {
     pdf_file: string;
     is_completed: boolean;
@@ -49,12 +52,14 @@ export interface CourseContent {
   video_content?: {
     video_file: string;
     is_completed: boolean;
+    duration?: number; // in seconds
   };
   qcm?: {
     question: string;
     options: QCMOption[];
     is_multiple_choice: boolean;
     passing_score?: number;
+    estimated_time?: number; // in minutes
   };
   created_at: string;
 }
@@ -69,7 +74,49 @@ interface SubscriptionData {
   id: number;
   is_active: boolean;
   progress_percentage: number;
+  total_time_spent: number; // in seconds
 }
+
+// Timer state interface
+interface TimerState {
+  isRunning: boolean;
+  timeElapsed: number; // in seconds
+  targetTime: number; // in seconds
+  isCompleted: boolean;
+}
+
+// Helper function to format time
+const formatTime = (minutes: number): string => {
+  if (minutes < 60) {
+    return `${minutes} min`;
+  } else {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes > 0 ? `${remainingMinutes}min` : ''}`.trim();
+  }
+};
+
+// Helper function to format seconds to readable time (MM:SS)
+const formatSeconds = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
+// Helper function to format seconds to detailed time
+const formatSecondsDetailed = (seconds: number): string => {
+  if (seconds < 60) {
+    return `${seconds} sec`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes} min${remainingSeconds > 0 ? ` ${remainingSeconds} sec` : ''}`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h${minutes > 0 ? ` ${minutes}min` : ''}`;
+  }
+};
 
 // Helper function to get correct image URL
 const getImageUrl = (imageUrl: string) => {
@@ -89,7 +136,7 @@ const getImageUrl = (imageUrl: string) => {
 // FIXED Helper function to get file URL
 const getFileUrl = (fileUrl: string) => {
   console.log('Processing fileUrl:', fileUrl);
-  
+
   if (!fileUrl) {
     console.warn('Empty fileUrl provided');
     return '';
@@ -140,6 +187,15 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
   const [expandedModules, setExpandedModules] = useState<number[]>([]);
   const [videoError, setVideoError] = useState(false);
 
+  // Timer state
+  const [timer, setTimer] = useState<TimerState>({
+    isRunning: false,
+    timeElapsed: 0,
+    targetTime: 0,
+    isCompleted: false
+  });
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Filter only active modules and active contents
   const filterActiveModulesAndContents = (modules: Module[]) => {
     return modules
@@ -153,31 +209,53 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       .filter(module => module.contents.length > 0); // Only modules that have active contents
   };
 
-  // Function to calculate content locking logic for active content only
+  // Calculate total estimated time for the course based on active content
+  const calculateTotalEstimatedTime = (modules: Module[]): number => {
+    const activeModules = filterActiveModulesAndContents(modules);
+    let totalMinutes = 0;
+
+    activeModules.forEach(module => {
+      module.contents.forEach(content => {
+        // Use content's estimated_time if available, otherwise use defaults based on content type
+        if (content.estimated_time) {
+          totalMinutes += content.estimated_time;
+        } else {
+          // Default estimates based on content type
+          switch (content.content_type_name?.toLowerCase()) {
+            case 'video':
+              totalMinutes += 10; // Default 10 minutes for videos
+              break;
+            case 'pdf':
+              totalMinutes += 15; // Default 15 minutes for PDFs
+              break;
+            case 'qcm':
+              totalMinutes += 5; // Default 5 minutes for QCMs
+              break;
+            default:
+              totalMinutes += 10; // Default 10 minutes for other content types
+          }
+        }
+      });
+    });
+
+    return totalMinutes;
+  };
+
+  // Simplified content locking logic - only checks if user is active
   const calculateContentLockStatus = (modules: Module[], isActive: boolean) => {
     const activeModules = filterActiveModulesAndContents(modules);
-    
-    return activeModules.map((module: Module, moduleIndex: number) => {
+
+    return activeModules.map((module: Module) => {
       const moduleContents = module.contents || [];
-      
+
       // Sort contents by order
       const sortedContents = moduleContents.sort((a: CourseContent, b: CourseContent) => a.order - b.order);
 
-      // Process contents within the module with proper previous content checking
-      const processedContents = sortedContents.map((content: CourseContent, contentIndex: number) => {
-        const isFirstInModule = contentIndex === 0;
-        const prevContent = contentIndex > 0 ? sortedContents[contentIndex - 1] : null;
-        const isPrevDone = prevContent ? prevContent.is_completed : true;
+      // Process contents within the module - only check if content is active
+      const processedContents = sortedContents.map((content: CourseContent) => {
+        // Content is locked ONLY if user is not subscribed/active
+        const contentLocked = !isActive;
 
-        // For first content in first module, only check subscription
-        const isFirstContentInCourse = moduleIndex === 0 && contentIndex === 0;
-        
-        // Content is locked if:
-        // 1. User is not subscribed OR
-        // 2. It's not the first content AND previous content is not completed OR
-        // 3. Module is locked
-        const contentLocked = !isActive || (!isFirstInModule && !isPrevDone) || module.is_locked;
-        
         return {
           ...content,
           is_locked: contentLocked
@@ -185,19 +263,12 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       });
 
       // Calculate module completion status (all active contents must be completed)
-      const moduleCompleted = processedContents.length > 0 && 
+      const moduleCompleted = processedContents.length > 0 &&
         processedContents.every((content: CourseContent) => content.is_completed);
-      
-      // Module locking logic:
-      // Module is locked if:
-      // 1. User is not subscribed OR
-      // 2. It's not the first module AND previous module is not completed
-      const isFirstModule = moduleIndex === 0;
-      const prevModule = moduleIndex > 0 ? activeModules[moduleIndex - 1] : null;
-      const isPrevModuleDone = prevModule ? 
-        prevModule.contents.every((c: CourseContent) => c.is_completed) : true;
-      
-      const moduleLocked = !isActive || (!isFirstModule && !isPrevModuleDone);
+
+      // Module locking logic simplified:
+      // Module is locked ONLY if user is not subscribed/active
+      const moduleLocked = !isActive;
 
       return {
         ...module,
@@ -207,6 +278,187 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       };
     });
   };
+
+  // Calculate time progress
+  const calculateTimeProgress = (): {
+    timeProgress: number;
+    timeRemaining: number;
+    hasMetTimeRequirement: boolean;
+  } => {
+    if (!subscription || !course) {
+      return { timeProgress: 0, timeRemaining: 0, hasMetTimeRequirement: false };
+    }
+
+    const requiredTimeSeconds = course.min_required_time * 60; // Convert minutes to seconds
+    const timeSpentSeconds = subscription.total_time_spent || 0;
+
+    const timeProgress = requiredTimeSeconds > 0
+      ? Math.min(100, (timeSpentSeconds / requiredTimeSeconds) * 100)
+      : 0;
+
+    const timeRemaining = Math.max(0, requiredTimeSeconds - timeSpentSeconds);
+    const hasMetTimeRequirement = timeSpentSeconds >= requiredTimeSeconds;
+
+    return { timeProgress, timeRemaining, hasMetTimeRequirement };
+  };
+
+  // Check if user can mark content as completed (time requirement met)
+  const canMarkContentCompleted = (): boolean => {
+    if (!course || !subscription) return false;
+
+    // If no minimum time requirement, allow completion
+    if (course.min_required_time === 0) return true;
+
+    const requiredTimeSeconds = course.min_required_time * 60;
+    const timeSpentSeconds = subscription.total_time_spent || 0;
+
+    return timeSpentSeconds >= requiredTimeSeconds;
+  };
+
+  // Timer functions
+  const startTimer = (targetMinutes: number) => {
+    const targetSeconds = targetMinutes * 60;
+
+    setTimer({
+      isRunning: true,
+      timeElapsed: 0,
+      targetTime: targetSeconds,
+      isCompleted: false
+    });
+
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    // Start new timer
+    timerRef.current = setInterval(() => {
+      setTimer(prev => {
+        const newTimeElapsed = prev.timeElapsed + 1;
+
+        if (newTimeElapsed >= prev.targetTime) {
+          // Timer completed
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          return {
+            ...prev,
+            timeElapsed: prev.targetTime,
+            isRunning: false,
+            isCompleted: true
+          };
+        }
+
+        return {
+          ...prev,
+          timeElapsed: newTimeElapsed
+        };
+      });
+    }, 1000);
+  };
+
+  const pauseTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    setTimer(prev => ({
+      ...prev,
+      isRunning: false
+    }));
+  };
+
+  const resumeTimer = () => {
+    if (timer.isCompleted) return;
+
+    timerRef.current = setInterval(() => {
+      setTimer(prev => {
+        const newTimeElapsed = prev.timeElapsed + 1;
+
+        if (newTimeElapsed >= prev.targetTime) {
+          // Timer completed
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          return {
+            ...prev,
+            timeElapsed: prev.targetTime,
+            isRunning: false,
+            isCompleted: true
+          };
+        }
+
+        return {
+          ...prev,
+          timeElapsed: newTimeElapsed
+        };
+      });
+    }, 1000);
+
+    setTimer(prev => ({
+      ...prev,
+      isRunning: true
+    }));
+  };
+
+  const resetTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    setTimer({
+      isRunning: false,
+      timeElapsed: 0,
+      targetTime: 0,
+      isCompleted: false
+    });
+  };
+
+  // Calculate timer progress percentage
+  const getTimerProgress = (): number => {
+    if (timer.targetTime === 0) return 0;
+    return Math.min(100, (timer.timeElapsed / timer.targetTime) * 100);
+  };
+
+  // Record time to backend when timer completes
+  const recordCompletedTime = async () => {
+    if (!courseId || !activeContent) return;
+
+    try {
+      // Record time tracking to backend
+      await api.post(`courses/${courseId}/record-time/`, {
+        content_id: activeContent.id,
+        duration: timer.targetTime, // Total time spent in seconds
+        session_type: 'content'
+      });
+
+      // Refresh subscription data to update total_time_spent
+      const subscriptionResponse = await api.get(`courses/${courseId}/my-progress/`);
+      if (Array.isArray(subscriptionResponse.data)) {
+        setSubscription(subscriptionResponse.data.length > 0 ? subscriptionResponse.data[0] : null);
+      } else {
+        setSubscription(subscriptionResponse.data);
+      }
+
+      console.log('Time recorded successfully:', timer.targetTime, 'seconds');
+    } catch (error) {
+      console.error('Failed to record time:', error);
+    }
+  };
+
+  // Effect to handle timer completion
+  useEffect(() => {
+    if (timer.isCompleted && activeContent) {
+      recordCompletedTime();
+    }
+  }, [timer.isCompleted, activeContent]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const fetchCourseData = async () => {
@@ -218,25 +470,51 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           api.get(`courses/${courseId}/is-subscribed/`),
           api.get(`courses/${courseId}/modules/`)
         ]);
-        
+
         setCourse(courseResponse.data);
         const rawModules = modulesResponse.data;
         console.log('Fetched modules (raw):', rawModules);
-        
+
         let subscriptionData: SubscriptionData | null = null;
+        let isActive = false;
+
         try {
+          // Use the my-progress endpoint for students
           const subscriptionResponse = await api.get(`courses/${courseId}/my-progress/`);
           console.log('subscriptionResponse.data', subscriptionResponse.data);
-          const subArray = subscriptionResponse.data;
-          subscriptionData = subArray.length > 0 ? subArray[0] : null;
+
+          // Handle both array and object responses
+          if (Array.isArray(subscriptionResponse.data)) {
+            subscriptionData = subscriptionResponse.data.length > 0 ? subscriptionResponse.data[0] : null;
+          } else {
+            subscriptionData = subscriptionResponse.data;
+          }
+
           console.log('Subscription data:', subscriptionData);
           setSubscription(subscriptionData);
-        } catch (subErr) {
+          isActive = subscriptionData?.is_active || false;
+
+        } catch (subErr: any) {
           console.warn('Subscription fetch failed:', subErr);
+          // If we get a 403, user is not the creator - this is expected for students
+          if (subErr.response?.status === 403) {
+            console.log('User is not course creator, using basic subscription data');
+            // For students, use the subscription status from course data
+            isActive = courseResponse.data.is_subscribed;
+            subscriptionData = {
+              id: 0,
+              is_active: courseResponse.data.is_subscribed,
+              progress_percentage: courseResponse.data.progress_percentage || 0,
+              total_time_spent: 0
+            };
+            setSubscription(subscriptionData);
+          } else {
+            // For other errors, fall back to course subscription status
+            isActive = courseResponse.data.is_subscribed;
+          }
         }
-        
+
         // Process modules and contents with proper locking logic - only active content
-        const isActive = subscriptionData?.is_active || false;
         const processedModules = calculateContentLockStatus(rawModules, isActive);
 
         console.log('Processed modules (active only):', processedModules);
@@ -272,22 +550,20 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           is_subscribed: true
         });
       }
-      
+
       // Refresh modules after subscription with proper locking logic
       const modulesResponse = await api.get(`courses/${courseId}/modules/`);
       const rawModules = modulesResponse.data;
-      
+
       const processedModules = calculateContentLockStatus(rawModules, true);
       setModules(processedModules);
-      
+
       alert('Successfully subscribed to the course!');
     } catch (error: any) {
       console.error('Failed to subscribe:', error);
       alert('Failed to subscribe to the course');
     }
   };
-
-  
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     console.error('Failed to load image:', e.currentTarget.src);
@@ -300,12 +576,26 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
   };
 
   const handleContentComplete = async (contentId: number, moduleId: number) => {
+    // For QCM, we don't require the timer - only for PDF and Video content
+    const contentType = activeContent?.content_type_name?.toLowerCase();
+    const isTimedContent = contentType === 'pdf' || contentType === 'video';
+
+    // Check if user has met the minimum time requirement for timed content
+    if (isTimedContent && !canMarkContentCompleted() && !timer.isCompleted) {
+      const { timeRemaining } = calculateTimeProgress();
+      alert(`You need to spend ${formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.`);
+      return;
+    }
+
+    // For timed content, require timer completion
+    if (isTimedContent && !timer.isCompleted) {
+      alert('Please complete the required study time before marking this content as completed.');
+      return;
+    }
+
     try {
       let response;
-      
-      // Normalize content type for comparison (case-insensitive)
-      const contentType = activeContent?.content_type_name?.toLowerCase() || '';
-      
+
       if (contentType === 'qcm') {
         if (selectedQCMOptions.length === 0) {
           alert('Please select at least one answer before submitting.');
@@ -315,7 +605,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         response = await api.post(`courses/${courseId}/submit-qcm/`, {
           content_id: contentId,
           selected_option_ids: selectedQCMOptions,
-          time_taken: 0, 
+          time_taken: 0,
         });
 
         // Check if QCM was passed
@@ -349,11 +639,11 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           progress_percentage: response.data.progress_percentage || course.progress_percentage
         });
       }
-     
-      // Update modules and contents completion status with proper unlocking logic
+
+      // Update modules and contents completion status
       const updatedModules = modules.map(module => {
         if (module.id === moduleId) {
-          const updatedContents = module.contents.map((content, index, contentsArray) => {
+          const updatedContents = module.contents.map(content => {
             if (content.id === contentId) {
               // Mark this content as completed
               return {
@@ -362,49 +652,27 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                 is_locked: false
               };
             }
-
-            // Unlock the next content in sequence if this one was completed
-            const completedContentIndex = contentsArray.findIndex(c => c.id === contentId);
-            if (completedContentIndex !== -1 && index === completedContentIndex + 1) {
-              return {
-                ...content,
-                is_locked: false // Unlock the next content
-              };
-            }
-
             return content;
           });
 
           // Check if module is now completed (all contents must be done)
           const moduleCompleted = updatedContents.every(content => content.is_completed);
-          
+
           return {
             ...module,
             contents: updatedContents,
             is_completed: moduleCompleted
           };
         }
-
-        // Unlock next module if current module is completed
-        const currentModuleIndex = modules.findIndex(m => m.id === moduleId);
-        if (currentModuleIndex !== -1 && module.order === modules[currentModuleIndex].order + 1) {
-          const currentModuleCompleted = modules[currentModuleIndex].contents.every(content => content.is_completed);
-          if (currentModuleCompleted) {
-            return {
-              ...module,
-              is_locked: false // Unlock the next module
-            };
-          }
-        }
-
         return module;
       });
-      
+
       setModules(updatedModules);
       setShowContentModal(false);
       setActiveContent(null);
       setSelectedQCMOptions([]);
       setVideoError(false);
+      resetTimer(); // Reset timer when content is completed
 
       alert('Content marked as completed successfully!');
 
@@ -416,27 +684,33 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
   const handleContentClick = (content: CourseContent, module: Module) => {
     if (module.is_locked) {
-      alert('Please complete the previous module first!');
+      alert('This module is locked. Please subscribe to the course first!');
       return;
     }
     if (content.is_locked) {
-      // Find which previous content needs to be completed
-      const moduleContents = module.contents.sort((a, b) => a.order - b.order);
-      const contentIndex = moduleContents.findIndex(c => c.id === content.id);
-      
-      if (contentIndex > 0) {
-        const prevContent = moduleContents[contentIndex - 1];
-        alert(`Please complete "${prevContent.title}" first!`);
-      } else {
-        alert('This content is locked. Please contact support.');
-      }
+      alert('This content is locked. Please subscribe to the course first!');
       return;
     }
-    
+
     setActiveContent(content);
-    setSelectedQCMOptions([]); // Reset previous answers
-    setVideoError(false); // Reset video error
+    setSelectedQCMOptions([]);
+    setVideoError(false);
+    resetTimer();
     setShowContentModal(true);
+
+    // Define which content types should auto-start timer
+    const autoStartContentTypes = ['pdf', 'video']; // Add/remove types as needed
+
+    const contentType = content.content_type_name?.toLowerCase();
+    const shouldAutoStart = autoStartContentTypes.includes(contentType) && !content.is_completed;
+
+    if (shouldAutoStart) {
+      // Small delay to ensure modal is fully rendered
+      setTimeout(() => {
+        const targetTime = getContentTargetTime(content);
+        startTimer(targetTime);
+      }, 100);
+    }
   };
 
   const openPdfInNewWindow = (pdfUrl: string) => {
@@ -463,12 +737,55 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     }
   };
 
+  // Get estimated time for individual content
+  const getContentEstimatedTime = (content: CourseContent): string => {
+    if (content.estimated_time) {
+      return formatTime(content.estimated_time);
+    }
+
+    const contentType = content.content_type_name?.toLowerCase();
+    switch (contentType) {
+      case 'video':
+        return content.video_content?.duration ? formatTime(Math.ceil(content.video_content.duration / 60)) : '10 min';
+      case 'pdf':
+        return '15 min';
+      case 'qcm':
+        return content.qcm?.estimated_time ? formatTime(content.qcm.estimated_time) : '5 min';
+      default:
+        return '10 min';
+    }
+  };
+
+  // Get content target time for timer (in minutes)
+  const getContentTargetTime = (content: CourseContent): number => {
+    if (content.estimated_time) {
+      return content.estimated_time;
+    }
+
+    const contentType = content.content_type_name?.toLowerCase();
+    switch (contentType) {
+      case 'video':
+        return content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 10;
+      case 'pdf':
+        return 15;
+      case 'qcm':
+        return content.qcm?.estimated_time || 5;
+      default:
+        return 10;
+    }
+  };
+
   const renderContentModal = () => {
     if (!activeContent) return null;
 
+    const canComplete = canMarkContentCompleted();
+    const { timeRemaining } = calculateTimeProgress();
+    const contentType = activeContent.content_type_name?.toLowerCase();
+    const isTimedContent = contentType === 'pdf' || contentType === 'video';
+    const targetTime = getContentTargetTime(activeContent);
+    const timerProgress = getTimerProgress();
+
     const renderContent = () => {
-      const contentType = activeContent.content_type_name?.toLowerCase() || '';
-      
       switch (contentType) {
         case 'pdf':
           const pdfUrl = activeContent.pdf_content?.pdf_file ? getFileUrl(activeContent.pdf_content.pdf_file) : null;
@@ -477,34 +794,35 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               <i className="fas fa-file-pdf fa-5x text-danger mb-3"></i>
               <h5>{activeContent.title}</h5>
               {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
-              
+
+              {/* Time estimate */}
+              <div className="alert alert-info">
+                <i className="fas fa-clock me-2"></i>
+                Estimated study time: {getContentEstimatedTime(activeContent)}
+              </div>
+
               {pdfUrl ? (
                 <div className="mt-4">
-                  <div className="alert alert-info">
-                    <i className="fas fa-info-circle me-2"></i>
-                    PDF content is available. Choose an option below to view it.
-                  </div>
-                  
                   <div className="d-grid gap-2">
-                    <button 
+                    <button
                       className="btn btn-primary"
                       onClick={() => openPdfInNewWindow(pdfUrl)}
                     >
                       <i className="fas fa-external-link-alt me-2"></i>
                       Open PDF in New Window
                     </button>
-                    
-                    <button 
+
+                    <button
                       className="btn btn-outline-primary"
                       onClick={() => downloadFile(pdfUrl, `${activeContent.title}.pdf`)}
                     >
                       <i className="fas fa-download me-2"></i>
                       Download PDF
                     </button>
-                    
-                    <a 
-                      href={pdfUrl} 
-                      target="_blank" 
+
+                    <a
+                      href={pdfUrl}
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-outline-secondary"
                     >
@@ -521,18 +839,24 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               )}
             </div>
           );
-        
+
         case 'video':
           const videoUrl = activeContent.video_content?.video_file ? getFileUrl(activeContent.video_content.video_file) : null;
           return (
             <div>
               <h5>{activeContent.title}</h5>
               {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
-              
+
+              {/* Time estimate */}
+              <div className="alert alert-info">
+                <i className="fas fa-clock me-2"></i>
+                Estimated study time: {getContentEstimatedTime(activeContent)}
+              </div>
+
               {videoUrl && !videoError ? (
                 <div className="mt-3">
-                  <video 
-                    controls 
+                  <video
+                    controls
                     className="w-100"
                     style={{ maxHeight: '400px' }}
                     onError={handleVideoError}
@@ -543,18 +867,18 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     <source src={videoUrl} type="video/ogg" />
                     Your browser does not support the video tag.
                   </video>
-                  
+
                   <div className="mt-2">
-                    <a 
-                      href={videoUrl} 
-                      target="_blank" 
+                    <a
+                      href={videoUrl}
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-sm btn-outline-primary"
                     >
                       <i className="fas fa-external-link-alt me-1"></i>
                       Open in New Tab
                     </a>
-                    <button 
+                    <button
                       className="btn btn-sm btn-outline-secondary ms-2"
                       onClick={() => downloadFile(videoUrl, `${activeContent.title}.mp4`)}
                     >
@@ -569,9 +893,9 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   {!videoUrl ? 'Video file path not available.' : 'Unable to load video. File may be missing or in an unsupported format.'}
                   {videoUrl && (
                     <div className="mt-2">
-                      <a 
-                        href={videoUrl} 
-                        target="_blank" 
+                      <a
+                        href={videoUrl}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-sm btn-primary"
                       >
@@ -583,12 +907,19 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               )}
             </div>
           );
-        
+
         case 'qcm':
           return (
             <div>
               <h5>{activeContent.title}</h5>
               {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
+
+              {/* Time estimate */}
+              <div className="alert alert-info">
+                <i className="fas fa-clock me-2"></i>
+                Estimated time: {getContentEstimatedTime(activeContent)}
+              </div>
+
               {activeContent.qcm ? (
                 <div className="mt-3">
                   <div className="alert alert-info">
@@ -601,7 +932,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                       )}
                     </ul>
                   </div>
-                  
+
                   <h6 className="mt-3">Select your answer{activeContent.qcm.is_multiple_choice ? 's' : ''}:</h6>
                   <div className="list-group">
                     {activeContent.qcm.options.map((option, index) => {
@@ -643,7 +974,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               )}
             </div>
           );
-        
+
         default:
           return (
             <div className="text-center">
@@ -679,10 +1010,117 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   setActiveContent(null);
                   setSelectedQCMOptions([]);
                   setVideoError(false);
+                  resetTimer();
                 }}
               ></button>
             </div>
             <div className="modal-body">
+              {/* Time requirement warning */}
+              {!canComplete && isTimedContent && course && course.min_required_time > 0 && (
+                <div className="alert alert-warning">
+                  <i className="fas fa-exclamation-triangle me-2"></i>
+                  <strong>Course time requirement not met:</strong> You need to spend {formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.
+                </div>
+              )}
+
+              {/* Timer Section for timed content */}
+              {isTimedContent && (
+                <div className="card mb-4">
+                  <div className="card-header bg-light">
+                    <h6 className="mb-0">
+                      <i className="fas fa-stopwatch me-2"></i>
+                      Study Timer
+                    </h6>
+                  </div>
+                  <div className="card-body">
+                    <div className="text-center">
+                      {/* Timer Display */}
+                      <div className="mb-3">
+                        <div className="display-4 font-monospace text-primary">
+                          {formatSeconds(timer.targetTime - timer.timeElapsed)}
+                        </div>
+                        <small className="text-muted">
+                          {formatSeconds(timer.timeElapsed)} / {formatSeconds(timer.targetTime)}
+                        </small>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="progress mb-3" style={{ height: '10px' }}>
+                        <div
+                          className={`progress-bar ${timer.isCompleted ? 'bg-success' : 'bg-primary'}`}
+                          role="progressbar"
+                          style={{ width: `${timerProgress}%` }}
+                          aria-valuenow={timerProgress}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                        ></div>
+                      </div>
+
+                      {/* Timer Controls */}
+                      {/* Timer Controls */}
+                      {/* <div className="btn-group" role="group">
+                        {!timer.isRunning && !timer.isCompleted && timer.timeElapsed === 0 && (
+                          <button
+                            className="btn btn-success"
+                            onClick={() => startTimer(targetTime)}
+                          >
+                            <i className="fas fa-play me-2"></i>
+                            Start Timer ({targetTime} min)
+                          </button>
+                        )} */}
+
+                        {/* {timer.isRunning && (
+    <button
+      className="btn btn-warning"
+      onClick={pauseTimer}
+    >
+      <i className="fas fa-pause me-2"></i>
+      Pause
+    </button>
+  )} */}
+
+                        {/* {!timer.isRunning && timer.timeElapsed > 0 && !timer.isCompleted && (
+    <>
+      <button
+        className="btn btn-success"
+        onClick={resumeTimer}
+      >
+        <i className="fas fa-play me-2"></i>
+        Resume
+      </button>
+      <button
+        className="btn btn-outline-secondary"
+        onClick={resetTimer}
+      >
+        <i className="fas fa-redo me-2"></i>
+        Reset
+      </button>
+    </>
+  )} */}
+
+                        {/* {(timer.timeElapsed > 0 || timer.isCompleted) && timer.timeElapsed > 0 && (
+    <button
+      className="btn btn-outline-secondary"
+      onClick={resetTimer}
+    >
+      <i className="fas fa-redo me-2"></i>
+      Reset
+    </button>
+  )} */}
+                      {/* </div> */}
+
+                      {/* Timer Status */}
+                      {timer.isCompleted && (
+                        <div className="alert alert-success mt-3">
+                          <i className="fas fa-check-circle me-2"></i>
+                          <strong>Study time completed!</strong> You can now mark this content as completed.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {renderContent()}
             </div>
             <div className="modal-footer">
@@ -694,6 +1132,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   setActiveContent(null);
                   setSelectedQCMOptions([]);
                   setVideoError(false);
+                  resetTimer();
                 }}
               >
                 Close
@@ -703,14 +1142,24 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   type="button"
                   className="btn btn-primary"
                   onClick={() => {
-                    const currentModule = modules.find(module => 
+                    const currentModule = modules.find(module =>
                       module.contents.some(content => content.id === activeContent.id)
                     );
                     if (currentModule) {
                       handleContentComplete(activeContent.id, currentModule.id);
                     }
                   }}
-                  disabled={activeContent.content_type_name?.toLowerCase() === 'qcm' && selectedQCMOptions.length === 0}
+                  disabled={
+                    (activeContent.content_type_name?.toLowerCase() === 'qcm' && selectedQCMOptions.length === 0) ||
+                    (isTimedContent && !timer.isCompleted)
+                  }
+                  title={
+                    isTimedContent && !timer.isCompleted
+                      ? 'Complete the study timer first'
+                      : activeContent.content_type_name?.toLowerCase() === 'qcm' && selectedQCMOptions.length === 0
+                        ? 'Select at least one answer'
+                        : ''
+                  }
                 >
                   {activeContent.content_type_name?.toLowerCase() === 'qcm' ? 'Submit Answers' : 'Mark as Completed'}
                 </button>
@@ -758,6 +1207,12 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     );
   }
 
+  // Calculate time statistics
+  const { timeProgress, timeRemaining, hasMetTimeRequirement } = calculateTimeProgress();
+  const totalEstimatedTime = course.estimated_duration || calculateTotalEstimatedTime(modules);
+  const timeSpentSeconds = subscription?.total_time_spent || 0;
+  const canCompleteContent = canMarkContentCompleted();
+
   return (
     <div className="container mt-4">
       <div className="row">
@@ -778,18 +1233,50 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   marginTop: '1rem'
                 }}
               />
-              
+
               <div className="card-body text-start">
                 <h5 className="card-title">Course Details</h5>
                 <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
                 <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
                 <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
+
+                {/* Time Information */}
+                <div className="mt-3">
+                  <h6>Time Information</h6>
+                  <p><strong>Estimated Duration:</strong> {formatTime(totalEstimatedTime)}</p>
+                  {course.min_required_time > 0 && (
+                    <>
+                      <p><strong>Minimum Required Time:</strong> {formatTime(course.min_required_time)}</p>
+                      {!canCompleteContent && (
+                        <div className="alert alert-warning py-2 mt-2">
+                          <small>
+                            <i className="fas fa-clock me-1"></i>
+                            Spend {formatSecondsDetailed(timeRemaining)} more to unlock content completion
+                          </small>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {course.is_subscribed && subscription && (
+                    <>
+                      <p><strong>Time Spent:</strong> {formatSecondsDetailed(timeSpentSeconds)}</p>
+                      {course.min_required_time > 0 && (
+                        <p>
+                          <strong>Time Requirement:</strong>
+                          <span className={hasMetTimeRequirement ? 'text-success' : 'text-warning'}>
+                            {hasMetTimeRequirement ? ' Met' : ' Not Met'}
+                          </span>
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-              
+
               {/* Progress Bar */}
               {course.is_subscribed && (
                 <div className="mb-3 px-3">
-                  <strong>Progress: </strong>
+                  <strong>Content Progress: </strong>
                   <div className="progress mt-1">
                     <div
                       className="progress-bar"
@@ -802,6 +1289,31 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                       {course.progress_percentage}%
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Time Progress Bar (if minimum time is required) */}
+              {course.is_subscribed && course.min_required_time > 0 && (
+                <div className="mb-3 px-3">
+                  <strong>Time Progress: </strong>
+                  <div className="progress mt-1">
+                    <div
+                      className={`progress-bar ${hasMetTimeRequirement ? 'bg-success' : 'bg-info'}`}
+                      role="progressbar"
+                      style={{ width: `${timeProgress}%` }}
+                      aria-valuenow={timeProgress}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      {Math.round(timeProgress)}%
+                    </div>
+                  </div>
+                  <small className="text-muted">
+                    {hasMetTimeRequirement
+                      ? 'Time requirement met'
+                      : `${formatSecondsDetailed(timeRemaining)} remaining`
+                    }
+                  </small>
                 </div>
               )}
 
@@ -826,8 +1338,48 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           <div className="text-center mb-4">
             <h1 className="mb-3">{course.title}</h1>
             <p className="lead">{course.description}</p>
+
+            {/* Course Time Summary */}
+            <div className="row text-center mb-4">
+              <div className="col-md-4">
+                <div className="card bg-light">
+                  <div className="card-body">
+                    <h6 className="card-title">Estimated Duration</h6>
+                    <p className="card-text h5">{formatTime(totalEstimatedTime)}</p>
+                  </div>
+                </div>
+              </div>
+              {course.min_required_time > 0 && (
+                <div className="col-md-4">
+                  <div className="card bg-light">
+                    <div className="card-body">
+                      <h6 className="card-title">Minimum Required</h6>
+                      <p className="card-text h5">{formatTime(course.min_required_time)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {course.is_subscribed && subscription && (
+                <div className="col-md-4">
+                  <div className="card bg-light">
+                    <div className="card-body">
+                      <h6 className="card-title">Time Spent</h6>
+                      <p className="card-text h5">{formatSecondsDetailed(timeSpentSeconds)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Time Requirement Warning Banner */}
+            {course.is_subscribed && course.min_required_time > 0 && !canCompleteContent && (
+              <div className="alert alert-warning">
+                <i className="fas fa-clock me-2"></i>
+                <strong>Time requirement:</strong> You need to spend {formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.
+              </div>
+            )}
           </div>
-          
+
           <div className="card">
             <div className="card-header">
               <h5 className="mb-0">Course Modules</h5>
@@ -845,8 +1397,8 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   <i className="fas fa-folder-open fa-3x text-muted mb-3"></i>
                   <h5 className="text-muted">No active modules available</h5>
                   <p className="text-muted">
-                    {course.is_subscribed 
-                      ? 'There are currently no active modules in this course.' 
+                    {course.is_subscribed
+                      ? 'There are currently no active modules in this course.'
                       : 'Subscribe to the course to access available modules.'
                     }
                   </p>
@@ -857,6 +1409,20 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     const isExpanded = expandedModules.includes(module.id);
                     const completedContents = module.contents.filter(content => content.is_completed).length;
                     const totalContents = module.contents.length;
+
+                    // Calculate module estimated time
+                    const moduleEstimatedTime = module.contents.reduce((total, content) => {
+                      if (content.estimated_time) {
+                        return total + content.estimated_time;
+                      }
+                      // Default estimates
+                      switch (content.content_type_name?.toLowerCase()) {
+                        case 'video': return total + 10;
+                        case 'pdf': return total + 15;
+                        case 'qcm': return total + 5;
+                        default: return total + 10;
+                      }
+                    }, 0);
 
                     return (
                       <div key={module.id} className="accordion-item">
@@ -881,9 +1447,15 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                                 {module.description && (
                                   <p className="text-muted mb-0 small">{module.description}</p>
                                 )}
-                                <small className="text-muted">
-                                  Progress: {completedContents}/{totalContents} contents completed
-                                </small>
+                                <div className="d-flex gap-3">
+                                  <small className="text-muted">
+                                    Progress: {completedContents}/{totalContents} contents
+                                  </small>
+                                  <small className="text-muted">
+                                    <i className="fas fa-clock me-1"></i>
+                                    {formatTime(moduleEstimatedTime)}
+                                  </small>
+                                </div>
                               </div>
                               <div>
                                 {module.is_completed ? (
@@ -897,7 +1469,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                             </div>
                           </button>
                         </div>
-                        
+
                         {isExpanded && !module.is_locked && (
                           <div className="accordion-collapse collapse show">
                             <div className="accordion-body">
@@ -908,12 +1480,13 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                                   {module.contents.sort((a, b) => a.order - b.order).map((content, contentIndex) => (
                                     <div
                                       key={content.id}
-                                      className={`list-group-item ${content.is_locked ? 'list-group-item-secondary' : 'list-group-item-action'}`}
-                                      style={{ 
+                                      className={`list-group-item ${content.is_locked ? 'list-group-item-secondary' : 'list-group-item-action'} ${!canCompleteContent && !content.is_completed ? 'opacity-75' : ''
+                                        }`}
+                                      style={{
                                         cursor: content.is_locked ? 'not-allowed' : 'pointer',
-                                        opacity: content.is_locked ? 0.6 : 1
                                       }}
                                       onClick={() => handleContentClick(content, module)}
+                                      title={!canCompleteContent && !content.is_completed ? `Spend ${formatSecondsDetailed(timeRemaining)} more in the course to complete this content` : ''}
                                     >
                                       <div className="d-flex justify-content-between align-items-center">
                                         <div className="flex-grow-1">
@@ -928,16 +1501,28 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                                             {content.is_locked && (
                                               <span className="badge bg-warning ms-2">Locked</span>
                                             )}
+                                            {!canCompleteContent && !content.is_completed && course.min_required_time > 0 && (
+                                              <span className="badge bg-info ms-2" title={`Time requirement not met - ${formatSecondsDetailed(timeRemaining)} remaining`}>
+                                                <i className="fas fa-clock me-1"></i>
+                                                Time Locked
+                                              </span>
+                                            )}
                                           </h6>
                                           {content.caption && (
                                             <p className="text-muted mb-2 small">{content.caption}</p>
                                           )}
+                                          <small className="text-muted">
+                                            <i className="fas fa-clock me-1"></i>
+                                            {getContentEstimatedTime(content)}
+                                          </small>
                                         </div>
                                         <div>
                                           {content.is_completed ? (
                                             <i className="bi bi-check-circle-fill text-success fs-5"></i>
                                           ) : content.is_locked ? (
                                             <i className="bi bi-lock-fill text-warning fs-5"></i>
+                                          ) : !canCompleteContent && course.min_required_time > 0 ? (
+                                            <i className="bi bi-clock-history text-info fs-5" title={`Time requirement not met - ${formatSecondsDetailed(timeRemaining)} remaining`}></i>
                                           ) : (
                                             <i className="bi bi-play-circle-fill text-primary fs-5"></i>
                                           )}

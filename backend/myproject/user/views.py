@@ -3118,68 +3118,140 @@ from django.db import models
 from .models import TimeTracking, Course, Subscription, CourseContent, Module
 
 # Add these view classes to your views.py
+# class TimeTrackingRecordView(APIView):
+#     permission_classes = [IsAuthenticated]
+    
+#     def post(self, request):
+#         user = request.user
+#         course_id = request.data.get('course_id')
+#         module_id = request.data.get('module_id')
+#         content_id = request.data.get('content_id')
+#         duration = request.data.get('duration')  # in seconds
+#         session_type = request.data.get('session_type', 'content')  # course, module, content
+        
+#         try:
+#             course = Course.objects.get(id=course_id)
+            
+#             # Create time tracking record
+#             time_tracking = TimeTracking.objects.create(
+#                 user=user,
+#                 course=course,
+#                 module_id=module_id if module_id else None,
+#                 content_id=content_id if content_id else None,
+#                 start_time=timezone.now() - timezone.timedelta(seconds=duration),
+#                 end_time=timezone.now(),
+#                 duration=duration,
+#                 session_type=session_type
+#             )
+            
+#             # Update subscription total time
+#             subscription, created = Subscription.objects.get_or_create(
+#                 user=user,
+#                 course=course,
+#                 defaults={'is_active': True}
+#             )
+            
+#             subscription.total_time_spent = F('total_time_spent') + duration
+#             subscription.save()
+            
+#             # Recalculate average session time
+#             total_sessions = TimeTracking.objects.filter(
+#                 user=user, 
+#                 course=course
+#             ).count()
+            
+#             if total_sessions > 0:
+#                 total_time = TimeTracking.objects.filter(
+#                     user=user, 
+#                     course=course
+#                 ).aggregate(total=Sum('duration'))['total'] or 0
+#                 subscription.average_time_per_session = total_time / total_sessions
+#                 subscription.save()
+            
+#             return Response({
+#                 'message': 'Time tracking recorded successfully',
+#                 'time_tracking_id': time_tracking.id,
+#                 'total_time_spent': subscription.total_time_spent,
+#                 'average_session_time': subscription.average_time_per_session
+#             }, status=status.HTTP_200_OK)
+            
+#         except Course.DoesNotExist:
+#             return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
+#         except Exception as e:
+#             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 class TimeTrackingRecordView(APIView):
     permission_classes = [IsAuthenticated]
     
-    def post(self, request):
-        user = request.user
-        course_id = request.data.get('course_id')
-        module_id = request.data.get('module_id')
-        content_id = request.data.get('content_id')
-        duration = request.data.get('duration')  # in seconds
-        session_type = request.data.get('session_type', 'content')  # course, module, content
-        
+    def post(self, request, pk):
+        """Record time spent on course content"""
         try:
-            course = Course.objects.get(id=course_id)
-            
-            # Create time tracking record
-            time_tracking = TimeTracking.objects.create(
-                user=user,
-                course=course,
-                module_id=module_id if module_id else None,
-                content_id=content_id if content_id else None,
-                start_time=timezone.now() - timezone.timedelta(seconds=duration),
-                end_time=timezone.now(),
-                duration=duration,
-                session_type=session_type
-            )
-            
-            # Update subscription total time
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            content_id = request.data.get('content_id')
+            duration = request.data.get('duration')  # in seconds
+            session_type = request.data.get('session_type', 'content')
+
+            # Validate required fields
+            if not duration:
+                return Response(
+                    {'error': 'Duration is required'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get or create subscription
             subscription, created = Subscription.objects.get_or_create(
                 user=user,
                 course=course,
                 defaults={'is_active': True}
             )
-            
+
+            # Update subscription total time
             subscription.total_time_spent = F('total_time_spent') + duration
             subscription.save()
-            
-            # Recalculate average session time
-            total_sessions = TimeTracking.objects.filter(
-                user=user, 
-                course=course
-            ).count()
-            
-            if total_sessions > 0:
-                total_time = TimeTracking.objects.filter(
-                    user=user, 
-                    course=course
-                ).aggregate(total=Sum('duration'))['total'] or 0
-                subscription.average_time_per_session = total_time / total_sessions
-                subscription.save()
-            
-            return Response({
-                'message': 'Time tracking recorded successfully',
-                'time_tracking_id': time_tracking.id,
+
+            # Refresh to get the updated value
+            subscription.refresh_from_db()
+
+            # Create time tracking record if content_id is provided
+            time_tracking = None
+            if content_id:
+                try:
+                    content = CourseContent.objects.get(id=content_id, module__course=course)
+                    time_tracking = TimeTracking.objects.create(
+                        user=user,
+                        course=course,
+                        module=content.module,
+                        content=content,
+                        start_time=timezone.now() - timedelta(seconds=duration),
+                        end_time=timezone.now(),
+                        duration=duration,
+                        session_type=session_type
+                    )
+                except CourseContent.DoesNotExist:
+                    # Content not found, but we still record the time in subscription
+                    pass
+
+            # Update completion status
+            subscription.update_completion_status()
+
+            response_data = {
+                'message': 'Time recorded successfully',
                 'total_time_spent': subscription.total_time_spent,
-                'average_session_time': subscription.average_time_per_session
-            }, status=status.HTTP_200_OK)
-            
+                'progress_percentage': subscription.progress_percentage,
+                'is_completed': subscription.is_completed,
+                'completion_requirements': subscription.get_completion_requirements()
+            }
+
+            if time_tracking:
+                response_data['time_tracking_id'] = time_tracking.id
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
         except Course.DoesNotExist:
             return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 class CourseTimeStatsView(APIView):
     permission_classes = [IsAuthenticated]
     

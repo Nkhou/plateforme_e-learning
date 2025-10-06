@@ -59,7 +59,7 @@ urlpatterns = [
     
     # Time Tracking endpoints - ADD THESE
     path('courses/<int:pk>/time-stats/', CourseTimeStatsView.as_view(), name='course-time-stats'),
-    path('time-tracking/record/', TimeTrackingRecordView.as_view(), name='time-tracking-record'),
+    path('api/courses/<int:pk>/record-time/', TimeTrackingRecordView.as_view(), name='time-tracking-record'),
     
     # Module endpoints
     path('courses/<int:course_id>/modules/', views.ModuleListCreateAPIView.as_view(), name='module-list-create'),
@@ -123,6 +123,8 @@ urlpatterns = [
     # Content completion endpoints
     path('courses/<int:pk>/complete-content/', views.MarkContentCompletedView.as_view(), name='complete-content'),
     path('courses/<int:pk>/check-completion/', views.CheckCourseCompletionView.as_view(), name='check-completion'),
+    # Add this to your urlpatterns in urls.py
+    # path('api/courses/<int:pk>/record-time/', views.TimeTrackingRecordView.as_view(), name='record-time'),
         # Include course routes
     path('', include(router.urls)),
 ]
