@@ -22,6 +22,8 @@ interface CourseDetailData {
     updated_at: string;
     status: number;
     status_display: string;
+    estimated_duration?: number; // Total course duration in minutes
+    min_required_time?: number; // Minimum time required to complete (minutes)
 }
 
 interface QCMOption {
@@ -51,33 +53,42 @@ export interface CourseContent {
     module: number;
     status: number;
     status_display: string;
+    estimated_duration?: number; // Content duration in minutes
+    min_required_time?: number; // Minimum time required for content
     pdf_content?: {
         id: number;
         pdf_file: string;
+        page_count?: number;
+        estimated_reading_time?: number; // Auto-calculated reading time
     };
     video_content?: {
         id: number;
         video_file: string;
+        duration?: number; // Video duration in seconds
     };
     qcm?: QCMData;
     created_at: string;
     updated_at: string;
     is_completed?: boolean;
     can_access?: boolean;
+    time_spent?: number; // Actual time spent by user in seconds
+    last_accessed?: string;
 }
 
 export interface CourseStats {
     total_users_enrolled: number;
     total_users_completed: number;
-    total_courses_completed: number;
+    // Remove: total_courses_completed: number; // Redundant
     total_modules: number;
     total_contents_course: number;
-    completion_rate: number;
+    completion_rate: number;           // Calculated: (completed/enrolled) * 100
     average_progress: number;
     total_contents_module: number;
     pdf_count: number;
     video_count: number;
     qcm_count: number;
+    average_time_spent?: number;
+    total_time_tracked?: number;
 }
 
 interface QuizAttempt {
@@ -106,6 +117,8 @@ interface Module {
     course: number;
     status: number;
     status_display: string;
+    estimated_duration?: number; // Module total duration (auto-calculated)
+    min_required_time?: number; // Minimum time required for module
     created_at: string;
     updated_at: string;
     contents?: CourseContent[];
@@ -129,6 +142,15 @@ interface Subscriber {
     completed_contents_count: number;
     total_contents_count: number;
     is_completed: boolean;
+    total_time_spent?: number; // Total time spent on course in seconds
+    average_time_per_session?: number; // Average session time
+    can_complete_course?: boolean; // Whether user meets time requirements
+    completion_requirements?: {
+        time_met: boolean;
+        required_time: number;
+        actual_time: number;
+        progress_percentage: number;
+    };
 }
 
 interface UserProfile {
@@ -159,6 +181,130 @@ interface ChatMessage {
     is_read: boolean;
     sender_name?: string;
 }
+
+// Time Display Component
+const TimeDisplay: React.FC<{ 
+    seconds: number; 
+    type?: 'short' | 'detailed';
+    label?: string;
+}> = ({ seconds, type = 'short', label }) => {
+    const formatTime = (totalSeconds: number) => {
+        if (type === 'short') {
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            }
+            return `${minutes}m`;
+        } else {
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const secs = totalSeconds % 60;
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m ${secs}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${secs}s`;
+            }
+            return `${secs}s`;
+        }
+    };
+
+    return (
+        <div className="time-display">
+            {label && <small className="text-muted me-2">{label}:</small>}
+            <span className="badge bg-info">
+                <i className="fas fa-clock me-1"></i>
+                {formatTime(seconds)}
+            </span>
+        </div>
+    );
+};
+
+// Estimated Time Display Component
+// const EstimatedTimeDisplay: React.FC<{
+//     estimatedDuration?: number;
+//     actualTimeSpent?: number;
+//     type: 'module' | 'content';
+// }> = ({ estimatedDuration, actualTimeSpent, type }) => {
+//     if (!estimatedDuration && !actualTimeSpent) return null;
+
+//     return (
+//         <div className="time-info">
+//             {estimatedDuration && (
+//                 <small className="text-muted me-2">
+//                     <i className="fas fa-hourglass-half me-1"></i>
+//                     Est: {Math.ceil(estimatedDuration / 60)}min
+//                 </small>
+//             )}
+//             {actualTimeSpent && actualTimeSpent > 0 && (
+//                 <small className="text-success">
+//                     <i className="fas fa-check-circle me-1"></i>
+//                     Spent: <TimeDisplay seconds={actualTimeSpent} type="short" />
+//                 </small>
+//             )}
+//         </div>
+//     );
+// };
+
+// Time Requirement Badge Component
+const TimeRequirementBadge: React.FC<{
+    requiredTime: number;
+    actualTime: number;
+    type: 'course' | 'module' | 'content';
+}> = ({ requiredTime, actualTime, type }) => {
+    const timeMet = actualTime >= requiredTime;
+    const percentage = requiredTime > 0 ? Math.min((actualTime / requiredTime) * 100, 100) : 100;
+    
+    return (
+        <div className="time-requirement-badge">
+            <div className="d-flex align-items-center gap-2">
+                <span className={`badge ${timeMet ? 'bg-success' : 'bg-warning'}`}>
+                    <i className={`fas ${timeMet ? 'fa-check-circle' : 'fa-clock'} me-1`}></i>
+                    {timeMet ? 'Time Met' : 'Time Required'}
+                </span>
+                <small className="text-muted">
+                    {Math.floor(actualTime / 60)}m / {Math.floor(requiredTime / 60)}m
+                </small>
+            </div>
+            {!timeMet && (
+                <div className="progress mt-1" style={{ height: '4px', width: '80px' }}>
+                    <div 
+                        className="progress-bar bg-warning" 
+                        style={{ width: `${percentage}%` }}
+                    ></div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Auto Time Calculator Component
+const AutoTimeCalculator: React.FC<{
+    contents: CourseContent[];
+    onTimeCalculated: (totalTime: number) => void;
+}> = ({ contents, onTimeCalculated }) => {
+    const calculateTotalTime = () => {
+        const totalTime = contents.reduce((sum, content) => {
+            return sum + (content.estimated_duration || 0);
+        }, 0);
+        onTimeCalculated(totalTime);
+    };
+
+    return (
+        <div className="auto-time-calculator">
+            <button 
+                type="button"
+                className="btn btn-sm btn-outline-primary"
+                onClick={calculateTotalTime}
+            >
+                <i className="fas fa-calculator me-1"></i>
+                Calculate from Contents
+            </button>
+        </div>
+    );
+};
 
 const StatusBadge: React.FC<{ status: number; statusDisplay: string }> = ({ status, statusDisplay }) => {
     const getStatusColor = (status: number) => {
@@ -200,6 +346,40 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     const [loadingSubscribers, setLoadingSubscribers] = useState(false);
     const [loadingChat, setLoadingChat] = useState(false);
 
+    // Time tracking states
+    const [timeTracking, setTimeTracking] = useState<{
+        isTracking: boolean;
+        startTime: Date | null;
+        currentContent: number | null;
+        currentModule: number | null;
+    }>({
+        isTracking: false,
+        startTime: null,
+        currentContent: null,
+        currentModule: null
+    });
+
+    const [userTimeStats, setUserTimeStats] = useState<{
+        totalCourseTime: number;
+        moduleTimes: { [moduleId: number]: number };
+        contentTimes: { [contentId: number]: number };
+    }>({
+        totalCourseTime: 0,
+        moduleTimes: {},
+        contentTimes: {}
+    });
+
+    // New state for time requirements
+    const [completionRequirements, setCompletionRequirements] = useState<{
+        course: { required: number; actual: number; met: boolean };
+        modules: { [moduleId: number]: { required: number; actual: number; met: boolean } };
+        contents: { [contentId: number]: { required: number; actual: number; met: boolean } };
+    }>({
+        course: { required: 0, actual: 0, met: false },
+        modules: {},
+        contents: {}
+    });
+
     const [newContentData, setNewContentData] = useState({
         title: '',
         caption: '',
@@ -215,12 +395,16 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         points: 1,
         passing_score: 80,
         max_attempts: 3,
-        time_limit: 0
+        time_limit: 0,
+        estimated_duration: undefined as number | undefined,
+        min_required_time: undefined as number | undefined
     });
 
     const [newModuleData, setNewModuleData] = useState({
         title: '',
         description: '',
+        estimated_duration: undefined as number | undefined,
+        min_required_time: undefined as number | undefined
     });
 
     const [selectedContent, setSelectedContent] = useState<CourseContent | null>(null);
@@ -228,6 +412,176 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     const [editMode, setEditMode] = useState(false);
     const [moduleEditMode, setModuleEditMode] = useState(false);
     const [expandedModules, setExpandedModules] = useState<number[]>([]);
+
+    // Helper functions for time estimation
+    const getTimeSuggestions = (contentType: string) => {
+        switch (contentType) {
+            case 'pdf':
+                return [
+                    { label: '5 min', value: 5 },
+                    { label: '10 min', value: 10 },
+                    { label: '15 min', value: 15 },
+                    { label: '30 min', value: 30 },
+                    { label: '45 min', value: 45 }
+                ];
+            case 'Video':
+                return [
+                    { label: '5 min', value: 5 },
+                    { label: '10 min', value: 10 },
+                    { label: '15 min', value: 15 },
+                    { label: '20 min', value: 20 },
+                    { label: '30 min', value: 30 }
+                ];
+            case 'QCM':
+                return [
+                    { label: '5 min', value: 5 },
+                    { label: '10 min', value: 10 },
+                    { label: '15 min', value: 15 },
+                    { label: '20 min', value: 20 },
+                    { label: '30 min', value: 30 }
+                ];
+            default:
+                return [
+                    { label: '5 min', value: 5 },
+                    { label: '10 min', value: 10 },
+                    { label: '15 min', value: 15 }
+                ];
+        }
+    };
+
+    // Function to auto-calculate time based on content
+    const calculateAutoTime = (contentType: string, data: any): number | undefined => {
+        switch (contentType) {
+            case 'pdf':
+                return undefined;
+            case 'Video':
+                return undefined;
+            case 'QCM':
+                const questionCount = data.questions?.length || 1;
+                const optionsCount = data.questions?.[0]?.options?.length || 4;
+                const baseTime = questionCount * 2; // 2 minutes per question
+                const complexityBonus = optionsCount > 4 ? questionCount * 0.5 : 0;
+                return Math.ceil(baseTime + complexityBonus);
+            default:
+                return undefined;
+        }
+    };
+
+    // Helper function to calculate content estimated time
+    const getContentEstimatedTime = (content: CourseContent): number | undefined => {
+        const contentType = content.content_type_name || content.content_type;
+        
+        if (content.estimated_duration) {
+            return content.estimated_duration;
+        }
+        
+        switch (contentType.toLowerCase()) {
+            case 'pdf':
+                if (content.pdf_content?.estimated_reading_time) {
+                    return content.pdf_content.estimated_reading_time * 60;
+                }
+                if (content.pdf_content?.page_count) {
+                    return content.pdf_content.page_count * 60;
+                }
+                break;
+                
+            case 'video':
+                if (content.video_content?.duration) {
+                    return content.video_content.duration;
+                }
+                break;
+                
+            case 'qcm':
+                if (content.qcm?.time_limit && content.qcm.time_limit > 0) {
+                    return content.qcm.time_limit * 60;
+                }
+                const questionCount = content.qcm ? 1 : 0;
+                return questionCount * 30;
+        }
+        
+        return undefined;
+    };
+
+    // Function to format time for display
+    const formatTimeForDisplay = (seconds: number): string => {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
+    };
+
+    // Function to calculate total module time from contents
+    const calculateModuleTime = (contents: CourseContent[]): number => {
+        return contents.reduce((total, content) => {
+            return total + (content.estimated_duration || 0);
+        }, 0);
+    };
+
+    // Function to calculate total course time from modules
+    const calculateCourseTime = (modules: Module[]): number => {
+        return modules.reduce((total, module) => {
+            const moduleTime = module.estimated_duration || calculateModuleTime(module.contents || []);
+            return total + moduleTime;
+        }, 0);
+    };
+
+    // Function to check if user can complete course
+    const checkCompletionRequirements = () => {
+        if (!course || !modules) return;
+
+        const courseRequiredTime = (course.min_required_time || course.estimated_duration || 0) * 60; // Convert to seconds
+        const courseActualTime = userTimeStats.totalCourseTime;
+
+        const modulesRequirements: { [moduleId: number]: { required: number; actual: number; met: boolean } } = {};
+        const contentsRequirements: { [contentId: number]: { required: number; actual: number; met: boolean } } = {};
+
+        // Calculate requirements for each module and content
+        modules.forEach(module => {
+            const moduleRequiredTime = (module.min_required_time || module.estimated_duration || 0) * 60;
+            const moduleActualTime = userTimeStats.moduleTimes[module.id] || 0;
+            
+            modulesRequirements[module.id] = {
+                required: moduleRequiredTime,
+                actual: moduleActualTime,
+                met: moduleActualTime >= moduleRequiredTime
+            };
+
+            // Calculate requirements for each content in the module
+            module.contents?.forEach(content => {
+                const contentRequiredTime = (content.min_required_time || content.estimated_duration || 0) * 60;
+                const contentActualTime = userTimeStats.contentTimes[content.id] || 0;
+                
+                contentsRequirements[content.id] = {
+                    required: contentRequiredTime,
+                    actual: contentActualTime,
+                    met: contentActualTime >= contentRequiredTime
+                };
+            });
+        });
+
+        setCompletionRequirements({
+            course: {
+                required: courseRequiredTime,
+                actual: courseActualTime,
+                met: courseActualTime >= courseRequiredTime
+            },
+            modules: modulesRequirements,
+            contents: contentsRequirements
+        });
+    };
+
+    const canCompleteCourse = (): boolean => {
+        if (!completionRequirements.course.met) return false;
+        
+        // Check if all modules meet time requirements
+        const allModulesMet = Object.values(completionRequirements.modules).every(module => module.met);
+        if (!allModulesMet) return false;
+        
+        return allModulesMet;
+    };
 
     const getImageUrl = (imageUrl: string) => {
         if (!imageUrl) return '/group.avif';
@@ -260,29 +614,176 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         }
     };
 
+    // Time tracking functions - UPDATED WITH FALLBACKS
+    const startTimeTracking = (moduleId?: number, contentId?: number) => {
+        setTimeTracking({
+            isTracking: true,
+            startTime: new Date(),
+            currentContent: contentId || null,
+            currentModule: moduleId || null
+        });
+    };
+
+    const stopTimeTracking = async () => {
+        if (!timeTracking.isTracking || !timeTracking.startTime || !courseId) return;
+
+        const endTime = new Date();
+        const duration = Math.floor((endTime.getTime() - timeTracking.startTime.getTime()) / 1000);
+
+        // Update local state only (no API call)
+        setUserTimeStats(prev => {
+            const newStats = { ...prev };
+            
+            if (timeTracking.currentContent) {
+                newStats.contentTimes[timeTracking.currentContent] = 
+                    (newStats.contentTimes[timeTracking.currentContent] || 0) + duration;
+            }
+            
+            if (timeTracking.currentModule) {
+                newStats.moduleTimes[timeTracking.currentModule] = 
+                    (newStats.moduleTimes[timeTracking.currentModule] || 0) + duration;
+            }
+            
+            newStats.totalCourseTime += duration;
+            
+            return newStats;
+        });
+
+        // Save to localStorage as fallback (no API call)
+        try {
+            const timeTrackingData = {
+                course: courseId,
+                module: timeTracking.currentModule,
+                content: timeTracking.currentContent,
+                start_time: timeTracking.startTime.toISOString(),
+                end_time: endTime.toISOString(),
+                duration: duration,
+                session_type: timeTracking.currentContent ? 'content' : 
+                            timeTracking.currentModule ? 'module' : 'course'
+            };
+            
+            // Store in localStorage as backup
+            const existingData = localStorage.getItem(`timeTracking_${courseId}`) || '[]';
+            const timeData = JSON.parse(existingData);
+            timeData.push(timeTrackingData);
+            localStorage.setItem(`timeTracking_${courseId}`, JSON.stringify(timeData));
+            
+        } catch (error) {
+            console.error('Failed to save time tracking locally:', error);
+        }
+
+        // Reset tracking
+        setTimeTracking({
+            isTracking: false,
+            startTime: null,
+            currentContent: null,
+            currentModule: null
+        });
+    };
+
+    // UPDATED: Fetch time stats from localStorage as fallback
+    const fetchTimeStats = async () => {
+        if (!courseId) return;
+        
+        try {
+            // Try to fetch from localStorage as fallback
+            const timeData = localStorage.getItem(`timeTracking_${courseId}`);
+            if (timeData) {
+                const parsedData = JSON.parse(timeData);
+                const stats = {
+                    totalCourseTime: 0,
+                    moduleTimes: {} as { [moduleId: number]: number },
+                    contentTimes: {} as { [contentId: number]: number }
+                };
+                
+                parsedData.forEach((session: any) => {
+                    stats.totalCourseTime += session.duration || 0;
+                    
+                    if (session.module) {
+                        stats.moduleTimes[session.module] = (stats.moduleTimes[session.module] || 0) + (session.duration || 0);
+                    }
+                    
+                    if (session.content) {
+                        stats.contentTimes[session.content] = (stats.contentTimes[session.content] || 0) + (session.duration || 0);
+                    }
+                });
+                
+                setUserTimeStats(stats);
+            }
+        } catch (error) {
+            console.error('Failed to fetch time stats from localStorage:', error);
+            // Initialize with empty stats
+            setUserTimeStats({
+                totalCourseTime: 0,
+                moduleTimes: {},
+                contentTimes: {}
+            });
+        }
+    };
+
+    // Add this debugging code in your CourseDetail component
+useEffect(() => {
+    const fetchCourseData = async () => {
+        if (!courseId) return;
+
+        try {
+            setLoading(true);
+            const [courseResponse, modulesResponse] = await Promise.all([
+                api.get(`courses/${courseId}/`),
+                api.get(`courses/${courseId}/modules/`),
+            ]);
+
+            setCourse(courseResponse.data);
+            setModules(modulesResponse.data);
+            
+            // DEBUG: Check what's actually in the modules response
+            console.log('Full modules response:', modulesResponse.data);
+            if (modulesResponse.data && modulesResponse.data.length > 0) {
+                console.log('First module structure:', modulesResponse.data[0]);
+                console.log('First module content_stats:', modulesResponse.data[0].content_stats);
+                
+                // Check if content_stats exists and has the expected properties
+                const firstModuleStats = modulesResponse.data[0].content_stats;
+                if (firstModuleStats) {
+                    console.log('content_stats properties:', Object.keys(firstModuleStats));
+                    console.log('total_users_completed value:', firstModuleStats.total_users_completed);
+                    console.log('total_contents_course value:', firstModuleStats.total_contents_course);
+                }
+            }
+            
+            // Fetch time statistics from localStorage
+            await fetchTimeStats();
+        } catch (error: any) {
+            console.error('Failed to fetch course data:', error);
+            setError('Failed to load course details');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchCourseData();
+}, [courseId]);
+
+    // Auto-start/stop tracking when content is viewed
     useEffect(() => {
-        const fetchCourseData = async () => {
-            if (!courseId) return;
+        if (viewContentModal) {
+            startTimeTracking(viewContentModal.module, viewContentModal.id);
+        } else {
+            stopTimeTracking();
+        }
 
-            try {
-                setLoading(true);
-                const [courseResponse, modulesResponse] = await Promise.all([
-                    api.get(`courses/${courseId}/`),
-                    api.get(`courses/${courseId}/modules/`),
-                ]);
-
-                setCourse(courseResponse.data);
-                setModules(modulesResponse.data);
-            } catch (error: any) {
-                console.error('Failed to fetch course data:', error);
-                setError('Failed to load course details');
-            } finally {
-                setLoading(false);
+        // Cleanup on unmount
+        return () => {
+            if (timeTracking.isTracking) {
+                stopTimeTracking();
             }
         };
+    }, [viewContentModal]);
 
-        fetchCourseData();
-    }, [courseId]);
+    // Update completion requirements when time stats change
+    useEffect(() => {
+        checkCompletionRequirements();
+    }, [userTimeStats, course, modules]);
 
     const fetchModules = async () => {
         if (!courseId) return;
@@ -393,7 +894,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             await fetchChatMessages(userId);
         } catch (error) {
             console.error('Failed to fetch user profile:', error);
-            // Create a basic user profile from subscriber data
             const subscriber = subscribers.find(sub => sub.user.id === userId);
             if (subscriber) {
                 setSelectedUser({
@@ -424,12 +924,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     const fetchChatMessages = async (userId: number) => {
         try {
             setLoadingChat(true);
-            // Try to fetch from chat endpoint, fallback to empty array
             const response = await api.get(`chat/messages/${userId}/`);
             setChatMessages(response.data.messages || []);
         } catch (error) {
             console.error('Failed to fetch chat messages, using mock data:', error);
-            // Mock data for demonstration
             setChatMessages([
                 {
                     id: 1,
@@ -458,7 +956,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         if (!selectedUser || !newMessage.trim()) return;
 
         try {
-            // Try to send via API, fallback to local state update
             const response = await api.post(`chat/send/`, {
                 receiver_id: selectedUser.id,
                 message: newMessage.trim()
@@ -467,10 +964,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             if (response.data.success) {
                 setChatMessages(prev => [...prev, response.data.message]);
             } else {
-                // Fallback: add message locally
                 const newChatMessage: ChatMessage = {
                     id: Date.now(),
-                    sender: 1, // Current user ID
+                    sender: 1,
                     receiver: selectedUser.id,
                     message: newMessage.trim(),
                     timestamp: new Date().toISOString(),
@@ -481,10 +977,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             setNewMessage('');
         } catch (error) {
             console.error('Failed to send message, adding locally:', error);
-            // Fallback: add message locally
             const newChatMessage: ChatMessage = {
                 id: Date.now(),
-                sender: 1, // Current user ID
+                sender: 1,
                 receiver: selectedUser.id,
                 message: newMessage.trim(),
                 timestamp: new Date().toISOString(),
@@ -505,7 +1000,6 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             );
         } catch (error) {
             console.error('Failed to mark message as read:', error);
-            // Update locally anyway
             setChatMessages(prev => 
                 prev.map(msg => 
                     msg.id === messageId ? { ...msg, is_read: true } : msg
@@ -514,7 +1008,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         }
     };
 
-    // Existing functions (keep all your existing functions here)
+    // Module Creation with Time Tracking
     const handleCreateModule = async () => {
         try {
             if (!courseId) return;
@@ -522,12 +1016,19 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             const response = await api.post(`courses/${courseId}/modules/`, {
                 ...newModuleData,
                 order: modules.length + 1,
-                status: 0
+                status: 0,
+                estimated_duration: newModuleData.estimated_duration,
+                min_required_time: newModuleData.min_required_time
             });
 
             setModules([...modules, { ...response.data, contents: [] }]);
             setShowNewModuleModal(false);
-            setNewModuleData({ title: '', description: '' });
+            setNewModuleData({ 
+                title: '', 
+                description: '', 
+                estimated_duration: undefined,
+                min_required_time: undefined 
+            });
             alert('Module created successfully!');
 
         } catch (error) {
@@ -550,7 +1051,12 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             ));
             setShowNewModuleModal(false);
             setSelectedModuleForEdit(null);
-            setNewModuleData({ title: '', description: '' });
+            setNewModuleData({ 
+                title: '', 
+                description: '', 
+                estimated_duration: undefined,
+                min_required_time: undefined 
+            });
             alert('Module updated successfully!');
 
         } catch (error) {
@@ -574,6 +1080,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         }
     };
 
+    // Content Creation with Time Tracking
     const handleCreateContent = async () => {
         try {
             if (!courseId || !selectedModule) return;
@@ -589,6 +1096,8 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 formData.append('order', '1');
                 formData.append('module', selectedModule.toString());
                 formData.append('status', '1');
+                formData.append('estimated_duration', newContentData.estimated_duration?.toString() || '0');
+                formData.append('min_required_time', newContentData.min_required_time?.toString() || '0');
 
                 if (newContentData.file) {
                     formData.append('pdf_file', newContentData.file);
@@ -606,6 +1115,8 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 formData.append('order', '1');
                 formData.append('module', selectedModule.toString());
                 formData.append('status', '1');
+                formData.append('estimated_duration', newContentData.estimated_duration?.toString() || '0');
+                formData.append('min_required_time', newContentData.min_required_time?.toString() || '0');
 
                 if (newContentData.file) {
                     formData.append('video_file', newContentData.file);
@@ -632,7 +1143,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     points: newContentData.points,
                     passing_score: newContentData.passing_score,
                     max_attempts: newContentData.max_attempts,
-                    time_limit: newContentData.time_limit
+                    time_limit: newContentData.time_limit,
+                    estimated_duration: newContentData.estimated_duration,
+                    min_required_time: newContentData.min_required_time
                 };
             }
 
@@ -668,7 +1181,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 points: 1,
                 passing_score: 80,
                 max_attempts: 3,
-                time_limit: 0
+                time_limit: 0,
+                estimated_duration: undefined,
+                min_required_time: undefined
             });
 
         } catch (error: any) {
@@ -691,6 +1206,12 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
                 formData.append('caption', newContentData.caption);
+                if (newContentData.estimated_duration) {
+                    formData.append('estimated_duration', newContentData.estimated_duration.toString());
+                }
+                if (newContentData.min_required_time) {
+                    formData.append('min_required_time', newContentData.min_required_time.toString());
+                }
 
                 if (newContentData.file) {
                     formData.append('pdf_file', newContentData.file);
@@ -711,13 +1232,21 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     points: newContentData.points,
                     passing_score: newContentData.passing_score,
                     max_attempts: newContentData.max_attempts,
-                    time_limit: newContentData.time_limit
+                    time_limit: newContentData.time_limit,
+                    estimated_duration: newContentData.estimated_duration,
+                    min_required_time: newContentData.min_required_time
                 };
             } else if (contentType.toLowerCase() === 'video') {
                 endpoint = `courses/${courseId}/contents/video/${selectedContent.id}/`;
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
                 formData.append('caption', newContentData.caption);
+                if (newContentData.estimated_duration) {
+                    formData.append('estimated_duration', newContentData.estimated_duration.toString());
+                }
+                if (newContentData.min_required_time) {
+                    formData.append('min_required_time', newContentData.min_required_time.toString());
+                }
 
                 if (newContentData.file) {
                     formData.append('video_file', newContentData.file);
@@ -763,7 +1292,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 points: 1,
                 passing_score: 80,
                 max_attempts: 3,
-                time_limit: 0
+                time_limit: 0,
+                estimated_duration: undefined,
+                min_required_time: undefined
             });
 
         } catch (error: any) {
@@ -804,7 +1335,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             points: content.qcm?.points || 1,
             passing_score: content.qcm?.passing_score || 80,
             max_attempts: content.qcm?.max_attempts || 3,
-            time_limit: content.qcm?.time_limit || 0
+            time_limit: content.qcm?.time_limit || 0,
+            estimated_duration: content.estimated_duration,
+            min_required_time: content.min_required_time
         });
         setShowNewContentModal(true);
         setEditMode(true);
@@ -822,7 +1355,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         setSelectedModuleForEdit(module);
         setNewModuleData({
             title: module.title,
-            description: module.description || ''
+            description: module.description || '',
+            estimated_duration: module.estimated_duration,
+            min_required_time: module.min_required_time
         });
         setShowNewModuleModal(true);
         setModuleEditMode(true);
@@ -1095,38 +1630,46 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         );
     };
 
-    const overallCourseStats = modules.reduce((acc: CourseStats, module) => {
-        if (module.content_stats) {
-            if (acc.total_users_enrolled === 0) {
-                acc.total_users_enrolled = module.content_stats.total_users_enrolled;
-                acc.total_users_completed = module.content_stats.total_users_completed;
-                acc.total_courses_completed = module.content_stats.total_courses_completed;
-                acc.total_modules = module.content_stats.total_modules;
-                acc.completion_rate = module.content_stats.completion_rate;
-                acc.average_progress = module.content_stats.average_progress;
-                acc.total_contents_course = module.content_stats.total_contents_course;
-            }
-            
-            acc.total_contents_module += module.content_stats.total_contents_module;
-            acc.pdf_count += module.content_stats.pdf_count;
-            acc.video_count += module.content_stats.video_count;
-            acc.qcm_count += module.content_stats.qcm_count;
+    const overallCourseStats = modules.reduce((acc: CourseStats, module, index) => {
+    if (module.content_stats) {
+        // For course-level stats, take from the first module only
+        // These should be identical across all modules since they're course-level stats
+        if (index === 0) {
+            acc.total_users_enrolled = module.content_stats.total_users_enrolled;
+            acc.total_users_completed = module.content_stats.total_users_completed;
+            acc.total_modules = module.content_stats.total_modules;
+            acc.total_contents_course = module.content_stats.total_contents_course;
+            acc.completion_rate = module.content_stats.completion_rate;
+            acc.average_progress = module.content_stats.average_progress;
+            acc.average_time_spent = module.content_stats.average_time_spent;
+            acc.total_time_tracked = module.content_stats.total_time_tracked;
         }
-        return acc;
-    }, {
-        total_users_enrolled: 0,
-        total_users_completed: 0,
-        total_courses_completed: 0,
-        total_modules: 0,
-        total_contents_course: 0,
-        completion_rate: 0,
-        average_progress: 0,
-        total_contents_module: 0,
-        pdf_count: 0,
-        video_count: 0,
-        qcm_count: 0
-    });
-
+        
+        // Sum up module-specific content counts
+        acc.total_contents_module += module.content_stats.total_contents_module;
+        acc.pdf_count += module.content_stats.pdf_count;
+        acc.video_count += module.content_stats.video_count;
+        acc.qcm_count += module.content_stats.qcm_count;
+    }
+    return acc;
+}, {
+    total_users_enrolled: 0,
+    total_users_completed: 0,
+    total_modules: 0,
+    total_contents_course: 0,
+    completion_rate: 0,
+    average_progress: 0,
+    total_contents_module: 0,
+    pdf_count: 0,
+    video_count: 0,
+    qcm_count: 0,
+    average_time_spent: 0,
+    total_time_tracked: 0
+} as CourseStats); // Add initial value with proper type
+    // Add this after your overallCourseStats calculation
+console.log('Overall Course Stats:', overallCourseStats);
+console.log('total_users_completed:', overallCourseStats.total_users_completed);
+console.log('total_contents_course:', overallCourseStats.total_contents_course);
     if (loading) {
         return (
             <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
@@ -1203,6 +1746,50 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                         />
                         <div className="card-body">
                             <h5 className="card-title">Course Overview</h5>
+                            
+                            {/* Add course time information */}
+                            <div className="mb-3">
+                                <strong>Estimated Duration:</strong><br />
+                                {course.estimated_duration ? (
+                                    <span className="badge bg-primary">
+                                        {formatTimeForDisplay(course.estimated_duration * 60)}
+                                    </span>
+                                ) : (
+                                    <span className="text-muted">Not specified</span>
+                                )}
+                            </div>
+                            
+                            <div className="mb-3">
+                                <strong>Minimum Required Time:</strong><br />
+                                {course.min_required_time ? (
+                                    <span className="badge bg-warning">
+                                        {formatTimeForDisplay(course.min_required_time * 60)}
+                                    </span>
+                                ) : (
+                                    <span className="text-muted">Not specified</span>
+                                )}
+                            </div>
+                            
+                            {/* <div className="mb-3">
+                                <strong>Your Time Spent:</strong><br />
+                                <TimeDisplay 
+                                    seconds={userTimeStats.totalCourseTime} 
+                                    type="detailed"
+                                />
+                            </div>
+
+                            {/* Completion Status */}
+                            
+                            {/* Time Requirement Progress */}
+                            <div className="mb-3">
+                                <strong>Time Requirement Progress:</strong><br />
+                                <TimeRequirementBadge 
+                                    requiredTime={completionRequirements.course.required}
+                                    actualTime={completionRequirements.course.actual}
+                                    type="course"
+                                />
+                            </div>
+                            
                             <div className="mb-3">
                                 <strong>Status:</strong><br />
                                 <StatusBadge status={course.status} statusDisplay={course.status_display} />
@@ -1226,12 +1813,12 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                             title="Click to view all subscribers and their progress"
                         >
                             <CircularStatsDisplay stats={overallCourseStats} type="course" />
-                            <div className="text-center mt-2">
+                            {/* <div className="text-center mt-2">
                                 <small className="text-muted">
                                     <i className="fas fa-users me-1"></i>
                                     Click to view all learners
                                 </small>
-                            </div>
+                            </div> */}
                         </div>
                     </div>
                 </div>
@@ -1281,6 +1868,21 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                         {module.description && (
                                                                             <small className="text-muted">{module.description}</small>
                                                                         )}
+                                                                        
+                                                                        {/* Time Requirements */}
+                                                                        <div className="mt-2">
+                                                                            <TimeRequirementBadge 
+                                                                                requiredTime={completionRequirements.modules[module.id]?.required || 0}
+                                                                                actualTime={completionRequirements.modules[module.id]?.actual || 0}
+                                                                                type="module"
+                                                                            />
+                                                                        </div>
+                                                                        
+                                                                        {/* <EstimatedTimeDisplay 
+                                                                            estimatedDuration={module.estimated_duration}
+                                                                            actualTimeSpent={userTimeStats.moduleTimes[module.id]}
+                                                                            type="module"
+                                                                        /> */}
                                                                         {module.content_stats && (
                                                                             <CircularStatsDisplay stats={module.content_stats} type="module" />
                                                                         )}
@@ -1330,6 +1932,25 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                                                 {content.caption && (
                                                                                                     <p className="card-text text-muted small mb-2">{content.caption}</p>
                                                                                                 )}
+                                                                                                
+                                                                                                {/* Time Requirements for Content */}
+                                                                                                <div className="mb-2">
+                                                                                                    <TimeRequirementBadge 
+                                                                                                        requiredTime={completionRequirements.contents[content.id]?.required || 0}
+                                                                                                        actualTime={completionRequirements.contents[content.id]?.actual || 0}
+                                                                                                        type="content"
+                                                                                                    />
+                                                                                                </div>
+                                                                                                
+                                                                                                {/* Add time information for content */}
+                                                                                                {/* <div className="mb-2">
+                                                                                                    <EstimatedTimeDisplay 
+                                                                                                        estimatedDuration={getContentEstimatedTime(content)}
+                                                                                                        actualTimeSpent={userTimeStats.contentTimes[content.id]}
+                                                                                                        type="content"
+                                                                                                    />
+                                                                                                </div> */}
+                                                                                                
                                                                                                 <div className="d-flex justify-content-between align-items-center">
                                                                                                     <small className="text-muted">
                                                                                                         {content.content_type_name || content.content_type} • Order: {content.order}
@@ -1415,6 +2036,8 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                     <tr>
                                                         <th>User</th>
                                                         <th>Progress</th>
+                                                        <th>Time Spent</th>
+                                                        <th>Time Requirement</th>
                                                         <th>Score</th>
                                                         <th>Completed</th>
                                                         <th>Subscribed Since</th>
@@ -1459,6 +2082,21 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                         {subscriber.completed_contents_count}/{subscriber.total_contents_count}
                                                                     </small>
                                                                 </div>
+                                                            </td>
+                                                            <td>
+                                                                <TimeDisplay 
+                                                                    seconds={subscriber.total_time_spent || 0} 
+                                                                    type="short"
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                {course.min_required_time && (
+                                                                    <TimeRequirementBadge 
+                                                                        requiredTime={course.min_required_time * 60}
+                                                                        actualTime={subscriber.total_time_spent || 0}
+                                                                        type="course"
+                                                                    />
+                                                                )}
                                                             </td>
                                                             <td>
                                                                 <span className="badge bg-info">
@@ -1761,11 +2399,11 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 </>
             )}
 
-            {/* New Module Modal */}
+            {/* Enhanced New Module Modal with Time Tracking */}
             {showNewModuleModal && (
                 <>
                     <div className="modal fade show d-block" tabIndex={-1}>
-                        <div className="modal-dialog">
+                        <div className="modal-dialog modal-lg">
                             <div className="modal-content">
                                 <div className="modal-header">
                                     <h5 className="modal-title">{moduleEditMode ? 'Edit Module' : 'Add New Module'}</h5>
@@ -1773,21 +2411,43 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                         setShowNewModuleModal(false);
                                         setModuleEditMode(false);
                                         setSelectedModuleForEdit(null);
-                                        setNewModuleData({ title: '', description: '' });
+                                        setNewModuleData({ 
+                                            title: '', 
+                                            description: '', 
+                                            estimated_duration: undefined,
+                                            min_required_time: undefined 
+                                        });
                                     }}></button>
                                 </div>
                                 <div className="modal-body">
-                                    <div className="mb-3">
-                                        <label className="form-label">Module Title *</label>
-                                        <input
-                                            type="text"
-                                            className="form-control"
-                                            value={newModuleData.title}
-                                            onChange={(e) => setNewModuleData({ ...newModuleData, title: e.target.value })}
-                                            placeholder="Enter module title"
-                                            required
-                                        />
+                                    <div className="row">
+                                        <div className="col-md-6">
+                                            <div className="mb-3">
+                                                <label className="form-label">Module Title *</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    value={newModuleData.title}
+                                                    onChange={(e) => setNewModuleData({ ...newModuleData, title: e.target.value })}
+                                                    placeholder="Enter module title"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="col-md-6">
+                                            <div className="mb-3">
+                                                <label className="form-label">Order</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={modules.length + 1}
+                                                    disabled
+                                                />
+                                                <small className="text-muted">Auto-calculated based on existing modules</small>
+                                            </div>
+                                        </div>
                                     </div>
+                                    
                                     <div className="mb-3">
                                         <label className="form-label">Description</label>
                                         <textarea
@@ -1798,17 +2458,115 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                             rows={3}
                                         />
                                     </div>
+
+                                    {/* Time Configuration Section */}
+                                    <div className="card mb-3">
+                                        <div className="card-header bg-light">
+                                            <h6 className="mb-0">
+                                                <i className="fas fa-clock me-2"></i>
+                                                Time Configuration
+                                            </h6>
+                                        </div>
+                                        <div className="card-body">
+                                            <div className="row">
+                                                <div className="col-md-6">
+                                                    <div className="mb-3">
+                                                        <label className="form-label">Estimated Duration (minutes)</label>
+                                                        <input
+                                                            type="number"
+                                                            className="form-control"
+                                                            value={newModuleData.estimated_duration || ''}
+                                                            onChange={(e) => setNewModuleData({ 
+                                                                ...newModuleData, 
+                                                                estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                                                            })}
+                                                            min="1"
+                                                            placeholder="Auto-calculated from contents"
+                                                        />
+                                                        <small className="text-muted">
+                                                            Estimated time to complete this module
+                                                        </small>
+                                                    </div>
+                                                </div>
+                                                <div className="col-md-6">
+                                                    <div className="mb-3">
+                                                        <label className="form-label">
+                                                            Minimum Required Time (minutes) *
+                                                            <i className="fas fa-asterisk text-danger ms-1" style={{ fontSize: '0.6em' }}></i>
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            className="form-control"
+                                                            value={newModuleData.min_required_time || ''}
+                                                            onChange={(e) => setNewModuleData({ 
+                                                                ...newModuleData, 
+                                                                min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                                                            })}
+                                                            min="1"
+                                                            placeholder="Minimum time required"
+                                                            required
+                                                        />
+                                                        <small className="text-muted">
+                                                            Learners must spend at least this time
+                                                        </small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Auto-calculation section */}
+                                            {selectedModuleForEdit?.contents && selectedModuleForEdit.contents.length > 0 && (
+                                                <div className="alert alert-info">
+                                                    <div className="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <small>
+                                                                <i className="fas fa-info-circle me-1"></i>
+                                                                <strong>Contents Total:</strong> {calculateModuleTime(selectedModuleForEdit.contents)} minutes
+                                                            </small>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm btn-outline-primary"
+                                                            onClick={() => {
+                                                                const totalTime = calculateModuleTime(selectedModuleForEdit.contents || []);
+                                                                setNewModuleData(prev => ({
+                                                                    ...prev,
+                                                                    estimated_duration: totalTime,
+                                                                    min_required_time: totalTime
+                                                                }));
+                                                            }}
+                                                        >
+                                                            Apply Contents Total
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="alert alert-warning">
+                                        <small>
+                                            <i className="fas fa-exclamation-triangle me-2"></i>
+                                            <strong>Important:</strong> Learners must spend at least the minimum required time 
+                                            before they can complete this module. This ensures proper learning engagement.
+                                        </small>
+                                    </div>
                                 </div>
                                 <div className="modal-footer">
                                     <button type="button" className="btn btn-secondary" onClick={() => {
                                         setShowNewModuleModal(false);
                                         setModuleEditMode(false);
                                         setSelectedModuleForEdit(null);
-                                        setNewModuleData({ title: '', description: '' });
+                                        setNewModuleData({ 
+                                            title: '', 
+                                            description: '', 
+                                            estimated_duration: undefined,
+                                            min_required_time: undefined 
+                                        });
                                     }}>
                                         Cancel
                                     </button>
-                                    <button type="button" className="btn btn-primary" onClick={moduleEditMode ? handleUpdateModule : handleCreateModule} disabled={!newModuleData.title}>
+                                    <button type="button" className="btn btn-primary" onClick={moduleEditMode ? handleUpdateModule : handleCreateModule} 
+                                        disabled={!newModuleData.title || !newModuleData.min_required_time}>
                                         {moduleEditMode ? 'Update Module' : 'Create Module'}
                                     </button>
                                 </div>
@@ -1819,7 +2577,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 </>
             )}
 
-            {/* New Content Modal */}
+            {/* Enhanced New Content Modal with Time Tracking */}
             {showNewContentModal && (
                 <>
                     <div className="modal fade show d-block" tabIndex={-1}>
@@ -1847,7 +2605,9 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                             points: 1,
                                             passing_score: 80,
                                             max_attempts: 3,
-                                            time_limit: 0
+                                            time_limit: 0,
+                                            estimated_duration: undefined,
+                                            min_required_time: undefined
                                         });
                                     }}></button>
                                 </div>
@@ -1891,6 +2651,147 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                 />
                                             </div>
 
+                                            {/* Enhanced Time Configuration */}
+                                            <div className="card mb-3">
+                                                <div className="card-header bg-light">
+                                                    <h6 className="mb-0">
+                                                        <i className="fas fa-clock me-2"></i>
+                                                        Time Configuration
+                                                    </h6>
+                                                </div>
+                                                <div className="card-body">
+                                                    <div className="row">
+                                                        <div className="col-md-6">
+                                                            <div className="mb-3">
+                                                                <label className="form-label">
+                                                                    Estimated Duration (minutes) *
+                                                                    {selectedContentType === 'pdf' && <span className="text-muted"> - Reading time</span>}
+                                                                    {selectedContentType === 'Video' && <span className="text-muted"> - Video length</span>}
+                                                                    {selectedContentType === 'QCM' && <span className="text-muted"> - Quiz time</span>}
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    className="form-control"
+                                                                    value={newContentData.estimated_duration || ''}
+                                                                    onChange={(e) => setNewContentData({ 
+                                                                        ...newContentData, 
+                                                                        estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                                                                    })}
+                                                                    min="1"
+                                                                    placeholder={`Enter estimated duration`}
+                                                                    required
+                                                                />
+                                                                
+                                                                {/* Smart time suggestions */}
+                                                                <div className="mt-2">
+                                                                    <small className="text-muted d-block mb-1">
+                                                                        <strong>Suggested durations:</strong>
+                                                                    </small>
+                                                                    <div className="btn-group btn-group-sm" role="group">
+                                                                        {getTimeSuggestions(selectedContentType).map((suggestion, index) => (
+                                                                            <button
+                                                                                key={index}
+                                                                                type="button"
+                                                                                className="btn btn-outline-primary"
+                                                                                onClick={() => setNewContentData({
+                                                                                    ...newContentData,
+                                                                                    estimated_duration: suggestion.value,
+                                                                                    min_required_time: suggestion.value
+                                                                                })}
+                                                                            >
+                                                                                {suggestion.label}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="col-md-6">
+                                                            <div className="mb-3">
+                                                                <label className="form-label">
+                                                                    Minimum Required Time (minutes) *
+                                                                    <i className="fas fa-asterisk text-danger ms-1" style={{ fontSize: '0.6em' }}></i>
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    className="form-control"
+                                                                    value={newContentData.min_required_time || ''}
+                                                                    onChange={(e) => setNewContentData({ 
+                                                                        ...newContentData, 
+                                                                        min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                                                                    })}
+                                                                    min="1"
+                                                                    placeholder="Minimum time required"
+                                                                    required
+                                                                />
+                                                                <small className="text-muted">
+                                                                    Learners must spend at least this time
+                                                                </small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Auto-calculation for QCM */}
+                                                    {selectedContentType === 'QCM' && (
+                                                        <div className="alert alert-warning py-2 mb-3">
+                                                            <div className="d-flex justify-content-between align-items-center">
+                                                                <small>
+                                                                    <i className="fas fa-calculator me-1"></i>
+                                                                    <strong>Auto-calculated time:</strong> {calculateAutoTime('QCM', newContentData)} minutes
+                                                                </small>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-sm btn-outline-primary"
+                                                                    onClick={() => {
+                                                                        const autoTime = calculateAutoTime('QCM', newContentData);
+                                                                        if (autoTime) {
+                                                                            setNewContentData(prev => ({ 
+                                                                                ...prev, 
+                                                                                estimated_duration: autoTime,
+                                                                                min_required_time: autoTime 
+                                                                            }));
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    Apply
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Content-specific guidance */}
+                                                    {selectedContentType === 'pdf' && (
+                                                        <div className="alert alert-info py-2">
+                                                            <small>
+                                                                <i className="fas fa-lightbulb me-1"></i>
+                                                                <strong>PDF Reading Time:</strong> Average reading speed is 2-3 minutes per page. 
+                                                                Consider complexity and technical level when setting minimum time.
+                                                            </small>
+                                                        </div>
+                                                    )}
+
+                                                    {selectedContentType === 'Video' && (
+                                                        <div className="alert alert-info py-2">
+                                                            <small>
+                                                                <i className="fas fa-lightbulb me-1"></i>
+                                                                <strong>Video Learning Time:</strong> Include time for pausing, note-taking, 
+                                                                and reviewing key concepts. Minimum time should cover actual video length.
+                                                            </small>
+                                                        </div>
+                                                    )}
+
+                                                    {selectedContentType === 'QCM' && (
+                                                        <div className="alert alert-info py-2">
+                                                            <small>
+                                                                <i className="fas fa-lightbulb me-1"></i>
+                                                                <strong>Quiz Time:</strong> Allow sufficient time for reading questions carefully 
+                                                                and thinking. Complex questions may require more time.
+                                                            </small>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
                                             {selectedContentType === 'pdf' && (
                                                 <div className="mb-3">
                                                     <label className="form-label">Upload PDF File *</label>
@@ -1931,6 +2832,15 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                     const newQuestions = [...newContentData.questions];
                                                                     newQuestions[0].question_type = e.target.value as 'single' | 'multiple';
                                                                     setNewContentData({ ...newContentData, questions: newQuestions });
+                                                                    
+                                                                    // Auto-update time estimation
+                                                                    const autoTime = calculateAutoTime('QCM', {
+                                                                        questions: newQuestions,
+                                                                        question_type: e.target.value
+                                                                    });
+                                                                    if (autoTime && !newContentData.estimated_duration) {
+                                                                        setNewContentData(prev => ({ ...prev, estimated_duration: autoTime }));
+                                                                    }
                                                                 }}
                                                             >
                                                                 <option value="single">Single Choice</option>
@@ -1979,6 +2889,32 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                                                 onChange={(e) => setNewContentData({ ...newContentData, time_limit: parseInt(e.target.value) })}
                                                                 min="0"
                                                             />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Auto-time calculation for QCM */}
+                                                    <div className="alert alert-warning py-2 mb-3">
+                                                        <div className="d-flex justify-content-between align-items-center">
+                                                            <small>
+                                                                <i className="fas fa-calculator me-1"></i>
+                                                                <strong>Auto-calculated time:</strong> {calculateAutoTime('QCM', newContentData)} minutes
+                                                            </small>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-sm btn-outline-primary"
+                                                                onClick={() => {
+                                                                    const autoTime = calculateAutoTime('QCM', newContentData);
+                                                                    if (autoTime) {
+                                                                        setNewContentData(prev => ({ 
+                                                                            ...prev, 
+                                                                            estimated_duration: autoTime,
+                                                                            min_required_time: autoTime 
+                                                                        }));
+                                                                    }
+                                                                }}
+                                                            >
+                                                                Apply
+                                                            </button>
                                                         </div>
                                                     </div>
 
@@ -2081,6 +3017,8 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                                     {selectedContentType && (
                                         <button type="button" className="btn btn-primary" onClick={editMode ? handleUpdateContent : handleCreateContent} disabled={
                                             !newContentData.title ||
+                                            !newContentData.estimated_duration ||
+                                            !newContentData.min_required_time ||
                                             (selectedContentType === 'pdf' && !newContentData.file && !editMode) ||
                                             (selectedContentType === 'Video' && !newContentData.file && !editMode) ||
                                             (selectedContentType === 'QCM' && (
@@ -2128,6 +3066,21 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 }
                 .message-text {
                     word-wrap: break-word;
+                }
+                .time-display .badge {
+                    font-size: 0.75em;
+                }
+                .time-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+                .time-requirement-badge {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 4px;
                 }
             `}</style>
         </div>

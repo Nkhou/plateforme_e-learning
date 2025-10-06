@@ -2,11 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.conf import settings
-
-from django.db import models
-from django.contrib.auth.models import AbstractUser
-from django.utils import timezone
-from django.conf import settings
+from django.core.validators import MinValueValidator
 
 PRIVILEGE_CHOICES = [
     ('A', 'Admin'),
@@ -22,47 +18,54 @@ DEPARTMENT_CHOICES = [
     ('S', 'Sales'),
 ]
 
-# Ajouter le choix de statut
 USER_STATUS_CHOICES = [
     (1, 'Actif'),
     (2, 'Suspendu'),
 ]
 
+COURSE_STATUS_CHOICES = [
+    (0, 'Brouillon'),
+    (1, 'Actif'),
+    (2, 'Archivé'),
+]
+
+QUESTION_TYPE_CHOICES = [
+    ('single', 'Single Choice'),
+    ('multiple', 'Multiple Choice'),
+]
+
 class CustomUser(AbstractUser):
     privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
     department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
-    status = models.IntegerField(choices=USER_STATUS_CHOICES, default=1)  # Nouveau champ statut
-    suspended_at = models.DateTimeField(null=True, blank=True)  # Date de suspension
-    suspension_reason = models.TextField(blank=True, null=True)  # Raison de la suspension
+    status = models.IntegerField(choices=USER_STATUS_CHOICES, default=1)
+    suspended_at = models.DateTimeField(null=True, blank=True)
+    suspension_reason = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.username
 
     @property
+    def full_name(self):
+        """Return full name for React component compatibility"""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        return self.username
+
+    @property
     def is_active_user(self):
-        """Vérifie si l'utilisateur est actif"""
         return self.status == 1
 
     def suspend_user(self, reason=""):
-        """Suspendre un utilisateur"""
         self.status = 2
         self.suspended_at = timezone.now()
         self.suspension_reason = reason
         self.save()
 
     def activate_user(self):
-        """Réactiver un utilisateur"""
         self.status = 1
         self.suspended_at = None
         self.suspension_reason = None
         self.save()
-
-# Ajouter le choix de statut pour les cours
-COURSE_STATUS_CHOICES = [
-    (0, 'Brouillon'),
-    (1, 'Actif'),
-    (2, 'Archivé'),
-]
 
 class Course(models.Model):
     title_of_course = models.CharField(max_length=100, blank=False, null=False)
@@ -81,17 +84,45 @@ class Course(models.Model):
     )    
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=0)  # Nouveau champ statut
+    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=0)
     subscribers = models.ManyToManyField(
         settings.AUTH_USER_MODEL, 
         through='Subscription', 
         related_name='subscribed_courses',
         blank=True
     )
+    # NEW FIELDS - Added for time tracking
+    estimated_duration = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Total course duration in minutes"
+    )
+    min_required_time = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Minimum time required to complete in minutes"
+    )
 
     def __str__(self):
         creator_name = self.creator.get_full_name() or self.creator.username
         return f"{self.title_of_course} by {creator_name}"
+
+    # NEW PROPERTIES - Added for React compatibility
+    @property
+    def creator_username(self):
+        return self.creator.username
+
+    @property
+    def creator_first_name(self):
+        return self.creator.first_name
+
+    @property
+    def creator_last_name(self):
+        return self.creator.last_name
+
+    @property
+    def status_display(self):
+        return dict(COURSE_STATUS_CHOICES).get(self.status, 'Unknown')
 
     @property
     def is_draft(self):
@@ -106,19 +137,17 @@ class Course(models.Model):
         return self.status == 2
 
     def activate_course(self):
-        """Activer le cours"""
         self.status = 1
         self.save()
 
     def archive_course(self):
-        """Archiver le cours"""
         self.status = 2
         self.save()
 
     def set_draft(self):
-        """Remettre en brouillon"""
         self.status = 0
         self.save()
+
 class Enrollment(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='enrollments')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')
@@ -134,38 +163,101 @@ class Enrollment(models.Model):
 
 class ContentType(models.Model):
     name = models.CharField(max_length=50)  # 'video', 'qcm', or 'pdf'
+    # NEW FIELD - Added for better display names
+    display_name = models.CharField(max_length=50, blank=True)
     
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.display_name:
+            self.display_name = self.name
+        super().save(*args, **kwargs)
 
 class Module(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='modules')
     title = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
-    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=0)  # Nouveau champ statut
-    order = models.PositiveIntegerField(default=0)  # for ordering modules within a course
+    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=0)
+    order = models.PositiveIntegerField(default=0)
+    # NEW FIELDS - Added for time tracking
+    estimated_duration = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Module total duration in minutes"
+    )
+    min_required_time = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Minimum time required for module in minutes"
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['order']
     
     def __str__(self):
         return f"{self.course.title_of_course} - {self.title}"
+
+    # NEW PROPERTY - Added for React compatibility
+    @property
+    def status_display(self):
+        return dict(COURSE_STATUS_CHOICES).get(self.status, 'Unknown')
+
+    def calculate_estimated_duration(self):
+        """Calculate total duration from contents"""
+        total_duration = 0
+        for content in self.contents.all():
+            if content.estimated_duration:
+                total_duration += content.estimated_duration
+        return total_duration
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate duration if not set
+        if not self.estimated_duration and self.pk:
+            self.estimated_duration = self.calculate_estimated_duration()
+        super().save(*args, **kwargs)
+
 class CourseContent(models.Model):
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='contents', null=True, blank=True)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     title = models.CharField(max_length=100)
     caption = models.CharField(max_length=200, blank=True)
-    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=1)  # Nouveau champ statut
-    order = models.PositiveIntegerField(default=0)  # for ordering content within a module
+    status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=1)
+    order = models.PositiveIntegerField(default=0)
+    # NEW FIELDS - Added for time tracking
+    estimated_duration = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Content duration in minutes"
+    )
+    min_required_time = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Minimum time required for content in minutes"
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['order']
     
     def __str__(self):
         return f"{self.content_type}: {self.title}"
+
+    # NEW PROPERTIES - Added for React compatibility
+    @property
+    def content_type_name(self):
+        return self.content_type.display_name or self.content_type.name
+
+    @property
+    def status_display(self):
+        return dict(COURSE_STATUS_CHOICES).get(self.status, 'Unknown')
+
 class ContentProgress(models.Model):
     enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, related_name='content_progress')
-    content = models.ForeignKey(CourseContent, on_delete=models.CASCADE)  # Adjust based on your Content model
+    content = models.ForeignKey(CourseContent, on_delete=models.CASCADE)
     completed = models.BooleanField(default=False)
     viewed_at = models.DateTimeField(auto_now_add=True)
     time_spent = models.IntegerField(default=0)  # in seconds
@@ -176,16 +268,15 @@ class ContentProgress(models.Model):
     def __str__(self):
         return f"{self.enrollment.user.username} - {self.content.title}"
 
-
-
-
 class QCM(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='qcm')
     question = models.TextField()
+    # NEW FIELD - Added for question type
+    question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES, default='single')
     points = models.IntegerField(default=1)  
     passing_score = models.IntegerField(default=80) 
     max_attempts = models.IntegerField(default=3)  
-    time_limit = models.IntegerField(default=0)  
+    time_limit = models.IntegerField(default=0)  # in minutes
 
     def __str__(self):
         return f"QCM: {self.question} ({self.points} points)"
@@ -193,6 +284,12 @@ class QCM(models.Model):
 class VideoContent(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='video_content')
     video_file = models.FileField(upload_to='videos/%y')
+    # NEW FIELD - Added for video duration
+    duration = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Video duration in seconds"
+    )
     
     def __str__(self):
         return self.course_content.title
@@ -200,9 +297,31 @@ class VideoContent(models.Model):
 class PDFContent(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='pdf_content')
     pdf_file = models.FileField(upload_to='pdfs/')
+    # NEW FIELDS - Added for PDF metadata
+    page_count = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Number of pages in PDF"
+    )
+    estimated_reading_time = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Estimated reading time in minutes"
+    )
     
     def __str__(self):
         return self.course_content.title
+
+    def calculate_reading_time(self):
+        """Calculate reading time based on page count (2 minutes per page)"""
+        return self.page_count * 2
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate reading time if not set
+        if not self.estimated_reading_time and self.page_count > 0:
+            self.estimated_reading_time = self.calculate_reading_time()
+        super().save(*args, **kwargs)
+
 class Subscription(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='course_subscriptions')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='course_subscriptions')
@@ -215,34 +334,74 @@ class Subscription(models.Model):
     locked_contents = models.ManyToManyField('CourseContent', blank=True, related_name='locked_for_users')
     
     progress_percentage = models.FloatField(default=0.0)
-    
+    # NEW FIELDS - Added for time tracking and completion
+    total_time_spent = models.IntegerField(default=0, help_text="Total time spent on course in seconds")
+    average_time_per_session = models.IntegerField(default=0, help_text="Average session time in seconds")
+    is_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ['user', 'course']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.course.title_of_course}"
+
+    # NEW PROPERTIES - Added for React compatibility
+    @property
+    def completed_contents_count(self):
+        return self.completed_contents.count()
+
+    @property
+    def total_contents_count(self):
+        return CourseContent.objects.filter(module__course=self.course).count()
+
+    @property
+    def can_complete_course(self):
+        """Check if user meets time requirements to complete course"""
+        if not self.course.min_required_time:
+            return True
+        return (self.total_time_spent / 60) >= self.course.min_required_time
+
+    @property
+    def completion_requirements(self):
+        """Get completion requirements status"""
+        required_time = (self.course.min_required_time or 0) * 60  # Convert to seconds
+        return {
+            'time_met': self.total_time_spent >= required_time,
+            'required_time': required_time,
+            'actual_time': self.total_time_spent,
+            'progress_percentage': self.progress_percentage
+        }
+
     def update_total_score(self):
         completed_qcms = QCMCompletion.objects.filter(subscription=self, is_passed=True)
         self.total_score = sum(completion.points_earned for completion in completed_qcms)
         self.save()
         return self.total_score
-    
+
+    def update_progress(self):
+        """Update progress percentage"""
+        total_contents = self.total_contents_count
+        if total_contents > 0:
+            self.progress_percentage = (self.completed_contents_count / total_contents) * 100
+            self.save()
+
     def can_access_content(self, content):
         """Check if user can access specific content based on prerequisites"""
-        # Get all contents in the same module
         module_contents = CourseContent.objects.filter(module=content.module).order_by('order')
         
-        # Find the position of the current content
         content_position = None
         for i, module_content in enumerate(module_contents):
             if module_content.id == content.id:
                 content_position = i
                 break
         
-        # If it's the first content in the module, allow access
         if content_position == 0:
             return True
         
-        # Check if previous content is completed
         previous_content = module_contents[content_position - 1]
         
-        # If previous content is a QCM, check if it's passed
-        if previous_content.content_type.name == 'QCM':
+        if hasattr(previous_content, 'qcm') and previous_content.qcm:
             qcm = previous_content.qcm
             completion = QCMCompletion.objects.filter(
                 subscription=self, 
@@ -251,8 +410,75 @@ class Subscription(models.Model):
             ).exists()
             return completion
         
-        # For non-QCM content, check if it's marked as completed
         return self.completed_contents.filter(id=previous_content.id).exists()
+    def update_completion_status(self):
+        """Update the completion status based on content completion and time requirements"""
+        total_contents = CourseContent.objects.filter(module__course=self.course).count()
+        completed_contents = self.completed_contents.count()
+        
+        # Calculate progress percentage
+        if total_contents > 0:
+            self.progress_percentage = (completed_contents / total_contents) * 100
+        else:
+            self.progress_percentage = 0
+        
+        # Check if all contents are completed AND time requirements are met
+        all_contents_completed = completed_contents >= total_contents
+        time_requirements_met = self.check_time_requirements()
+        
+        # Update completion status
+        was_completed = self.is_completed
+        self.is_completed = all_contents_completed and time_requirements_met
+        
+        # Set completed_at timestamp if newly completed
+        if self.is_completed and not was_completed:
+            self.completed_at = timezone.now()
+        
+        self.save()
+        return self.is_completed
+    
+    def check_time_requirements(self):
+        """Check if user meets time requirements for course completion"""
+        if not self.course.min_required_time:
+            return True  # No time requirement
+        
+        # Convert required time to seconds and check
+        required_seconds = self.course.min_required_time * 60
+        return self.total_time_spent >= required_seconds
+    
+    def mark_content_completed(self, content):
+        """Mark a content as completed and update progress"""
+        if not self.completed_contents.filter(id=content.id).exists():
+            self.completed_contents.add(content)
+            self.update_completion_status()
+            return True
+        return False
+    
+    def mark_content_incomplete(self, content):
+        """Mark a content as incomplete and update progress"""
+        if self.completed_contents.filter(id=content.id).exists():
+            self.completed_contents.remove(content)
+            self.update_completion_status()
+            return True
+        return False
+    
+    def get_completion_requirements(self):
+        """Get detailed completion requirements status"""
+        total_contents = CourseContent.objects.filter(module__course=self.course).count()
+        completed_contents = self.completed_contents.count()
+        
+        required_time_seconds = (self.course.min_required_time or 0) * 60
+        
+        return {
+            'contents_met': completed_contents >= total_contents,
+            'time_met': self.total_time_spent >= required_time_seconds,
+            'required_contents': total_contents,
+            'completed_contents': completed_contents,
+            'required_time_seconds': required_time_seconds,
+            'actual_time_seconds': self.total_time_spent,
+            'progress_percentage': self.progress_percentage,
+            'can_complete': completed_contents >= total_contents and self.total_time_spent >= required_time_seconds
+        }
 
 class QCMCompletion(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
@@ -270,6 +496,14 @@ class QCMOption(models.Model):
     qcm = models.ForeignKey(QCM, on_delete=models.CASCADE, related_name='options')
     text = models.CharField(max_length=200)
     is_correct = models.BooleanField(default=False)
+    # NEW FIELD - Added for ordering
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.text} ({'Correct' if self.is_correct else 'Incorrect'})"
 
 class QCMAttempt(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='qcm_attempts')
@@ -303,8 +537,47 @@ class QCMAttempt(models.Model):
         self.save()
         return self.score
 
+# NEW MODELS - Added for additional functionality
+
+class TimeTracking(models.Model):
+    """Model to track user time spent on course content"""
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    module = models.ForeignKey(Module, on_delete=models.CASCADE, null=True, blank=True)
+    content = models.ForeignKey(CourseContent, on_delete=models.CASCADE, null=True, blank=True)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    duration = models.IntegerField(help_text="Duration in seconds")
+    session_type = models.CharField(
+        max_length=10,
+        choices=[('course', 'Course'), ('module', 'Module'), ('content', 'Content')]
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'course']),
+            models.Index(fields=['user', 'content']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.course.title_of_course} - {self.duration}s"
+
+class ChatMessage(models.Model):
+    sender = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='sent_messages')
+    receiver = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='received_messages')
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['timestamp']
+
+    def __str__(self):
+        return f"{self.sender.username} to {self.receiver.username}: {self.message[:50]}"
+
 # Signals for creating folders
-from django.db.models.signals import pre_save
+from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 import os
 
@@ -323,3 +596,11 @@ def create_video_folder(sender, instance, **kwargs):
 def create_pdf_folder(sender, instance, **kwargs):
     folder_path = os.path.join(settings.MEDIA_ROOT, 'pdfs', timezone.now().strftime('%y/%m/%d'))
     os.makedirs(folder_path, exist_ok=True)
+
+@receiver(post_save, sender=CourseContent)
+def update_module_duration(sender, instance, **kwargs):
+    """Update module duration when content is saved"""
+    if instance.module and instance.estimated_duration:
+        # Recalculate module duration
+        instance.module.estimated_duration = instance.module.calculate_estimated_duration()
+        instance.module.save()

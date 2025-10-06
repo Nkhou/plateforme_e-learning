@@ -3,15 +3,14 @@ import '../css/cours.css';
 import NewCours from '../component/courses/new_courses';
 import api from '../api/api';
 import CourseDetail from "../component/courses/formateur/CourseDetail";
-import CourseImage from '../component/courses/CourseImage'; // Import the CourseImage component
+import CourseImage from '../component/courses/CourseImage';
 
-// In your React component file or a types file
 interface Course {
     id: number;
     title_of_course: string;
     description: string;
-    image: string;  // Original image field (relative path)
-    image_url?: string;  // Optional absolute URL field added by serializer
+    image: string;
+    image_url?: string;
     creator_username: string;
     creator_first_name: string;
     creator_last_name: string;
@@ -32,14 +31,24 @@ const Cours = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
+    // Add the edit course handler
+    const handleEditCourse = (courseId: number) => {
+        console.log('Edit course requested:', courseId);
+        // Add your edit logic here, for example:
+        // - Navigate to an edit page
+        // - Open an edit modal
+        // - Set edit mode in state
+        alert(`Edit course with ID: ${courseId}`);
+    };
+
     // Fetch user's created courses
     const fetchMyCourses = async () => {
         try {
             setLoading(true);
             const response = await api.get('courses/my-courses/');
-            console.log('__________________________________________________________________________Courses data:', response.data);
+            console.log('Courses data:', response.data);
             setMyCourses(response.data);
-            setError(''); // Clear any previous errors
+            setError('');
         } catch (error: any) {
             console.error('Failed to fetch courses:', error);
             setError('Failed to load your courses. Please check if the backend server is running.');
@@ -51,6 +60,7 @@ const Cours = () => {
     useEffect(() => {
         fetchMyCourses();
     }, []);
+
     useEffect(() => {
         if (!newProject && !showCourseDetail) {
             fetchMyCourses();
@@ -137,15 +147,11 @@ const Cours = () => {
         setNewProject(!newProject);
     };
 
-    // Handle card click to show course detail component
     const handleCardClick = (courseId: number) => {
-        console.log('---------------------------',selectedCourseId);
         setSelectedCourseId(courseId);
-        console.log('+++++++++++++++++++++++++++++',selectedCourseId);
         setShowCourseDetail(true);
     };
 
-    // Handle closing course detail
     const handleCloseCourseDetail = () => {
         setShowCourseDetail(false);
         setSelectedCourseId(null);
@@ -199,18 +205,18 @@ const Cours = () => {
                                 >
                                     {myCourses.map((course) => (
                                         <div 
-                                      className="card-carousel card-hover" 
-                                      key={`my-course-${course.id}`}
-                                      onClick={() => handleCardClick(course.id)}
-                                      style={{ cursor: 'pointer' }}
-                                    >
-                                      <CourseImage
-                                        src={course.image_url || course.image}  // Use image_url if available, fallback to image
-                                        alt={course.title_of_course}
-                                        className="card-img-top"
-                                        fallback="/group.avif"
-                                        style={{ height: '200px', objectFit: 'cover' }}
-                                      />
+                                            className="card-carousel card-hover" 
+                                            key={`my-course-${course.id}`}
+                                            onClick={() => handleCardClick(course.id)}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            <CourseImage
+                                                src={course.image_url || course.image}
+                                                alt={course.title_of_course}
+                                                className="card-img-top"
+                                                fallback="/group.avif"
+                                                style={{ height: '200px', objectFit: 'cover' }}
+                                            />
                                             <div className="card-body">
                                                 <h5 className="card-title">{course.title_of_course}</h5>
                                                 <p className="card-text">{course.description || 'No description'}</p>
@@ -238,7 +244,12 @@ const Cours = () => {
                     <button className="close-button" onClick={handleCloseCourseDetail}>
                         ×
                     </button>
-                    <CourseDetail courseId={selectedCourseId} onClose={handleCloseCourseDetail} />
+                    {/* Fixed: Added the missing onEditCourse prop */}
+                    <CourseDetail 
+                        courseId={selectedCourseId} 
+                        onClose={handleCloseCourseDetail}
+                        onEditCourse={handleEditCourse}
+                    />
                 </div>
             ) : (
                 <div className="fullscreen-container">

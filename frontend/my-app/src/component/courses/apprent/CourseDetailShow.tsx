@@ -225,7 +225,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
         
         let subscriptionData: SubscriptionData | null = null;
         try {
-          const subscriptionResponse = await api.get(`courses/${courseId}/subscribers/`);
+          const subscriptionResponse = await api.get(`courses/${courseId}/my-progress/`);
           console.log('subscriptionResponse.data', subscriptionResponse.data);
           const subArray = subscriptionResponse.data;
           subscriptionData = subArray.length > 0 ? subArray[0] : null;
@@ -287,39 +287,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     }
   };
 
-  const handleUnsubscribe = async () => {
-    try {
-      await api.post(`courses/${courseId}/unsubscribe/`);
-      setSubscription(null);
-
-      // Update course to reflect unsubscription
-      if (course) {
-        setCourse({
-          ...course,
-          is_subscribed: false,
-          progress_percentage: 0
-        });
-      }
-
-      // Reset all modules and contents to locked state
-      const updatedModules = modules.map(module => ({
-        ...module,
-        is_completed: false,
-        is_locked: true,
-        contents: module.contents.map(content => ({
-          ...content,
-          is_completed: false,
-          is_locked: true
-        }))
-      }));
-
-      setModules(updatedModules);
-      alert('Successfully unsubscribed from the course!');
-    } catch (error: any) {
-      console.error('Failed to unsubscribe:', error);
-      alert('Failed to unsubscribe from the course');
-    }
-  };
+  
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     console.error('Failed to load image:', e.currentTarget.src);
@@ -381,7 +349,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           progress_percentage: response.data.progress_percentage || course.progress_percentage
         });
       }
-
+     
       // Update modules and contents completion status with proper unlocking logic
       const updatedModules = modules.map(module => {
         if (module.id === moduleId) {

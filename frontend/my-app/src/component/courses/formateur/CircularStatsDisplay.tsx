@@ -7,6 +7,8 @@ interface CircularStatsDisplayProps {
 }
 
 const CircularStatsDisplay: React.FC<CircularStatsDisplayProps> = ({ stats, type }) => {
+    // console.log('+-9999999999999999', stats);
+    // console.log('+-9999999999999999', type);
     const statItems = type === 'course' ? [
         { value: stats.total_contents_course, max: Math.max(stats.total_contents_course, 50), label: 'Total Contents', color: '#007bff' },
         { value: stats.total_modules, max: Math.max(stats.total_modules, 10), label: 'Modules', color: '#17a2b8' },
