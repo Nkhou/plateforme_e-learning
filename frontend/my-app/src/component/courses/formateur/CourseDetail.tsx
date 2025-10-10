@@ -1806,23 +1806,16 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                     </div>
 
                     <div className="card">
-                        <div 
+                        <div
                             className="card-body cursor-pointer"
                             onClick={fetchSubscribers}
                             style={{ cursor: 'pointer' }}
                             title="Click to view all subscribers and their progress"
                         >
                             <CircularStatsDisplay stats={overallCourseStats} type="course" />
-                            {/* <div className="text-center mt-2">
-                                <small className="text-muted">
-                                    <i className="fas fa-users me-1"></i>
-                                    Click to view all learners
-                                </small>
-                            </div> */}
                         </div>
                     </div>
                 </div>
-
                 <div className="col-xl-9 col-lg-8">
                     <div className="card">
                         <div className="card-header">
@@ -1878,11 +1871,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                             />
                                                                         </div>
                                                                         
-                                                                        {/* <EstimatedTimeDisplay 
-                                                                            estimatedDuration={module.estimated_duration}
-                                                                            actualTimeSpent={userTimeStats.moduleTimes[module.id]}
-                                                                            type="module"
-                                                                        /> */}
+
                                                                         {module.content_stats && (
                                                                             <CircularStatsDisplay stats={module.content_stats} type="module" />
                                                                         )}

@@ -99,6 +99,7 @@ urlpatterns = [
     path('courses/<int:pk>/update-progress/', views.UpdateProgress.as_view(), name='update-progress'),
     path('courses/<int:pk>/my-progress/', views.MyProgress.as_view(), name='my-progress'),
     path('courses/<int:pk>/qcm-progress/', views.QCMProgress.as_view(), name='qcm-progress'),
+    path('courses/<int:pk>/time-calculation/', views.CourseTimeCalculationView.as_view(), name='course-time-calculation'),
     
     # Chat endpoints
     path('chat/messages/<int:user_id>/', views.ChatMessageView.as_view(), name='chat-messages'),

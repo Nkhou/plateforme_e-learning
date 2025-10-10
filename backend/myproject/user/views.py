@@ -10,8 +10,11 @@ from .serializers import (
     SubscriptionSerializer, QCMAttemptSerializer, 
     QCMCompletionSerializer, PDFContentSerializer, VideoContentSerializer, QCMSerializer,
     QCMOptionCreateSerializer, QCMContentCreateSerializer, PDFContentCreateSerializer,
-    VideoContentCreateSerializer, TimeTrackingSerializer, ChatMessageSerializer, SubscriptionWithProgressSerializer, ModuleWithContentsSerializer
+    VideoContentCreateSerializer,ModuleWithContentsSerializer
 )
+
+
+
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 import logging
@@ -1824,8 +1827,13 @@ class MarkVideoCompletedView(APIView):
             user = request.user
             content_id = request.data.get('content_id')
             
-            # Get content
-            content = CourseContent.objects.get(id=content_id, module__course=course)
+            # Get content - ensure it's active
+            content = CourseContent.objects.get(
+                id=content_id, 
+                module__course=course,
+                module__status=1,  # Only active modules
+                status=1  # Only active content
+            )
             
             if content.content_type.name != 'video':
                 return Response({'error': 'Content is not a Video'}, status=400)
@@ -1836,22 +1844,39 @@ class MarkVideoCompletedView(APIView):
             if not subscription.completed_contents.filter(id=content.id).exists():
                 subscription.completed_contents.add(content)
             
-            # Update progress percentage
-            total_contents = CourseContent.objects.filter(module__course=course).count()
-            completed_count = subscription.completed_contents.count()
-            progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+            # Update progress percentage based on ACTIVE content only
+            active_contents = CourseContent.objects.filter(
+                module__course=course,
+                module__status=1,  # Active modules only
+                status=1  # Active content only
+            )
+            total_active_contents = active_contents.count()
+            
+            # Count only completed ACTIVE contents
+            completed_active_contents = subscription.completed_contents.filter(
+                id__in=active_contents.values_list('id', flat=True)
+            )
+            completed_count = completed_active_contents.count()
+            
+            progress_percentage = (completed_count / total_active_contents) * 100 if total_active_contents > 0 else 0
             
             subscription.progress_percentage = progress_percentage
             subscription.save()
             
+            # Update completion status
+            subscription.update_completion_status()
+            
             return Response({
                 'status': 'Video marked as completed',
-                'progress_percentage': progress_percentage,
-                'completed_contents': list(subscription.completed_contents.values_list('id', flat=True))
+                'progress_percentage': round(progress_percentage, 2),
+                'completed_contents_count': completed_count,
+                'total_contents_count': total_active_contents,
+                'completed_contents': list(completed_active_contents.values_list('id', flat=True)),
+                'is_completed': subscription.is_completed
             })
             
         except CourseContent.DoesNotExist:
-            return Response({'error': 'Content not found'}, status=404)
+            return Response({'error': 'Content not found or not active'}, status=404)
         except Subscription.DoesNotExist:
             return Response({'error': 'Subscription not found. Please subscribe to the course first.'}, status=404)
         except Exception as e:
@@ -1866,11 +1891,16 @@ class MarkPDFCompletedView(APIView):
             user = request.user
             content_id = request.data.get('content_id')
             
-            # Get the course content
-            content = CourseContent.objects.get(id=content_id, module__course=course)
+            # Get the course content - ensure it's active
+            content = CourseContent.objects.get(
+                id=content_id, 
+                module__course=course,
+                module__status=1,  # Only active modules
+                status=1  # Only active content
+            )
             
             if content.content_type.name.lower() != 'pdf':
-                return Response({'error': 'Content is not a pdf'}, status=400)
+                return Response({'error': 'Content is not a PDF'}, status=400)
             
             subscription = Subscription.objects.get(user=user, course=course, is_active=True)
 
@@ -1878,31 +1908,47 @@ class MarkPDFCompletedView(APIView):
             if not subscription.completed_contents.filter(id=content.id).exists():
                 subscription.completed_contents.add(content)
             
-            # Update progress percentage
-            total_contents = CourseContent.objects.filter(module__course=course).count()
-            completed_count = subscription.completed_contents.count()
-            progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+            # Update progress percentage based on ACTIVE content only
+            active_contents = CourseContent.objects.filter(
+                module__course=course,
+                module__status=1,  # Active modules only
+                status=1  # Active content only
+            )
+            total_active_contents = active_contents.count()
+            
+            # Count only completed ACTIVE contents
+            completed_active_contents = subscription.completed_contents.filter(
+                id__in=active_contents.values_list('id', flat=True)
+            )
+            completed_count = completed_active_contents.count()
+            
+            progress_percentage = (completed_count / total_active_contents) * 100 if total_active_contents > 0 else 0
             
             subscription.progress_percentage = progress_percentage
             subscription.save()
+            
+            # Update completion status
+            subscription.update_completion_status()
             
             # Serialize the PDF content
             serializer = PDFContentSerializer(content.pdf_content, context={'request': request})
             
             return Response({
                 'status': 'PDF marked as completed',
-                'progress_percentage': progress_percentage,
-                'completed_contents': list(subscription.completed_contents.values_list('id', flat=True)),
-                'pdf_content': serializer.data
+                'progress_percentage': round(progress_percentage, 2),
+                'completed_contents_count': completed_count,
+                'total_contents_count': total_active_contents,
+                'completed_contents': list(completed_active_contents.values_list('id', flat=True)),
+                'pdf_content': serializer.data,
+                'is_completed': subscription.is_completed
             })
             
         except CourseContent.DoesNotExist:
-            return Response({'error': 'Content not found'}, status=404)
+            return Response({'error': 'Content not found or not active'}, status=404)
         except Subscription.DoesNotExist:
             return Response({'error': 'Subscription not found. Please subscribe to the course first.'}, status=404)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
-
 # Subscription Views
 class CourseSubscribers(APIView):
     def get(self, request, pk):
@@ -1949,42 +1995,114 @@ class UnsubscribeFromCourse(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+from .models import Course, Subscription, CourseContent, Module
+
 class CheckSubscription(APIView):
     def get(self, request, pk):
-        course = get_object_or_404(Course, pk=pk)
-        user = request.user
+        try:
+            course = get_object_or_404(Course, pk=pk)
+            user = request.user
+            
+            # Check if user is authenticated
+            if not user.is_authenticated:
+                return Response({
+                    'error': 'Authentication required'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            # Check if user is subscribed
+            subscription = Subscription.objects.filter(
+                user=user, 
+                course=course,
+                is_active=True
+            ).first()
+            
+            is_subscribed = subscription is not None
+            
+            # Calculate progress based ONLY on active content
+            progress_data = self.calculate_progress_active_only(course, subscription)
+            
+            # Build response data
+            response_data = {
+                'id': course.id,
+                'title': course.title_of_course,
+                'description': course.description,
+                'image': course.image.url if course.image and hasattr(course.image, 'url') else None,
+                'creator_username': course.creator.username if course.creator else 'Unknown',
+                'creator_first_name': course.creator.first_name if course.creator else '',
+                'creator_last_name': course.creator.last_name if course.creator else '',
+                'created_at': course.created_at.isoformat() if course.created_at else None,
+                'updated_at': course.updated_at.isoformat() if course.updated_at else None,
+                'is_subscribed': is_subscribed,
+                'progress_percentage': progress_data['progress_percentage'],
+                'total_time_spent': progress_data['total_time_spent'],
+                'estimated_duration': course.estimated_duration or 0,
+                'min_required_time': course.min_required_time or 0,
+                'active_content_stats': progress_data['content_stats']
+            }
+            
+            # Add subscription ID if subscribed
+            if is_subscribed and subscription:
+                response_data['subscription_id'] = subscription.id
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Course.DoesNotExist:
+            return Response({
+                'error': 'Course not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': f'An error occurred: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def calculate_progress_active_only(self, course, subscription):
+        """
+        Calculate progress percentage considering ONLY active modules and active contents
+        Uses the Subscription.completed_contents field for tracking
+        """
+        # Get only ACTIVE modules (status=1)
+        active_modules = Module.objects.filter(course=course, status=1)
         
-        # Check if user is subscribed
-        subscription = Subscription.objects.filter(
-            user=user, 
-            course=course,
-            is_active=True
-        ).first()
+        total_active_contents = 0
+        completed_active_contents = 0
         
-        is_subscribed = subscription is not None
+        # Count all active contents across active modules
+        for module in active_modules:
+            # Get only ACTIVE contents within this module (status=1)
+            module_active_contents = CourseContent.objects.filter(
+                module=module, 
+                status=1
+            )
+            total_active_contents += module_active_contents.count()
+            
+            # Count completed active contents if user is subscribed
+            if subscription:
+                completed_active_contents += subscription.completed_contents.filter(
+                    id__in=module_active_contents.values_list('id', flat=True)
+                ).count()
         
-        # Calculate progress percentage if subscribed
-        progress_percentage = 0
-        if is_subscribed:
-            total_contents = CourseContent.objects.filter(module__course=course).count()
-            completed_count = subscription.completed_contents.count()
-            if total_contents > 0:
-                progress_percentage = (completed_count / total_contents) * 100
+        # Calculate progress percentage
+        if total_active_contents > 0:
+            progress_percentage = round((completed_active_contents / total_active_contents) * 100, 2)
+        else:
+            progress_percentage = 0
         
-        response_data = {
-            'id': course.id,
-            'title': course.title_of_course,
-            'description': course.description,
-            'image': course.image.url if course.image else '',
-            'creator_username': course.creator.username,
-            'created_at': course.created_at.isoformat() if course.created_at else '',
-            'updated_at': course.updated_at.isoformat() if course.updated_at else '',
-            'is_subscribed': is_subscribed,
+        # Get total time spent if subscribed
+        total_time_spent = subscription.total_time_spent if subscription else 0
+        
+        return {
             'progress_percentage': progress_percentage,
+            'total_time_spent': total_time_spent,
+            'content_stats': {
+                'total_active_contents': total_active_contents,
+                'completed_active_contents': completed_active_contents,
+                'total_active_modules': active_modules.count()
+            }
         }
-        
-        return Response(response_data)
-
 class MySubscriptions(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
@@ -2007,8 +2125,14 @@ class SubmitQCM(APIView):
             user = request.user
             content_id = request.data.get('content_id')
             
-            # Get the QCM content
-            content = get_object_or_404(CourseContent, id=content_id, module__course=course)
+            # Get the QCM content - ensure it's active
+            content = get_object_or_404(
+                CourseContent, 
+                id=content_id, 
+                module__course=course,
+                module__status=1,  # Only active modules
+                status=1  # Only active content
+            )
             
             if content.content_type.name.lower() != 'qcm':
                 return Response({'error': 'Content is not a QCM'}, status=400)
@@ -2069,23 +2193,39 @@ class SubmitQCM(APIView):
                     # Add to completed contents
                     subscription.completed_contents.add(content)
                     
-                    # Update progress percentage
-                    total_contents = CourseContent.objects.filter(module__course=course).count()
-                    completed_count = subscription.completed_contents.count()
-                    progress_percentage = (completed_count / total_contents) * 100 if total_contents > 0 else 0
+                    # Update progress percentage based on ACTIVE content only
+                    active_contents = CourseContent.objects.filter(
+                        module__course=course,
+                        module__status=1,  # Active modules only
+                        status=1  # Active content only
+                    )
+                    total_active_contents = active_contents.count()
+                    
+                    # Count only completed ACTIVE contents
+                    completed_active_contents = subscription.completed_contents.filter(
+                        id__in=active_contents.values_list('id', flat=True)
+                    )
+                    completed_count = completed_active_contents.count()
+                    
+                    progress_percentage = (completed_count / total_active_contents) * 100 if total_active_contents > 0 else 0
                     
                     subscription.progress_percentage = progress_percentage
                     subscription.save()
                     
                     # Update total score
                     subscription.update_total_score()
+                    # Update completion status
+                    subscription.update_completion_status()
                     
                     response_data = QCMAttemptSerializer(attempt).data
-                    response_data['progress_percentage'] = progress_percentage
-                    response_data['completed_contents'] = list(subscription.completed_contents.values_list('id', flat=True))
+                    response_data['progress_percentage'] = round(progress_percentage, 2)
+                    response_data['completed_contents_count'] = completed_count
+                    response_data['total_contents_count'] = total_active_contents
+                    response_data['completed_contents'] = list(completed_active_contents.values_list('id', flat=True))
                     response_data['qcm_completion_id'] = qcm_completion.id
                     response_data['qcm_completed'] = True
                     response_data['total_score'] = subscription.total_score
+                    response_data['is_completed'] = subscription.is_completed
                     
                     return Response(response_data, status=201)
                 else:
@@ -2097,6 +2237,8 @@ class SubmitQCM(APIView):
             else:
                 return Response(serializer.errors, status=400)
                 
+        except CourseContent.DoesNotExist:
+            return Response({'error': 'Content not found or not active'}, status=404)
         except Exception as e:
             print('Error in SubmitQCM:', str(e))
             import traceback
@@ -2106,7 +2248,6 @@ class SubmitQCM(APIView):
     def get_next_attempt_number(self, user, qcm):
         last_attempt = QCMAttempt.objects.filter(user=user, qcm=qcm).order_by('-attempt_number').first()
         return last_attempt.attempt_number + 1 if last_attempt else 1
-
 class QCMProgress(APIView):
     def get(self, request, pk):
         course = get_object_or_404(Course, pk=pk)
@@ -2615,8 +2756,47 @@ class MyProgress(APIView):
         
         try:
             subscription = Subscription.objects.get(user=user, course=course, is_active=True)
+            
+            # Get only active modules and contents
+            active_modules = Module.objects.filter(course=course, status=1)
+            active_contents = CourseContent.objects.filter(
+                module__in=active_modules,
+                status=1
+            )
+            
+            # Get completed contents that are also active
+            completed_active_contents = subscription.completed_contents.filter(
+                id__in=active_contents.values_list('id', flat=True)
+            )
+            
+            # Calculate progress based only on active content
+            total_active_contents = active_contents.count()
+            completed_active_contents_count = completed_active_contents.count()
+            
+            if total_active_contents > 0:
+                progress_percentage = (completed_active_contents_count / total_active_contents) * 100
+            else:
+                progress_percentage = 0
+            
+            # Update subscription progress
+            subscription.progress_percentage = progress_percentage
+            subscription.save()
+            
+            # Update completion status
+            subscription.update_completion_status()
+            
             serializer = SubscriptionSerializer(subscription)
-            return Response(serializer.data)
+            response_data = serializer.data
+            
+            # Add active content statistics
+            response_data['active_content_stats'] = {
+                'total_active_contents': total_active_contents,
+                'completed_active_contents': completed_active_contents_count,
+                'active_modules_count': active_modules.count(),
+                'progress_percentage_active': round(progress_percentage, 2)
+            }
+            
+            return Response(response_data)
             
         except Subscription.DoesNotExist:
             return Response(
@@ -3116,70 +3296,6 @@ from django.utils import timezone
 from django.db.models import Sum, Avg, Count, F
 from django.db import models
 from .models import TimeTracking, Course, Subscription, CourseContent, Module
-
-# Add these view classes to your views.py
-# class TimeTrackingRecordView(APIView):
-#     permission_classes = [IsAuthenticated]
-    
-#     def post(self, request):
-#         user = request.user
-#         course_id = request.data.get('course_id')
-#         module_id = request.data.get('module_id')
-#         content_id = request.data.get('content_id')
-#         duration = request.data.get('duration')  # in seconds
-#         session_type = request.data.get('session_type', 'content')  # course, module, content
-        
-#         try:
-#             course = Course.objects.get(id=course_id)
-            
-#             # Create time tracking record
-#             time_tracking = TimeTracking.objects.create(
-#                 user=user,
-#                 course=course,
-#                 module_id=module_id if module_id else None,
-#                 content_id=content_id if content_id else None,
-#                 start_time=timezone.now() - timezone.timedelta(seconds=duration),
-#                 end_time=timezone.now(),
-#                 duration=duration,
-#                 session_type=session_type
-#             )
-            
-#             # Update subscription total time
-#             subscription, created = Subscription.objects.get_or_create(
-#                 user=user,
-#                 course=course,
-#                 defaults={'is_active': True}
-#             )
-            
-#             subscription.total_time_spent = F('total_time_spent') + duration
-#             subscription.save()
-            
-#             # Recalculate average session time
-#             total_sessions = TimeTracking.objects.filter(
-#                 user=user, 
-#                 course=course
-#             ).count()
-            
-#             if total_sessions > 0:
-#                 total_time = TimeTracking.objects.filter(
-#                     user=user, 
-#                     course=course
-#                 ).aggregate(total=Sum('duration'))['total'] or 0
-#                 subscription.average_time_per_session = total_time / total_sessions
-#                 subscription.save()
-            
-#             return Response({
-#                 'message': 'Time tracking recorded successfully',
-#                 'time_tracking_id': time_tracking.id,
-#                 'total_time_spent': subscription.total_time_spent,
-#                 'average_session_time': subscription.average_time_per_session
-#             }, status=status.HTTP_200_OK)
-            
-#         except Course.DoesNotExist:
-#             return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
-#         except Exception as e:
-#             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 class TimeTrackingRecordView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -3231,8 +3347,6 @@ class TimeTrackingRecordView(APIView):
                 except CourseContent.DoesNotExist:
                     # Content not found, but we still record the time in subscription
                     pass
-
-            # Update completion status
             subscription.update_completion_status()
 
             response_data = {
@@ -3517,3 +3631,152 @@ class CheckCourseCompletionView(APIView):
                 
         except Course.DoesNotExist:
             return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
+
+from rest_framework.views import APIView
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+from .models import Course, CourseContent, TimeTracking, Subscription
+
+class CourseTimeCalculationView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get course time calculations considering only active content"""
+        try:
+            course = Course.objects.get(id=pk)
+            
+            # Calculate times considering only active content
+            estimated_duration = course.calculate_estimated_duration()
+            min_required_time = course.calculate_min_required_time()
+            
+            # Get module breakdown
+            module_breakdown = []
+            active_modules = course.modules.filter(status=1)
+            
+            for module in active_modules:
+                module_duration = module.calculate_estimated_duration()
+                module_min_time = module.calculate_min_required_time()
+                
+                # Get content breakdown for this module
+                content_breakdown = []
+                active_contents = module.contents.filter(status=1)
+                
+                for content in active_contents:
+                    content_duration = content.estimated_duration or 0
+                    content_min_time = content.min_required_time or 0
+                    
+                    content_breakdown.append({
+                        'id': content.id,
+                        'title': content.title,
+                        'content_type': content.content_type.name,
+                        'estimated_duration': content_duration,
+                        'min_required_time': content_min_time
+                    })
+                
+                module_breakdown.append({
+                    'id': module.id,
+                    'title': module.title,
+                    'estimated_duration': module_duration,
+                    'min_required_time': module_min_time,
+                    'contents': content_breakdown
+                })
+            
+            return Response({
+                'course': {
+                    'id': course.id,
+                    'title': course.title_of_course,
+                    'calculated_estimated_duration': estimated_duration,
+                    'calculated_min_required_time': min_required_time,
+                    'stored_estimated_duration': course.estimated_duration,
+                    'stored_min_required_time': course.min_required_time
+                },
+                'module_breakdown': module_breakdown,
+                'summary': {
+                    'total_active_modules': active_modules.count(),
+                    'total_active_contents': CourseContent.objects.filter(
+                        module__course=course, 
+                        status=1
+                    ).count(),
+                    'total_inactive_modules': course.modules.filter(status__in=[0, 2]).count(),
+                    'total_inactive_contents': CourseContent.objects.filter(
+                        module__course=course, 
+                        status__in=[0, 2]
+                    ).count()
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Course.DoesNotExist:
+            return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request, pk):
+        """Record time spent on course content"""
+        try:
+            course = Course.objects.get(id=pk)
+            content_id = request.data.get('content_id')
+            duration = request.data.get('duration')  # in seconds
+            session_type = request.data.get('session_type', 'content')
+            
+            # Validate required fields
+            if not duration:
+                return Response(
+                    {'error': 'Duration is required'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get content if provided
+            content = None
+            if content_id:
+                try:
+                    content = CourseContent.objects.get(id=content_id, module__course=course)
+                except CourseContent.DoesNotExist:
+                    return Response(
+                        {'error': 'Content not found in this course'}, 
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            # Get or create subscription
+            subscription, created = Subscription.objects.get_or_create(
+                user=request.user,
+                course=course,
+                defaults={'is_active': True, 'total_time_spent': 0}
+            )
+            
+            # Create time tracking record
+            time_tracking = TimeTracking.objects.create(
+                user=request.user,
+                course=course,
+                content=content,
+                duration=duration,
+                session_type=session_type,
+                recorded_at=timezone.now()
+            )
+            
+            # Update user's total time spent on course
+            subscription.total_time_spent += duration
+            subscription.save()
+            
+            # Get updated progress percentage
+            progress_percentage = subscription.calculate_progress_percentage()
+            
+            return Response({
+                'message': 'Time recorded successfully',
+                'time_tracking_id': time_tracking.id,
+                'duration_recorded': duration,
+                'total_time_spent': subscription.total_time_spent,
+                'progress_percentage': progress_percentage,
+                'content_completed': content.is_completed if content else False
+            }, status=status.HTTP_201_CREATED)
+            
+        except Course.DoesNotExist:
+            return Response(
+                {'error': 'Course not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to record time: {str(e)}'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )

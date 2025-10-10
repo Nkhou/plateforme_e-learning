@@ -174,6 +174,168 @@ const getFileUrl = (fileUrl: string) => {
   return fullUrl;
 };
 
+// Filter only active modules and active contents
+const filterActiveModulesAndContents = (modules: Module[]) => {
+  return modules
+    .filter(module => module.status === 1) // Only active modules (status 1)
+    .map(module => ({
+      ...module,
+      contents: module.contents
+        ? module.contents.filter(content => content.status === 1) // Only active contents
+        : []
+    }))
+    .filter(module => module.contents.length > 0); // Only modules that have active contents
+};
+
+// Calculate total estimated time for the course based on ACTIVE content only
+const calculateTotalEstimatedTime = (modules: Module[]): number => {
+  const activeModules = filterActiveModulesAndContents(modules);
+  let totalMinutes = 0;
+
+  activeModules.forEach(module => {
+    module.contents.forEach(content => {
+      // Use content's estimated_time if available, otherwise use defaults based on content type
+      if (content.estimated_time) {
+        totalMinutes += content.estimated_time;
+      } else {
+        // Default estimates based on content type
+        switch (content.content_type_name?.toLowerCase()) {
+          case 'video':
+            totalMinutes += content.video_content?.duration 
+              ? Math.ceil(content.video_content.duration / 60) 
+              : 10;
+            break;
+          case 'pdf':
+            totalMinutes += 15;
+            break;
+          case 'qcm':
+            totalMinutes += 5;
+            break;
+          default:
+            totalMinutes += 10;
+        }
+      }
+    });
+  });
+
+  return totalMinutes;
+};
+
+// Calculate total minimum required time for the course based on ACTIVE content only
+const calculateTotalMinRequiredTime = (modules: Module[]): number => {
+  const activeModules = filterActiveModulesAndContents(modules);
+  let totalMinutes = 0;
+
+  activeModules.forEach(module => {
+    module.contents.forEach(content => {
+      // For min required time, we might want to use different logic
+      // You can adjust this based on your requirements
+      if (content.estimated_time) {
+        totalMinutes += content.estimated_time; // Or use a different calculation
+      } else {
+        // Conservative estimates for minimum required time
+        switch (content.content_type_name?.toLowerCase()) {
+          case 'video':
+            totalMinutes += content.video_content?.duration 
+              ? Math.ceil(content.video_content.duration / 60) * 0.8 // 80% of estimated time
+              : 8;
+            break;
+          case 'pdf':
+            totalMinutes += 12; // Slightly less than estimated
+            break;
+          case 'qcm':
+            totalMinutes += 4; // Slightly less than estimated
+            break;
+          default:
+            totalMinutes += 8;
+        }
+      }
+    });
+  });
+
+  return totalMinutes;
+};
+
+// Statistics component to show active vs inactive content
+const CourseTimeStatistics: React.FC<{ modules: Module[] }> = ({ modules }) => {
+  const activeModules = filterActiveModulesAndContents(modules);
+  const allModules = modules;
+  
+  const totalActiveContents = activeModules.reduce((total, module) => total + module.contents.length, 0);
+  const totalAllContents = allModules.reduce((total, module) => total + (module.contents?.length || 0), 0);
+  
+  const activeEstimatedTime = calculateTotalEstimatedTime(modules);
+  const activeMinRequiredTime = calculateTotalMinRequiredTime(modules);
+
+  return (
+    <div className="card bg-light mb-4">
+      <div className="card-header">
+        <h6 className="mb-0">
+          <i className="fas fa-chart-bar me-2"></i>
+          Course Time Statistics
+        </h6>
+      </div>
+      <div className="card-body">
+        <div className="row text-center">
+          <div className="col-md-3">
+            <div className="border rounded p-2 bg-white">
+              <small className="text-muted d-block">Active Modules</small>
+              <strong className="text-primary">{activeModules.length}</strong>
+              <small className="text-muted d-block">of {allModules.length} total</small>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="border rounded p-2 bg-white">
+              <small className="text-muted d-block">Active Contents</small>
+              <strong className="text-primary">{totalActiveContents}</strong>
+              <small className="text-muted d-block">of {totalAllContents} total</small>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="border rounded p-2 bg-white">
+              <small className="text-muted d-block">Estimated Time</small>
+              <strong className="text-success">{formatTime(activeEstimatedTime)}</strong>
+              <small className="text-muted d-block">(Active content only)</small>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="border rounded p-2 bg-white">
+              <small className="text-muted d-block">Min Required</small>
+              <strong className="text-warning">{formatTime(activeMinRequiredTime)}</strong>
+              <small className="text-muted d-block">(Active content only)</small>
+            </div>
+          </div>
+        </div>
+        
+        {/* Progress bars showing active vs total */}
+        <div className="mt-3">
+          <div className="d-flex justify-content-between mb-1">
+            <small>Module Completion</small>
+            <small>{activeModules.length}/{allModules.length}</small>
+          </div>
+          <div className="progress" style={{ height: '8px' }}>
+            <div 
+              className="progress-bar bg-primary" 
+              style={{ width: `${(activeModules.length / allModules.length) * 100}%` }}
+            ></div>
+          </div>
+          
+          <div className="d-flex justify-content-between mb-1 mt-2">
+            <small>Content Completion</small>
+            <small>{totalActiveContents}/{totalAllContents}</small>
+          </div>
+          <div className="progress" style={{ height: '8px' }}>
+            <div 
+              className="progress-bar bg-success" 
+              style={{ width: `${(totalActiveContents / totalAllContents) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
   const [course, setCourse] = useState<CourseDetailData | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
@@ -196,50 +358,13 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
   });
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Filter only active modules and active contents
-  const filterActiveModulesAndContents = (modules: Module[]) => {
-    return modules
-      .filter(module => module.status === 1) // Only active modules (status 1)
-      .map(module => ({
-        ...module,
-        contents: module.contents
-          ? module.contents.filter(content => content.status === 1) // Only active contents
-          : []
-      }))
-      .filter(module => module.contents.length > 0); // Only modules that have active contents
-  };
+  // Calculate times based on active content only
+  const activeEstimatedTime = calculateTotalEstimatedTime(modules);
+  const activeMinRequiredTime = calculateTotalMinRequiredTime(modules);
 
-  // Calculate total estimated time for the course based on active content
-  const calculateTotalEstimatedTime = (modules: Module[]): number => {
-    const activeModules = filterActiveModulesAndContents(modules);
-    let totalMinutes = 0;
-
-    activeModules.forEach(module => {
-      module.contents.forEach(content => {
-        // Use content's estimated_time if available, otherwise use defaults based on content type
-        if (content.estimated_time) {
-          totalMinutes += content.estimated_time;
-        } else {
-          // Default estimates based on content type
-          switch (content.content_type_name?.toLowerCase()) {
-            case 'video':
-              totalMinutes += 10; // Default 10 minutes for videos
-              break;
-            case 'pdf':
-              totalMinutes += 15; // Default 15 minutes for PDFs
-              break;
-            case 'qcm':
-              totalMinutes += 5; // Default 5 minutes for QCMs
-              break;
-            default:
-              totalMinutes += 10; // Default 10 minutes for other content types
-          }
-        }
-      });
-    });
-
-    return totalMinutes;
-  };
+  // Use active times for display, fallback to course times if not available
+  const displayEstimatedTime = activeEstimatedTime > 0 ? activeEstimatedTime : (course?.estimated_duration || 0);
+  const displayMinRequiredTime = activeMinRequiredTime > 0 ? activeMinRequiredTime : (course?.min_required_time || 0);
 
   // Simplified content locking logic - only checks if user is active
   const calculateContentLockStatus = (modules: Module[], isActive: boolean) => {
@@ -289,7 +414,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       return { timeProgress: 0, timeRemaining: 0, hasMetTimeRequirement: false };
     }
 
-    const requiredTimeSeconds = course.min_required_time * 60; // Convert minutes to seconds
+    const requiredTimeSeconds = displayMinRequiredTime * 60; // Use active min required time
     const timeSpentSeconds = subscription.total_time_spent || 0;
 
     const timeProgress = requiredTimeSeconds > 0
@@ -307,9 +432,9 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     if (!course || !subscription) return false;
 
     // If no minimum time requirement, allow completion
-    if (course.min_required_time === 0) return true;
+    if (displayMinRequiredTime === 0) return true;
 
-    const requiredTimeSeconds = course.min_required_time * 60;
+    const requiredTimeSeconds = displayMinRequiredTime * 60;
     const timeSpentSeconds = subscription.total_time_spent || 0;
 
     return timeSpentSeconds >= requiredTimeSeconds;
@@ -424,7 +549,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
     try {
       // Record time tracking to backend
-      await api.post(`courses/${courseId}/record-time/`, {
+      await api.post(`courses/${courseId}/time-calculation/`, {
         content_id: activeContent.id,
         duration: timer.targetTime, // Total time spent in seconds
         session_type: 'content'
@@ -432,6 +557,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
       // Refresh subscription data to update total_time_spent
       const subscriptionResponse = await api.get(`courses/${courseId}/my-progress/`);
+      console.log("**************************1111my progress", subscriptionResponse);
       if (Array.isArray(subscriptionResponse.data)) {
         setSubscription(subscriptionResponse.data.length > 0 ? subscriptionResponse.data[0] : null);
       } else {
@@ -496,7 +622,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
         } catch (subErr: any) {
           console.warn('Subscription fetch failed:', subErr);
-          // If we get a 403, user is not the creator - this is expected for students
+          // If we get a 403, user is not the creator - this is expected for students 
           if (subErr.response?.status === 403) {
             console.log('User is not course creator, using basic subscription data');
             // For students, use the subscription status from course data
@@ -519,7 +645,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
         console.log('Processed modules (active only):', processedModules);
         setModules(processedModules);
-      } catch (err: any) {
+      } catch (err: any) { 
         console.error('Failed to fetch course data:', err);
         setError('Failed to load course details');
       } finally {
@@ -775,6 +901,29 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     }
   };
 
+  // Get module estimated time based on active content only
+  const getModuleEstimatedTime = (module: Module): number => {
+    const activeContents = module.contents.filter(content => content.status === 1);
+    
+    return activeContents.reduce((total, content) => {
+      if (content.estimated_time) {
+        return total + content.estimated_time;
+      }
+      
+      // Default estimates for active content
+      switch (content.content_type_name?.toLowerCase()) {
+        case 'video':
+          return total + (content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 10);
+        case 'pdf':
+          return total + 15;
+        case 'qcm':
+          return total + 5;
+        default:
+          return total + 10;
+      }
+    }, 0);
+  };
+
   const renderContentModal = () => {
     if (!activeContent) return null;
 
@@ -1016,7 +1165,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
             </div>
             <div className="modal-body">
               {/* Time requirement warning */}
-              {!canComplete && isTimedContent && course && course.min_required_time > 0 && (
+              {!canComplete && isTimedContent && course && displayMinRequiredTime > 0 && (
                 <div className="alert alert-warning">
                   <i className="fas fa-exclamation-triangle me-2"></i>
                   <strong>Course time requirement not met:</strong> You need to spend {formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.
@@ -1055,59 +1204,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                           aria-valuemax={100}
                         ></div>
                       </div>
-
-                      {/* Timer Controls */}
-                      {/* Timer Controls */}
-                      {/* <div className="btn-group" role="group">
-                        {!timer.isRunning && !timer.isCompleted && timer.timeElapsed === 0 && (
-                          <button
-                            className="btn btn-success"
-                            onClick={() => startTimer(targetTime)}
-                          >
-                            <i className="fas fa-play me-2"></i>
-                            Start Timer ({targetTime} min)
-                          </button>
-                        )} */}
-
-                        {/* {timer.isRunning && (
-    <button
-      className="btn btn-warning"
-      onClick={pauseTimer}
-    >
-      <i className="fas fa-pause me-2"></i>
-      Pause
-    </button>
-  )} */}
-
-                        {/* {!timer.isRunning && timer.timeElapsed > 0 && !timer.isCompleted && (
-    <>
-      <button
-        className="btn btn-success"
-        onClick={resumeTimer}
-      >
-        <i className="fas fa-play me-2"></i>
-        Resume
-      </button>
-      <button
-        className="btn btn-outline-secondary"
-        onClick={resetTimer}
-      >
-        <i className="fas fa-redo me-2"></i>
-        Reset
-      </button>
-    </>
-  )} */}
-
-                        {/* {(timer.timeElapsed > 0 || timer.isCompleted) && timer.timeElapsed > 0 && (
-    <button
-      className="btn btn-outline-secondary"
-      onClick={resetTimer}
-    >
-      <i className="fas fa-redo me-2"></i>
-      Reset
-    </button>
-  )} */}
-                      {/* </div> */}
 
                       {/* Timer Status */}
                       {timer.isCompleted && (
@@ -1209,7 +1305,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
   // Calculate time statistics
   const { timeProgress, timeRemaining, hasMetTimeRequirement } = calculateTimeProgress();
-  const totalEstimatedTime = course.estimated_duration || calculateTotalEstimatedTime(modules);
   const timeSpentSeconds = subscription?.total_time_spent || 0;
   const canCompleteContent = canMarkContentCompleted();
 
@@ -1240,37 +1335,56 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                 <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
                 <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
 
-                {/* Time Information */}
+                {/* Enhanced Time Information */}
                 <div className="mt-3">
-                  <h6>Time Information</h6>
-                  <p><strong>Estimated Duration:</strong> {formatTime(totalEstimatedTime)}</p>
-                  {course.min_required_time > 0 && (
-                    <>
-                      <p><strong>Minimum Required Time:</strong> {formatTime(course.min_required_time)}</p>
-                      {!canCompleteContent && (
-                        <div className="alert alert-warning py-2 mt-2">
-                          <small>
-                            <i className="fas fa-clock me-1"></i>
-                            Spend {formatSecondsDetailed(timeRemaining)} more to unlock content completion
-                          </small>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {course.is_subscribed && subscription && (
-                    <>
-                      <p><strong>Time Spent:</strong> {formatSecondsDetailed(timeSpentSeconds)}</p>
-                      {course.min_required_time > 0 && (
-                        <p>
-                          <strong>Time Requirement:</strong>
-                          <span className={hasMetTimeRequirement ? 'text-success' : 'text-warning'}>
-                            {hasMetTimeRequirement ? ' Met' : ' Not Met'}
-                          </span>
-                        </p>
-                      )}
-                    </>
+                  <div className="border-start border-3 border-primary ps-3">
+                    <h6 className="text-primary">Time Information (Active Content)</h6>
+                    <p className="mb-1">
+                      <strong>Estimated Duration:</strong> 
+                      <span className="text-success"> {formatTime(displayEstimatedTime)}</span>
+                    </p>
+                    {displayMinRequiredTime > 0 && (
+                      <p className="mb-1">
+                        <strong>Minimum Required:</strong> 
+                        <span className="text-warning"> {formatTime(displayMinRequiredTime)}</span>
+                      </p>
+                    )}
+                    
+                    {/* Show original times if different */}
+                    {(course.estimated_duration !== displayEstimatedTime || course.min_required_time !== displayMinRequiredTime) && (
+                      <div className="mt-2 p-2 bg-light rounded">
+                        <small className="text-muted">
+                          <strong>Original times (all content):</strong><br />
+                          Estimated: {formatTime(course.estimated_duration || 0)}<br />
+                          {course.min_required_time > 0 && `Min Required: ${formatTime(course.min_required_time)}`}
+                        </small>
+                      </div>
+                    )}
+                  </div>
+
+                  {!canCompleteContent && displayMinRequiredTime > 0 && (
+                    <div className="alert alert-warning py-2 mt-2">
+                      <small>
+                        <i className="fas fa-clock me-1"></i>
+                        Spend {formatSecondsDetailed(timeRemaining)} more to unlock content completion
+                      </small>
+                    </div>
                   )}
                 </div>
+
+                {course.is_subscribed && subscription && (
+                  <>
+                    <p className="mt-2"><strong>Time Spent:</strong> {formatSecondsDetailed(timeSpentSeconds)}</p>
+                    {displayMinRequiredTime > 0 && (
+                      <p>
+                        <strong>Time Requirement:</strong>
+                        <span className={hasMetTimeRequirement ? 'text-success' : 'text-warning'}>
+                          {hasMetTimeRequirement ? ' Met' : ' Not Met'}
+                        </span>
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Progress Bar */}
@@ -1293,7 +1407,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               )}
 
               {/* Time Progress Bar (if minimum time is required) */}
-              {course.is_subscribed && course.min_required_time > 0 && (
+              {course.is_subscribed && displayMinRequiredTime > 0 && (
                 <div className="mb-3 px-3">
                   <strong>Time Progress: </strong>
                   <div className="progress mt-1">
@@ -1339,22 +1453,27 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
             <h1 className="mb-3">{course.title}</h1>
             <p className="lead">{course.description}</p>
 
+            {/* Add the time statistics component */}
+            <CourseTimeStatistics modules={modules} />
+
             {/* Course Time Summary */}
             <div className="row text-center mb-4">
               <div className="col-md-4">
                 <div className="card bg-light">
                   <div className="card-body">
                     <h6 className="card-title">Estimated Duration</h6>
-                    <p className="card-text h5">{formatTime(totalEstimatedTime)}</p>
+                    <p className="card-text h5 text-success">{formatTime(displayEstimatedTime)}</p>
+                    <small className="text-muted">Active content only</small>
                   </div>
                 </div>
               </div>
-              {course.min_required_time > 0 && (
+              {displayMinRequiredTime > 0 && (
                 <div className="col-md-4">
                   <div className="card bg-light">
                     <div className="card-body">
                       <h6 className="card-title">Minimum Required</h6>
-                      <p className="card-text h5">{formatTime(course.min_required_time)}</p>
+                      <p className="card-text h5 text-warning">{formatTime(displayMinRequiredTime)}</p>
+                      <small className="text-muted">Active content only</small>
                     </div>
                   </div>
                 </div>
@@ -1364,7 +1483,10 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                   <div className="card bg-light">
                     <div className="card-body">
                       <h6 className="card-title">Time Spent</h6>
-                      <p className="card-text h5">{formatSecondsDetailed(timeSpentSeconds)}</p>
+                      <p className="card-text h5 text-primary">{formatSecondsDetailed(timeSpentSeconds)}</p>
+                      <small className="text-muted">
+                        {hasMetTimeRequirement ? 'Requirement met' : 'In progress'}
+                      </small>
                     </div>
                   </div>
                 </div>
@@ -1372,7 +1494,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
             </div>
 
             {/* Time Requirement Warning Banner */}
-            {course.is_subscribed && course.min_required_time > 0 && !canCompleteContent && (
+            {course.is_subscribed && displayMinRequiredTime > 0 && !canCompleteContent && (
               <div className="alert alert-warning">
                 <i className="fas fa-clock me-2"></i>
                 <strong>Time requirement:</strong> You need to spend {formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.
@@ -1410,19 +1532,8 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     const completedContents = module.contents.filter(content => content.is_completed).length;
                     const totalContents = module.contents.length;
 
-                    // Calculate module estimated time
-                    const moduleEstimatedTime = module.contents.reduce((total, content) => {
-                      if (content.estimated_time) {
-                        return total + content.estimated_time;
-                      }
-                      // Default estimates
-                      switch (content.content_type_name?.toLowerCase()) {
-                        case 'video': return total + 10;
-                        case 'pdf': return total + 15;
-                        case 'qcm': return total + 5;
-                        default: return total + 10;
-                      }
-                    }, 0);
+                    // Calculate module estimated time based on active content
+                    const moduleEstimatedTime = getModuleEstimatedTime(module);
 
                     return (
                       <div key={module.id} className="accordion-item">
@@ -1501,7 +1612,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                                             {content.is_locked && (
                                               <span className="badge bg-warning ms-2">Locked</span>
                                             )}
-                                            {!canCompleteContent && !content.is_completed && course.min_required_time > 0 && (
+                                            {!canCompleteContent && !content.is_completed && displayMinRequiredTime > 0 && (
                                               <span className="badge bg-info ms-2" title={`Time requirement not met - ${formatSecondsDetailed(timeRemaining)} remaining`}>
                                                 <i className="fas fa-clock me-1"></i>
                                                 Time Locked
@@ -1521,7 +1632,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                                             <i className="bi bi-check-circle-fill text-success fs-5"></i>
                                           ) : content.is_locked ? (
                                             <i className="bi bi-lock-fill text-warning fs-5"></i>
-                                          ) : !canCompleteContent && course.min_required_time > 0 ? (
+                                          ) : !canCompleteContent && displayMinRequiredTime > 0 ? (
                                             <i className="bi bi-clock-history text-info fs-5" title={`Time requirement not met - ${formatSecondsDetailed(timeRemaining)} remaining`}></i>
                                           ) : (
                                             <i className="bi bi-play-circle-fill text-primary fs-5"></i>

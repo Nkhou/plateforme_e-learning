@@ -172,13 +172,16 @@ class ModuleSerializer(serializers.ModelSerializer):
     contents = serializers.SerializerMethodField()
     content_stats = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    calculated_estimated_duration = serializers.SerializerMethodField()
+    calculated_min_required_time = serializers.SerializerMethodField()
     
     class Meta:
         model = Module
         fields = [
             'id', 'title', 'description', 'order', 'status', 'status_display', 
             'estimated_duration', 'min_required_time', 'created_at', 'updated_at',
-            'contents', 'content_stats'
+            'contents', 'content_stats','estimated_duration', 'min_required_time',
+            'calculated_estimated_duration', 'calculated_min_required_time'
         ]
     
     def get_contents(self, obj):
@@ -208,6 +211,13 @@ class ModuleSerializer(serializers.ModelSerializer):
             'video_count': sum(1 for c in contents if c.content_type.name == 'video'),
             'qcm_count': sum(1 for c in contents if c.content_type.name == 'qcm'),
         }
+    def get_calculated_estimated_duration(self, obj):
+        """Get calculated duration considering only active content"""
+        return obj.calculate_estimated_duration()
+    
+    def get_calculated_min_required_time(self, obj):
+        """Get calculated min required time considering only active content"""
+        return obj.calculate_min_required_time()
 def safe_int(value, default=0):
     """Safely convert to int, returning default if conversion fails"""
     if value is None:
@@ -262,28 +272,27 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
     def get_content_stats(self, obj):
         """Calculate comprehensive content statistics for a module"""
         course = obj.course
-    
-        # DEBUG: Check what subscriptions exist
+
+        # DEBUG: Check what subscriptions exist 
         all_subscriptions = Subscription.objects.filter(course=course, is_active=True)
         print(f"DEBUG - Course: {course.id}, All active subscriptions: {all_subscriptions.count()}")
-        
+
         completed_subscriptions = Subscription.objects.filter(
             course=course, 
             is_active=True, 
             is_completed=True
         )
         print(f"DEBUG - Completed subscriptions: {completed_subscriptions.count()}")
-        
+
         # Print details of each subscription
         for sub in completed_subscriptions:
             print(f"DEBUG - Completed subscription: User {sub.user.id}, Completed: {sub.is_completed}")
-    
+
         total_enrolled = safe_int(all_subscriptions.count())
         total_completed = safe_int(completed_subscriptions.count())
-    
+
         print(f"DEBUG - Final counts - Enrolled: {total_enrolled}, Completed: {total_completed}")
-    
-        # ... rest of your method
+
 
         # Calculate completion rate (percentage of enrolled users who completed)
         completion_rate = safe_percentage(total_completed, total_enrolled)
@@ -317,12 +326,9 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
         video_count = safe_int(contents.filter(content_type__name__iexact='video').count())
         qcm_count = safe_int(contents.filter(content_type__name__iexact='qcm').count())
         total_contents_module = safe_int(contents.count())
-
-        # Return data matching CourseStats interface EXACTLY
         return {
             'total_users_enrolled': total_enrolled,
             'total_users_completed': total_completed,
-            # REMOVED: 'total_courses_completed': total_completed,  # No longer included
             'total_modules': total_modules,
             'total_contents_course': total_contents_course,
             'completion_rate': completion_rate,
@@ -460,6 +466,9 @@ class CourseSerializer(serializers.ModelSerializer):
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     department_display = serializers.CharField(source='get_department_display', read_only=True)
+    calculated_estimated_duration = serializers.SerializerMethodField()
+    calculated_min_required_time = serializers.SerializerMethodField()
+
     
     class Meta:
         model = Course
@@ -480,7 +489,9 @@ class CourseSerializer(serializers.ModelSerializer):
             'is_subscribed',
             'creator_username',
             'creator_first_name',
-            'creator_last_name'
+            'creator_last_name',
+            'estimated_duration', 'min_required_time',
+            'calculated_estimated_duration', 'calculated_min_required_time'
         ]
     
     def get_image_url(self, obj):
@@ -490,6 +501,14 @@ class CourseSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.image.url)
             return obj.image.url
         return None
+    
+    def get_calculated_estimated_duration(self, obj):
+        """Get calculated duration considering only active content"""
+        return obj.calculate_estimated_duration()
+    
+    def get_calculated_min_required_time(self, obj):
+        """Get calculated min required time considering only active content"""
+        return obj.calculate_min_required_time()
     
     def get_progress_percentage(self, obj):
         request = self.context.get('request')
@@ -502,7 +521,27 @@ class CourseSerializer(serializers.ModelSerializer):
                 ).first()
                 
                 if subscription:
-                    return subscription.progress_percentage
+                    # Calculate progress based only on active content
+                    course = obj
+                    
+                    # Get active modules and contents
+                    active_modules = Module.objects.filter(course=course, status=1)
+                    active_contents = CourseContent.objects.filter(
+                        module__in=active_modules,
+                        status=1
+                    )
+                    
+                    # Get completed active contents for this subscription
+                    completed_active_contents = subscription.completed_contents.filter(
+                        id__in=active_contents.values_list('id', flat=True)
+                    )
+                    
+                    total_active_contents = active_contents.count()
+                    completed_count = completed_active_contents.count()
+                    
+                    if total_active_contents > 0:
+                        return round((completed_count / total_active_contents) * 100, 2)
+                    return 0.0
                     
             except Subscription.DoesNotExist:
                 pass
@@ -764,17 +803,18 @@ class SubscriberSerializer(serializers.ModelSerializer):
         return obj.full_name
 
 # Subscription Serializer
+# Update your SubscriptionSerializer in serializers.py
 class SubscriptionSerializer(serializers.ModelSerializer):
     user = SubscriberSerializer(read_only=True)
-    progress_percentage = serializers.FloatField(read_only=True)
+    progress_percentage = serializers.SerializerMethodField()
     total_score = serializers.IntegerField(read_only=True)
-    completed_contents_count = serializers.IntegerField(read_only=True)
-    total_contents_count = serializers.IntegerField(read_only=True)
-    is_completed = serializers.BooleanField(read_only=True)
+    completed_contents_count = serializers.SerializerMethodField()
+    total_contents_count = serializers.SerializerMethodField()
+    is_completed = serializers.SerializerMethodField()
     total_time_spent = serializers.IntegerField(read_only=True)
     average_time_per_session = serializers.IntegerField(read_only=True)
-    can_complete_course = serializers.BooleanField(read_only=True)
-    completion_requirements = serializers.DictField(read_only=True)
+    can_complete_course = serializers.SerializerMethodField()
+    completion_requirements = serializers.SerializerMethodField()
     
     class Meta:
         model = Subscription
@@ -784,7 +824,147 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'is_completed', 'total_time_spent', 'average_time_per_session',
             'can_complete_course', 'completion_requirements'
         ]
-
+    
+    def get_progress_percentage(self, obj):
+        """Calculate progress based only on active content"""
+        course = obj.course
+        
+        # Get active modules and contents
+        active_modules = Module.objects.filter(course=course, status=1)
+        active_contents = CourseContent.objects.filter(
+            module__in=active_modules,
+            status=1
+        )
+        
+        # Get completed active contents
+        completed_active_contents = obj.completed_contents.filter(
+            id__in=active_contents.values_list('id', flat=True)
+        )
+        
+        total_active_contents = active_contents.count()
+        completed_count = completed_active_contents.count()
+        
+        if total_active_contents > 0:
+            return round((completed_count / total_active_contents) * 100, 2)
+        return 0.0
+    
+    def get_completed_contents_count(self, obj):
+        """Count only completed active contents"""
+        course = obj.course
+        active_modules = Module.objects.filter(course=course, status=1)
+        active_contents = CourseContent.objects.filter(
+            module__in=active_modules,
+            status=1
+        )
+        
+        completed_active_contents = obj.completed_contents.filter(
+            id__in=active_contents.values_list('id', flat=True)
+        )
+        
+        return completed_active_contents.count()
+    
+    def get_total_contents_count(self, obj):
+        """Count only active contents"""
+        course = obj.course
+        active_modules = Module.objects.filter(course=course, status=1)
+        active_contents = CourseContent.objects.filter(
+            module__in=active_modules,
+            status=1
+        )
+        
+        return active_contents.count()
+    
+    def get_is_completed(self, obj):
+        """Check completion based only on active content"""
+        course = obj.course
+        
+        # Get active modules and contents
+        active_modules = Module.objects.filter(course=course, status=1)
+        active_contents = CourseContent.objects.filter(
+            module__in=active_modules,
+            status=1
+        )
+        
+        # Get completed active contents
+        completed_active_contents = obj.completed_contents.filter(
+            id__in=active_contents.values_list('id', flat=True)
+        )
+        
+        # Calculate time requirements for active content
+        total_min_required_time = self.calculate_active_min_required_time(course)
+        
+        # Check completion criteria
+        all_content_completed = completed_active_contents.count() >= active_contents.count()
+        time_requirements_met = obj.total_time_spent >= (total_min_required_time * 60)
+        
+        return all_content_completed and time_requirements_met
+    
+    def get_can_complete_course(self, obj):
+        """Check if user can complete course based on active content time requirements"""
+        course = obj.course
+        total_min_required_time = self.calculate_active_min_required_time(course)
+        return obj.total_time_spent >= (total_min_required_time * 60)
+    
+    def get_completion_requirements(self, obj):
+        """Get completion requirements for active content only"""
+        course = obj.course
+        
+        # Get active modules and contents
+        active_modules = Module.objects.filter(course=course, status=1)
+        active_contents = CourseContent.objects.filter(
+            module__in=active_modules,
+            status=1
+        )
+        
+        # Get completed active contents
+        completed_active_contents = obj.completed_contents.filter(
+            id__in=active_contents.values_list('id', flat=True)
+        )
+        
+        # Calculate time requirements
+        total_min_required_time = self.calculate_active_min_required_time(course)
+        required_time_seconds = total_min_required_time * 60
+        
+        all_content_completed = completed_active_contents.count() >= active_contents.count()
+        time_requirements_met = obj.total_time_spent >= required_time_seconds
+        
+        return {
+            'contents_met': all_content_completed,
+            'time_met': time_requirements_met,
+            'required_contents': active_contents.count(),
+            'completed_contents': completed_active_contents.count(),
+            'required_time_seconds': required_time_seconds,
+            'actual_time_seconds': obj.total_time_spent,
+            'progress_percentage': self.get_progress_percentage(obj),
+            'can_complete': all_content_completed and time_requirements_met
+        }
+    
+    def calculate_active_min_required_time(self, course):
+        """Calculate minimum required time for active content only"""
+        active_modules = Module.objects.filter(course=course, status=1)
+        active_contents = CourseContent.objects.filter(
+            module__in=active_modules,
+            status=1
+        )
+        
+        total_min_required_time = 0
+        
+        for content in active_contents:
+            if content.min_required_time:
+                total_min_required_time += content.min_required_time
+            else:
+                # Conservative estimates for min required time
+                content_type_name = content.content_type.name.lower()
+                if content_type_name == 'video':
+                    total_min_required_time += 8
+                elif content_type_name == 'pdf':
+                    total_min_required_time += 12
+                elif content_type_name == 'qcm':
+                    total_min_required_time += 4
+                else:
+                    total_min_required_time += 8
+        
+        return total_min_required_time
 # Course with Subscribers Serializer
 class CourseWithSubscribersSerializer(serializers.ModelSerializer):
     subscribers = SubscriptionSerializer(many=True, read_only=True, source='course_subscriptions')

@@ -47,14 +47,13 @@ const Dashboard = () => {
             setLoading(true);
             
             // Fetch courses I'm subscribed to
-            console.log('Fetching my subscribed courses from:', `${api.defaults.baseURL}/courses/my-courses/`);
+            // console.log('Fetching my subscribed courses from:', `${api.defaults.baseURL}/courses/my-courses/`);
             const myCoursesRes = await api.get('courses/mysubscriptions/');
             console.log('My courses response:', myCoursesRes.data);
             
             // Fetch recommended courses by department
             console.log('Fetching recommended courses from:', `${api.defaults.baseURL}/courses/recommended/`);
             const recommendedRes = await api.get('courses/recommended/');
-            console.log('++++++++++++++++++++++++++++++Recommended courses response:', recommendedRes.data);
 
             // Filter to show only active courses
             const activeMyCourses = filterActiveCourses(myCoursesRes.data);

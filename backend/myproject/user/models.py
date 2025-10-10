@@ -33,7 +33,6 @@ QUESTION_TYPE_CHOICES = [
     ('single', 'Single Choice'),
     ('multiple', 'Multiple Choice'),
 ]
-
 class CustomUser(AbstractUser):
     privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
     department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
@@ -147,7 +146,56 @@ class Course(models.Model):
     def set_draft(self):
         self.status = 0
         self.save()
+    def calculate_estimated_duration(self):
+        """Calculate total duration from ACTIVE modules and contents only"""
+        total_duration = 0
+        
+        # Filter only active modules (status = 1)
+        active_modules = self.modules.filter(status=1)
+        
+        for module in active_modules:
+            # Use the module's calculate_estimated_duration method
+            total_duration += module.calculate_estimated_duration()
+        
+        return total_duration
+    
+    def calculate_min_required_time(self):
+        """Calculate minimum required time from ACTIVE modules and contents only"""
+        total_min_time = 0
+        
+        # Filter only active modules (status = 1)
+        active_modules = self.modules.filter(status=1)
+        
+        for module in active_modules:
+            # Filter only active contents within the module
+            active_contents = module.contents.filter(status=1)
+            
+            for content in active_contents:
+                if content.min_required_time:
+                    total_min_time += content.min_required_time
+                else:
+                    # Fallback to estimated_duration if min_required_time not set
+                    if content.estimated_duration:
+                        total_min_time += content.estimated_duration
+                    else:
+                        # Default fallback based on content type
+                        content_type_name = content.content_type.name.lower()
+                        if content_type_name == 'video':
+                            total_min_time += 10  # Default 10 minutes for video
+                        elif content_type_name == 'pdf':
+                            total_min_time += 15  # Default 15 minutes for PDF
+                        elif content_type_name == 'qcm':
+                            total_min_time += 5   # Default 5 minutes for QCM
+        
+        return total_min_time
 
+    def save(self, *args, **kwargs):
+        # Auto-calculate durations if not set
+        if not self.estimated_duration:
+            self.estimated_duration = self.calculate_estimated_duration()
+        if not self.min_required_time:
+            self.min_required_time = self.calculate_min_required_time()
+        super().save(*args, **kwargs)
 class Enrollment(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='enrollments')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')
@@ -206,17 +254,65 @@ class Module(models.Model):
         return dict(COURSE_STATUS_CHOICES).get(self.status, 'Unknown')
 
     def calculate_estimated_duration(self):
-        """Calculate total duration from contents"""
+        """Calculate total duration from ACTIVE contents only"""
         total_duration = 0
-        for content in self.contents.all():
+        
+        # Filter only active contents (status = 1)
+        active_contents = self.contents.filter(status=1)
+        
+        for content in active_contents:
             if content.estimated_duration:
                 total_duration += content.estimated_duration
+            else:
+                # Fallback to default estimates based on content type
+                content_type_name = content.content_type.name.lower()
+                if content_type_name == 'video':
+                    # Check if video has duration, otherwise default to 10 min
+                    if hasattr(content, 'video_content') and content.video_content and content.video_content.duration:
+                        total_duration += math.ceil(content.video_content.duration / 60)  # Convert seconds to minutes
+                    else:
+                        total_duration += 10
+                elif content_type_name == 'pdf':
+                    total_duration += 15
+                elif content_type_name == 'qcm':
+                    total_duration += 5
+                else:
+                    total_duration += 10  # Default for other content types
+        
         return total_duration
 
+    def calculate_min_required_time(self):
+        """Calculate minimum required time from ACTIVE contents only"""
+        total_min_time = 0
+        
+        # Filter only active contents (status = 1)
+        active_contents = self.contents.filter(status=1)
+        
+        for content in active_contents:
+            if content.min_required_time:
+                total_min_time += content.min_required_time
+            else:
+                # Fallback to estimated_duration if min_required_time not set
+                if content.estimated_duration:
+                    total_min_time += content.estimated_duration
+                else:
+                    # Default fallback
+                    content_type_name = content.content_type.name.lower()
+                    if content_type_name == 'video':
+                        total_min_time += 10
+                    elif content_type_name == 'pdf':
+                        total_min_time += 15
+                    elif content_type_name == 'qcm':
+                        total_min_time += 5
+        
+        return total_min_time
+
     def save(self, *args, **kwargs):
-        # Auto-calculate duration if not set
-        if not self.estimated_duration and self.pk:
+        # Auto-calculate durations if not set
+        if not self.estimated_duration:
             self.estimated_duration = self.calculate_estimated_duration()
+        if not self.min_required_time:
+            self.min_required_time = self.calculate_min_required_time()
         super().save(*args, **kwargs)
 
 class CourseContent(models.Model):
@@ -349,11 +445,16 @@ class Subscription(models.Model):
     # NEW PROPERTIES - Added for React compatibility
     @property
     def completed_contents_count(self):
-        return self.completed_contents.count()
+        """Count only active completed contents (status=1)"""
+        return self.completed_contents.filter(status=1).count()
 
     @property
     def total_contents_count(self):
-        return CourseContent.objects.filter(module__course=self.course).count()
+        """Count only active course contents (status=1)"""
+        return CourseContent.objects.filter(
+            module__course=self.course, 
+            status=1
+        ).count()
 
     @property
     def can_complete_course(self):
@@ -374,13 +475,14 @@ class Subscription(models.Model):
         }
 
     def update_total_score(self):
+        """Update total score from completed QCMs"""
         completed_qcms = QCMCompletion.objects.filter(subscription=self, is_passed=True)
         self.total_score = sum(completion.points_earned for completion in completed_qcms)
         self.save()
         return self.total_score
 
     def update_progress(self):
-        """Update progress percentage"""
+        """Update progress percentage considering only active content"""
         total_contents = self.total_contents_count
         if total_contents > 0:
             self.progress_percentage = (self.completed_contents_count / total_contents) * 100
@@ -388,7 +490,14 @@ class Subscription(models.Model):
 
     def can_access_content(self, content):
         """Check if user can access specific content based on prerequisites"""
-        module_contents = CourseContent.objects.filter(module=content.module).order_by('order')
+        # If content is not active (status != 1), user cannot access it
+        if content.status != 1:
+            return False
+            
+        module_contents = CourseContent.objects.filter(
+            module=content.module, 
+            status=1
+        ).order_by('order')
         
         content_position = None
         for i, module_content in enumerate(module_contents):
@@ -396,9 +505,13 @@ class Subscription(models.Model):
                 content_position = i
                 break
         
+        # If content not found in active contents or is first content
+        if content_position is None:
+            return False
         if content_position == 0:
             return True
         
+        # Check previous content completion
         previous_content = module_contents[content_position - 1]
         
         if hasattr(previous_content, 'qcm') and previous_content.qcm:
@@ -411,10 +524,14 @@ class Subscription(models.Model):
             return completion
         
         return self.completed_contents.filter(id=previous_content.id).exists()
+
     def update_completion_status(self):
-        """Update the completion status based on content completion and time requirements"""
-        total_contents = CourseContent.objects.filter(module__course=self.course).count()
-        completed_contents = self.completed_contents.count()
+        """Update the completion status based on active content completion and time requirements"""
+        total_contents = CourseContent.objects.filter(
+            module__course=self.course, 
+            status=1
+        ).count()
+        completed_contents = self.completed_contents.filter(status=1).count()
         
         # Calculate progress percentage
         if total_contents > 0:
@@ -422,7 +539,7 @@ class Subscription(models.Model):
         else:
             self.progress_percentage = 0
         
-        # Check if all contents are completed AND time requirements are met
+        # Check if all active contents are completed AND time requirements are met
         all_contents_completed = completed_contents >= total_contents
         time_requirements_met = self.check_time_requirements()
         
@@ -447,7 +564,10 @@ class Subscription(models.Model):
         return self.total_time_spent >= required_seconds
     
     def mark_content_completed(self, content):
-        """Mark a content as completed and update progress"""
+        """Mark a content as completed and update progress (only if content is active)"""
+        if content.status != 1:
+            return False
+            
         if not self.completed_contents.filter(id=content.id).exists():
             self.completed_contents.add(content)
             self.update_completion_status()
@@ -463,9 +583,12 @@ class Subscription(models.Model):
         return False
     
     def get_completion_requirements(self):
-        """Get detailed completion requirements status"""
-        total_contents = CourseContent.objects.filter(module__course=self.course).count()
-        completed_contents = self.completed_contents.count()
+        """Get detailed completion requirements status considering only active content"""
+        total_contents = CourseContent.objects.filter(
+            module__course=self.course, 
+            status=1
+        ).count()
+        completed_contents = self.completed_contents.filter(status=1).count()
         
         required_time_seconds = (self.course.min_required_time or 0) * 60
         
@@ -479,7 +602,14 @@ class Subscription(models.Model):
             'progress_percentage': self.progress_percentage,
             'can_complete': completed_contents >= total_contents and self.total_time_spent >= required_time_seconds
         }
-
+    
+    def get_active_completed_contents(self):
+        """Get only active completed contents (status=1)"""
+        return self.completed_contents.filter(status=1)
+    
+    def get_active_locked_contents(self):
+        """Get only active locked contents (status=1)"""
+        return self.locked_contents.filter(status=1)
 class QCMCompletion(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
     qcm = models.ForeignKey(QCM, on_delete=models.CASCADE)
