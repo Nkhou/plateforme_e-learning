@@ -4,6 +4,7 @@ import NewCours from '../component/courses/new_courses';
 import api from '../api/api';
 import CourseDetail from "../component/courses/formateur/CourseDetail";
 import CourseImage from '../component/courses/CourseImage';
+import { useNavigate } from 'react-router-dom';
 
 interface Course {
     id: number;
@@ -30,14 +31,11 @@ const Cours = () => {
     const [myCourses, setMyCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const navigate = useNavigate();
 
     // Add the edit course handler
     const handleEditCourse = (courseId: number) => {
         console.log('Edit course requested:', courseId);
-        // Add your edit logic here, for example:
-        // - Navigate to an edit page
-        // - Open an edit modal
-        // - Set edit mode in state
         alert(`Edit course with ID: ${courseId}`);
     };
 
@@ -149,6 +147,7 @@ const Cours = () => {
 
     const handleCardClick = (courseId: number) => {
         setSelectedCourseId(courseId);
+        navigate(`/mycreatecours/${courseId}`);
         setShowCourseDetail(true);
     };
 
@@ -245,11 +244,11 @@ const Cours = () => {
                         ×
                     </button>
                     {/* Fixed: Added the missing onEditCourse prop */}
-                    <CourseDetail 
+                    {/* <CourseDetail 
                         courseId={selectedCourseId} 
                         onClose={handleCloseCourseDetail}
                         onEditCourse={handleEditCourse}
-                    />
+                    /> */}
                 </div>
             ) : (
                 <div className="fullscreen-container">

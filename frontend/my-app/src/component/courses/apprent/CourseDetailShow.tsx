@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import api from '../../../api/api';
+import { useNavigate } from 'react-router-dom';
 
 interface CourseDetailProps {
-  courseId: number | null;
-  onClose: () => void;
+  courseId?: number | null;
+  onClose?: () => void;
 }
+
 
 interface CourseDetailData {
   id: number;
@@ -336,7 +338,7 @@ const CourseTimeStatistics: React.FC<{ modules: Module[] }> = ({ modules }) => {
     // </div>
   );
 };
-
+import { useParams } from 'react-router-dom';
 const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
   const [course, setCourse] = useState<CourseDetailData | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
@@ -349,7 +351,13 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
   const [selectedQCMOptions, setSelectedQCMOptions] = useState<number[]>([]);
   const [expandedModules, setExpandedModules] = useState<number[]>([]);
   const [videoError, setVideoError] = useState(false);
-
+  const params = useParams<{ id: string }>();
+  const id = courseId ?? (params.id ? parseInt(params.id, 10) : null);
+  const navigate = useNavigate();
+  console.log('helllooooooovovovov', id, id)
+  if (id === null) {
+    return <div>Aucun cours sélectionné</div>;
+  }
   // Timer state
   const [timer, setTimer] = useState<TimerState>({
     isRunning: false,
@@ -546,18 +554,18 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
   // Record time to backend when timer completes
   const recordCompletedTime = async () => {
-    if (!courseId || !activeContent) return;
+    if (!id || !activeContent) return;
 
     try {
       // Record time tracking to backend
-      await api.post(`courses/${courseId}/time-calculation/`, {
+      await api.post(`courses/${id}/time-calculation/`, {
         content_id: activeContent.id,
         duration: timer.targetTime, // Total time spent in seconds
         session_type: 'content'
       });
 
       // Refresh subscription data to update total_time_spent
-      const subscriptionResponse = await api.get(`courses/${courseId}/my-progress/`);
+      const subscriptionResponse = await api.get(`courses/${id}/my-progress/`);
       console.log("**************************1111my progress", subscriptionResponse);
       if (Array.isArray(subscriptionResponse.data)) {
         setSubscription(subscriptionResponse.data.length > 0 ? subscriptionResponse.data[0] : null);
@@ -589,13 +597,13 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
   useEffect(() => {
     const fetchCourseData = async () => {
-      if (!courseId) return;
+      if (!id) return;
 
       try {
         setLoading(true);
         const [courseResponse, modulesResponse] = await Promise.all([
-          api.get(`courses/${courseId}/is-subscribed/`),
-          api.get(`courses/${courseId}/modules/`)
+          api.get(`courses/${id}/is-subscribed/`),
+          api.get(`courses/${id}/modules/`)
         ]);
 
         setCourse(courseResponse.data);
@@ -607,7 +615,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
         try {
           // Use the my-progress endpoint for students
-          const subscriptionResponse = await api.get(`courses/${courseId}/my-progress/`);
+          const subscriptionResponse = await api.get(`courses/${id}/my-progress/`);
           console.log('subscriptionResponse.data', subscriptionResponse.data);
 
           // Handle both array and object responses
@@ -655,7 +663,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     };
 
     fetchCourseData();
-  }, [courseId]);
+  }, [id]);
 
   const toggleModuleExpansion = (moduleId: number) => {
     setExpandedModules(prev =>
@@ -667,7 +675,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
   const handleSubscribe = async () => {
     try {
-      const response = await api.post(`courses/${courseId}/subscribe/`);
+      const response = await api.post(`courses/${id}/subscribe/`);
       setSubscription(response.data);
 
       // Update course to reflect subscription
@@ -679,7 +687,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       }
 
       // Refresh modules after subscription with proper locking logic
-      const modulesResponse = await api.get(`courses/${courseId}/modules/`);
+      const modulesResponse = await api.get(`courses/${id}/modules/`);
       const rawModules = modulesResponse.data;
 
       const processedModules = calculateContentLockStatus(rawModules, true);
@@ -729,7 +737,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           return;
         }
 
-        response = await api.post(`courses/${courseId}/submit-qcm/`, {
+        response = await api.post(`courses/${id}/submit-qcm/`, {
           content_id: contentId,
           selected_option_ids: selectedQCMOptions,
           time_taken: 0,
@@ -741,11 +749,11 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
           return; // Don't mark as completed if not passed
         }
       } else if (contentType === 'pdf') {
-        response = await api.post(`courses/${courseId}/completePdf/`, {
+        response = await api.post(`courses/${id}/completePdf/`, {
           content_id: contentId,
         });
       } else if (contentType === 'video') {
-        response = await api.post(`courses/${courseId}/completeVideo/`, {
+        response = await api.post(`courses/${id}/completeVideo/`, {
           content_id: contentId
         });
       } else {
@@ -924,6 +932,9 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       }
     }, 0);
   };
+  const handleBack = () => {
+    navigate('/dashboard');
+  }
 
   const renderContentModal = () => {
     if (!activeContent) return null;
@@ -1667,7 +1678,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
       {/* Back Button */}
       <div className="text-center mt-4">
-        <button className="btn btn-secondary" onClick={onClose}>
+        <button className="btn btn-secondary" onClick={handleBack}>
           <i className="bi bi-arrow-left me-2"></i>
           Back to Courses
         </button>

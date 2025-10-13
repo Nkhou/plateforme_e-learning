@@ -91,15 +91,15 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
       // Default navigation behavior
       switch (result.type) {
         case 'course':
-          navigate(`/course/${result.id}`);
+          navigate(`/cours/${result.id}`);
           break;
         case 'module':
           if (result.course_id) {
-            navigate(`/course/${result.course_id}/modules/${result.id}`);
+            navigate(`/cours/${result.course_id}/`);
           }
           break;
         case 'content':
-          navigate(`/content/${result.id}`);
+          navigate(`/cours/${result.course_id}/`);
           break;
       }
     }

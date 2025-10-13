@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from './api/api';
 import SearchComponent from '../src/component/Search/SearchComponent';
@@ -37,24 +37,37 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleClickOutside = (event: any) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  const handleMenu = () => {
+    setOpen((prev) => !prev)
+  }
   const handleSearchResultClick = (result: SearchResult) => {
     console.log('Selected result:', result);
     // Custom logic based on result type
     switch (result.type) {
       case 'course':
-        navigate(`/courses/${result.id}`);
+        navigate(`/cours/${result.id}`);
         break;
       case 'module':
         if (result.course_id) {
-          navigate(`/courses/${result.course_id}/modules/${result.id}`);
+          navigate(`/cours/${result.course_id}`);
         } else {
           console.warn('Module result missing course_id:', result);
         }
         break;
       case 'content':
         if (result.course_id && result.module_id) {
-          navigate(`/courses/${result.course_id}/modules/${result.module_id}/content/${result.id}`);
+          navigate(`/cours/${result.course_id}`);
         } else {
           console.warn('Content result missing course_id or module_id:', result);
         }
@@ -74,9 +87,9 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         console.log('data: ', res.data.user);
         setUser(res.data.user);
         setLoading(false);
-        
+
         console.log("User privilege:", res.data.user?.privilege, "Current path:", location.pathname);
-        
+
         if (!auth && location.pathname !== '/') {
           navigate('/');
         } else if (auth && location.pathname === '/') {
@@ -99,18 +112,30 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         }
       });
   }, [navigate, location]);
-
+  const handleLogOut =() => {
+    api.post('logout/', {
+      withCredentials: true,
+    })
+      .then(res => {
+        console.log('res', res);
+        navigate('/');
+      })
+      .catch((error) => {
+      
+          navigate('/');
+      });
+  }
   if (loading) return <div className="text-center p-5">Loading...</div>;
   if (!isAuthenticated) return <>{children}</>;
 
   return (
     <div className="d-flex" style={{ minHeight: '100vh' }}>
       {/* Sidebar */}
-      <div 
-        className={`border-end ${sidebarOpen ? 'd-block' : 'd-none'} d-md-block`} 
-        style={{ 
-          width: '260px', 
-          minHeight: '100vh', 
+      <div
+        className={`border-end ${sidebarOpen ? 'd-block' : 'd-none'} d-md-block`}
+        style={{
+          width: '260px',
+          minHeight: '100vh',
           background: 'rgba(5, 44, 101, 0.9)',
           position: 'sticky',
           top: 0
@@ -174,8 +199,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
       {/* Main Content */}
       <div className="flex-grow-1 d-flex flex-column">
         {/* Top Navbar */}
-        <nav 
-          className="navbar navbar-light border-bottom px-3" 
+        <nav
+          className="navbar navbar-light border-bottom px-3"
           style={{ background: 'rgba(5, 44, 101, 0.9)' }}
         >
           <div className="container-fluid">
@@ -187,21 +212,38 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               >
                 {sidebarOpen ? '×' : '☰'}
               </button>
-              
+
               {!sidebarOpen && (
                 <div className="d-flex align-items-center justify-content-between w-100">
                   {/* Search Form - Styled like your original */}
                   <form className="search-form position-relative flex-grow-1 me-4" style={{ maxWidth: '500px' }}>
-                    <SearchComponent 
+                    <SearchComponent
                       onSearchResultClick={handleSearchResultClick}
                       placeholder="Search courses, modules, or content..."
                       className="w-100"
                     />
                   </form>
-                  
-                  <span className="text-white fw-semibold">
-                    Hello, {user?.username}
-                  </span>
+
+
+
+                  <div className="btn-group custom-dropdown-group" ref={dropdownRef}>
+                    <button
+                      type="button"
+                      className="btn btn-info dropdown-toggle rounded-btn"
+                      onClick={() => handleMenu()}
+                      aria-expanded={open}
+                    >
+                    </button>
+                    {open && (
+                      <div className="dropdown-menu show custom-dark-dropdown ">
+                        <h6 className="dropdown-header custom-header">Hello, {user?.username}</h6>
+                        <a className="dropdown-item custom-item" href="#">Profile</a>
+                        <a className="dropdown-item custom-item" href="#">Settings</a>
+                        <div className="dropdown-divider custom-divider"></div>
+                        <a className="dropdown-item custom-item" onClick={() => handleLogOut()}>Log out</a>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

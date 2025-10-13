@@ -11,6 +11,8 @@ import FirstPage from "./component/user/firstPage";
 import './App.css';
 import Cours from "./pages/courses";
 import AdminDashboard from "./pages/AdminDashboard";
+import CourseDetailShow from "./component/courses/apprent/CourseDetailShow";
+import CourseDetail from "./component/courses/formateur/CourseDetail";
 
 function App() {
   axios.defaults.withCredentials = true;
@@ -20,15 +22,15 @@ function App() {
       <Routes>
         <Route path="/" element={<AuthGuard><FirstPage /></AuthGuard>} />
         <Route path="/cours" element={
-            <AuthGuard>
-              <Cours />
-            </AuthGuard>
-          } />
-          <Route path="/admin" element={
-            <AuthGuard>
-              <AdminDashboard/>
-            </AuthGuard>
-          } />
+          <AuthGuard>
+            <Cours />
+          </AuthGuard>
+        } />
+        <Route path="/admin" element={
+          <AuthGuard>
+            <AdminDashboard />
+          </AuthGuard>
+        } />
         <Route
           path="/dashboard"
           element={
@@ -38,6 +40,24 @@ function App() {
             </AuthGuard>
           }
         />
+        <Route
+          path="/mycreatecours/:id"
+          element={
+            <AuthGuard>
+              <CourseDetail />
+            </AuthGuard>
+          }
+        />
+        <Route
+  path="/cours/:id"
+  element={
+    <AuthGuard>
+      <CourseDetailShow />
+    </AuthGuard>
+  }
+/>
+
+
         <Route
           path="/signup"
           element={

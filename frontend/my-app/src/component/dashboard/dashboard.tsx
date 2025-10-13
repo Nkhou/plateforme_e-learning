@@ -4,6 +4,7 @@ import '../../css/cours.css';
 import api from '../../api/api';
 import CourseDetailShow from "../courses/apprent/CourseDetailShow";
 import CourseImage from "../courses/CourseImage";
+import { useNavigate } from 'react-router-dom';
 
 interface Course {
     id: number;
@@ -35,6 +36,7 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [courseFilter, setCourseFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
+    const navigate = useNavigate();
 
     // Filter only active courses (status = 1)
     const filterActiveCourses = (courses: Course[]): Course[] => {
@@ -98,7 +100,8 @@ const Dashboard = () => {
 
     const handleCardClick = (courseId: number) => {
         setSelectedCourseId(courseId);
-        setShowCourseDetail(true);
+        navigate(`/cours/${courseId}`);
+        // setShowCourseDetail(true);
     };
 
     const handleCloseCourseDetail = () => {
@@ -270,10 +273,12 @@ const Dashboard = () => {
                     )}
                 </div>
             ) : (
-                <div className="fullscreen-container">
-                    <button className="close-button" onClick={handleCloseCourseDetail}>×</button>
-                    <CourseDetailShow courseId={selectedCourseId} onClose={handleCloseCourseDetail} />
-                </div>
+                <>
+                </>
+                // <div className="fullscreen-container">
+                //     <button className="close-button" onClick={handleCloseCourseDetail}>×</button>
+                //     <CourseDetailShow courseId={selectedCourseId} onClose={handleCloseCourseDetail} />
+                // </div>
             )}
         </>
     );

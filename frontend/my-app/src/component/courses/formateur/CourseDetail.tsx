@@ -3,11 +3,12 @@ import api from '../../../api/api';
 import ViewContentModal from './ViewContentModal'
 import CircularStatsDisplay from './CircularStatsDisplay'
 import QuizComponent from './QuizComponent'
+import { useParams } from 'react-router-dom';
 
 interface CourseDetailProps {
-    courseId: number | null;
-    onClose: () => void;
-    onEditCourse: (courseId: number) => void;
+    courseId?: number | null;
+    onClose?: () => void;
+    // onEditCourse?: (courseId: number) => void;
 }
 
 interface CourseDetailData {
@@ -183,8 +184,8 @@ interface ChatMessage {
 }
 
 // Time Display Component
-const TimeDisplay: React.FC<{ 
-    seconds: number; 
+const TimeDisplay: React.FC<{
+    seconds: number;
     type?: 'short' | 'detailed';
     label?: string;
 }> = ({ seconds, type = 'short', label }) => {
@@ -192,7 +193,7 @@ const TimeDisplay: React.FC<{
         if (type === 'short') {
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
-            
+
             if (hours > 0) {
                 return `${hours}h ${minutes}m`;
             }
@@ -201,7 +202,7 @@ const TimeDisplay: React.FC<{
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
             const secs = totalSeconds % 60;
-            
+
             if (hours > 0) {
                 return `${hours}h ${minutes}m ${secs}s`;
             } else if (minutes > 0) {
@@ -256,26 +257,26 @@ const TimeRequirementBadge: React.FC<{
 }> = ({ requiredTime, actualTime, type }) => {
     const timeMet = actualTime >= requiredTime;
     const percentage = requiredTime > 0 ? Math.min((actualTime / requiredTime) * 100, 100) : 100;
-    
+
     return (
         <div className="time-requirement-badge">
             <div className="d-flex align-items-center gap-2">
-                <span className={`badge ${timeMet ? 'bg-success' : 'bg-warning'}`}>
+                {/* <span className={`badge ${timeMet ? 'bg-success' : 'bg-warning'}`}>
                     <i className={`fas ${timeMet ? 'fa-check-circle' : 'fa-clock'} me-1`}></i>
                     {timeMet ? 'Time Met' : 'Time Required'}
                 </span>
                 <small className="text-muted">
                     {Math.floor(actualTime / 60)}m / {Math.floor(requiredTime / 60)}m
-                </small>
+                </small> */}
             </div>
-            {!timeMet && (
+            {/* {!timeMet && (
                 <div className="progress mt-1" style={{ height: '4px', width: '80px' }}>
-                    <div 
-                        className="progress-bar bg-warning" 
+                    <div
+                        className="progress-bar bg-warning"
                         style={{ width: `${percentage}%` }}
                     ></div>
                 </div>
-            )}
+            )} */}
         </div>
     );
 };
@@ -294,7 +295,7 @@ const AutoTimeCalculator: React.FC<{
 
     return (
         <div className="auto-time-calculator">
-            <button 
+            <button
                 type="button"
                 className="btn btn-sm btn-outline-primary"
                 onClick={calculateTotalTime}
@@ -323,12 +324,20 @@ const StatusBadge: React.FC<{ status: number; statusDisplay: string }> = ({ stat
     );
 };
 
-const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCourse }) => {
+const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
     const [course, setCourse] = useState<CourseDetailData | null>(null);
     const [modules, setModules] = useState<Module[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [showEditCourseModal, setShowEditCourseModal] = useState(false);
 
+    // Add this function
+    const handleEditCourseInternal = () => {
+        console.log('hellllllllllllllllllllllllllllllllllllllllllllo')
+        // if (course) {
+            setShowEditCourseModal(true);
+        // }
+    };
     const [showNewContentModal, setShowNewContentModal] = useState(false);
     const [showNewModuleModal, setShowNewModuleModal] = useState(false);
     const [selectedContentType, setSelectedContentType] = useState<'pdf' | 'Video' | 'QCM' | null>(null);
@@ -345,6 +354,16 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     const [newMessage, setNewMessage] = useState('');
     const [loadingSubscribers, setLoadingSubscribers] = useState(false);
     const [loadingChat, setLoadingChat] = useState(false);
+    const params = useParams<{ id: string }>();
+
+    // Prefer prop value, fallback to URL param
+    const resolvedCourseId = courseId ?? (params.id ? parseInt(params.id, 10) : null);
+
+    if (!resolvedCourseId) {
+        return <div>Aucun cours sélectionné</div>;
+    }
+
+    if (!resolvedCourseId) return <div>Invalid course ID</div>;
 
     // Time tracking states
     const [timeTracking, setTimeTracking] = useState<{
@@ -470,11 +489,11 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     // Helper function to calculate content estimated time
     const getContentEstimatedTime = (content: CourseContent): number | undefined => {
         const contentType = content.content_type_name || content.content_type;
-        
+
         if (content.estimated_duration) {
             return content.estimated_duration;
         }
-        
+
         switch (contentType.toLowerCase()) {
             case 'pdf':
                 if (content.pdf_content?.estimated_reading_time) {
@@ -484,13 +503,13 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     return content.pdf_content.page_count * 60;
                 }
                 break;
-                
+
             case 'video':
                 if (content.video_content?.duration) {
                     return content.video_content.duration;
                 }
                 break;
-                
+
             case 'qcm':
                 if (content.qcm?.time_limit && content.qcm.time_limit > 0) {
                     return content.qcm.time_limit * 60;
@@ -498,7 +517,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                 const questionCount = content.qcm ? 1 : 0;
                 return questionCount * 30;
         }
-        
+
         return undefined;
     };
 
@@ -506,7 +525,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     const formatTimeForDisplay = (seconds: number): string => {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
-        
+
         if (hours > 0) {
             return `${hours}h ${minutes}m`;
         }
@@ -542,7 +561,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         modules.forEach(module => {
             const moduleRequiredTime = (module.min_required_time || module.estimated_duration || 0) * 60;
             const moduleActualTime = userTimeStats.moduleTimes[module.id] || 0;
-            
+
             modulesRequirements[module.id] = {
                 required: moduleRequiredTime,
                 actual: moduleActualTime,
@@ -553,7 +572,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
             module.contents?.forEach(content => {
                 const contentRequiredTime = (content.min_required_time || content.estimated_duration || 0) * 60;
                 const contentActualTime = userTimeStats.contentTimes[content.id] || 0;
-                
+
                 contentsRequirements[content.id] = {
                     required: contentRequiredTime,
                     actual: contentActualTime,
@@ -575,11 +594,11 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
     const canCompleteCourse = (): boolean => {
         if (!completionRequirements.course.met) return false;
-        
+
         // Check if all modules meet time requirements
         const allModulesMet = Object.values(completionRequirements.modules).every(module => module.met);
         if (!allModulesMet) return false;
-        
+
         return allModulesMet;
     };
 
@@ -604,7 +623,10 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         }
         return `http://localhost:8000/media/${fileUrl}`;
     };
-
+    // const handleEditCourse = (courseId: number) => {
+    //     console.log('Edit course requested:', courseId);
+    //     alert(`Edit course with ID: ${courseId}`);
+    // };
     const getContentIcon = (contentType: string) => {
         switch (contentType) {
             case 'pdf': return 'fas fa-file-pdf text-danger';
@@ -625,7 +647,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     };
 
     const stopTimeTracking = async () => {
-        if (!timeTracking.isTracking || !timeTracking.startTime || !courseId) return;
+        if (!timeTracking.isTracking || !timeTracking.startTime || !resolvedCourseId) return;
 
         const endTime = new Date();
         const duration = Math.floor((endTime.getTime() - timeTracking.startTime.getTime()) / 1000);
@@ -633,41 +655,41 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
         // Update local state only (no API call)
         setUserTimeStats(prev => {
             const newStats = { ...prev };
-            
+
             if (timeTracking.currentContent) {
-                newStats.contentTimes[timeTracking.currentContent] = 
+                newStats.contentTimes[timeTracking.currentContent] =
                     (newStats.contentTimes[timeTracking.currentContent] || 0) + duration;
             }
-            
+
             if (timeTracking.currentModule) {
-                newStats.moduleTimes[timeTracking.currentModule] = 
+                newStats.moduleTimes[timeTracking.currentModule] =
                     (newStats.moduleTimes[timeTracking.currentModule] || 0) + duration;
             }
-            
+
             newStats.totalCourseTime += duration;
-            
+
             return newStats;
         });
 
         // Save to localStorage as fallback (no API call)
         try {
             const timeTrackingData = {
-                course: courseId,
+                course: resolvedCourseId,
                 module: timeTracking.currentModule,
                 content: timeTracking.currentContent,
                 start_time: timeTracking.startTime.toISOString(),
                 end_time: endTime.toISOString(),
                 duration: duration,
-                session_type: timeTracking.currentContent ? 'content' : 
-                            timeTracking.currentModule ? 'module' : 'course'
+                session_type: timeTracking.currentContent ? 'content' :
+                    timeTracking.currentModule ? 'module' : 'course'
             };
-            
+
             // Store in localStorage as backup
-            const existingData = localStorage.getItem(`timeTracking_${courseId}`) || '[]';
+            const existingData = localStorage.getItem(`timeTracking_${resolvedCourseId}`) || '[]';
             const timeData = JSON.parse(existingData);
             timeData.push(timeTrackingData);
-            localStorage.setItem(`timeTracking_${courseId}`, JSON.stringify(timeData));
-            
+            localStorage.setItem(`timeTracking_${resolvedCourseId}`, JSON.stringify(timeData));
+
         } catch (error) {
             console.error('Failed to save time tracking locally:', error);
         }
@@ -683,11 +705,11 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
 
     // UPDATED: Fetch time stats from localStorage as fallback
     const fetchTimeStats = async () => {
-        if (!courseId) return;
-        
+        if (!resolvedCourseId) return;
+
         try {
             // Try to fetch from localStorage as fallback
-            const timeData = localStorage.getItem(`timeTracking_${courseId}`);
+            const timeData = localStorage.getItem(`timeTracking_${resolvedCourseId}`);
             if (timeData) {
                 const parsedData = JSON.parse(timeData);
                 const stats = {
@@ -695,19 +717,19 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
                     moduleTimes: {} as { [moduleId: number]: number },
                     contentTimes: {} as { [contentId: number]: number }
                 };
-                
+
                 parsedData.forEach((session: any) => {
                     stats.totalCourseTime += session.duration || 0;
-                    
+
                     if (session.module) {
                         stats.moduleTimes[session.module] = (stats.moduleTimes[session.module] || 0) + (session.duration || 0);
                     }
-                    
+
                     if (session.content) {
                         stats.contentTimes[session.content] = (stats.contentTimes[session.content] || 0) + (session.duration || 0);
                     }
                 });
-                
+
                 setUserTimeStats(stats);
             }
         } catch (error) {
@@ -722,47 +744,47 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose, onEditCo
     };
 
     // Add this debugging code in your CourseDetail component
-useEffect(() => {
-    const fetchCourseData = async () => {
-        if (!courseId) return;
+    useEffect(() => {
+        const fetchCourseData = async () => {
+            if (!resolvedCourseId) return;
 
-        try {
-            setLoading(true);
-            const [courseResponse, modulesResponse] = await Promise.all([
-                api.get(`courses/${courseId}/`),
-                api.get(`courses/${courseId}/modules/`),
-            ]);
+            try {
+                setLoading(true);
+                const [courseResponse, modulesResponse] = await Promise.all([
+                    api.get(`courses/${resolvedCourseId}/`),
+                    api.get(`courses/${resolvedCourseId}/modules/`),
+                ]);
 
-            setCourse(courseResponse.data);
-            setModules(modulesResponse.data);
-            
-            // DEBUG: Check what's actually in the modules response
-            console.log('Full modules response:', modulesResponse.data);
-            if (modulesResponse.data && modulesResponse.data.length > 0) {
-                console.log('First module structure:', modulesResponse.data[0]);
-                console.log('First module content_stats:', modulesResponse.data[0].content_stats);
-                
-                // Check if content_stats exists and has the expected properties
-                const firstModuleStats = modulesResponse.data[0].content_stats;
-                if (firstModuleStats) {
-                    console.log('content_stats properties:', Object.keys(firstModuleStats));
-                    console.log('total_users_completed value:', firstModuleStats.total_users_completed);
-                    console.log('total_contents_course value:', firstModuleStats.total_contents_course);
+                setCourse(courseResponse.data);
+                setModules(modulesResponse.data);
+
+                // DEBUG: Check what's actually in the modules response
+                console.log('Full modules response:', modulesResponse.data);
+                if (modulesResponse.data && modulesResponse.data.length > 0) {
+                    console.log('First module structure:', modulesResponse.data[0]);
+                    console.log('First module content_stats:', modulesResponse.data[0].content_stats);
+
+                    // Check if content_stats exists and has the expected properties
+                    const firstModuleStats = modulesResponse.data[0].content_stats;
+                    if (firstModuleStats) {
+                        console.log('content_stats properties:', Object.keys(firstModuleStats));
+                        console.log('total_users_completed value:', firstModuleStats.total_users_completed);
+                        console.log('total_contents_course value:', firstModuleStats.total_contents_course);
+                    }
                 }
-            }
-            
-            // Fetch time statistics from localStorage
-            await fetchTimeStats();
-        } catch (error: any) {
-            console.error('Failed to fetch course data:', error);
-            setError('Failed to load course details');
-        } finally {
-            setLoading(false);
-        }
-    };
 
-    fetchCourseData();
-}, [courseId]);
+                // Fetch time statistics from localStorage
+                await fetchTimeStats();
+            } catch (error: any) {
+                console.error('Failed to fetch course data:', error);
+                setError('Failed to load course details');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCourseData();
+    }, [resolvedCourseId]);
 
     // Auto-start/stop tracking when content is viewed
     useEffect(() => {
@@ -786,9 +808,9 @@ useEffect(() => {
     }, [userTimeStats, course, modules]);
 
     const fetchModules = async () => {
-        if (!courseId) return;
+        if (!resolvedCourseId) return;
         try {
-            const response = await api.get(`courses/${courseId}/modules/`);
+            const response = await api.get(`courses/${resolvedCourseId}/modules/`);
             setModules(response.data);
         } catch (error) {
             console.error('Failed to fetch modules:', error);
@@ -798,19 +820,19 @@ useEffect(() => {
     // Course Status Management
     const updateCourseStatus = async (newStatus: number) => {
         try {
-            if (!courseId) return;
+            if (!resolvedCourseId) return;
 
             const response = await api.patch(
-                `courses/${courseId}/update-status/`,
+                `courses/${resolvedCourseId}/update-status/`,
                 { status: newStatus }
             );
-            
-            setCourse(prev => prev ? { 
-                ...prev, 
-                status: newStatus, 
-                status_display: response.data.course.status_display 
+
+            setCourse(prev => prev ? {
+                ...prev,
+                status: newStatus,
+                status_display: response.data.course.status_display
             } : null);
-            
+
             alert(`Course status updated to ${response.data.course.status_display}`);
             return response.data;
         } catch (error) {
@@ -824,16 +846,16 @@ useEffect(() => {
     const updateModuleStatus = async (moduleId: number, newStatus: number) => {
         try {
             const response = await api.patch(
-                `courses/${courseId}/modules/${moduleId}/update-status/`,
+                `courses/${resolvedCourseId}/modules/${moduleId}/update-status/`,
                 { status: newStatus }
             );
-            
-            setModules(modules.map(module => 
-                module.id === moduleId 
+
+            setModules(modules.map(module =>
+                module.id === moduleId
                     ? { ...module, status: newStatus, status_display: response.data.module.status_display }
                     : module
             ));
-            
+
             alert(`Module status updated to ${response.data.module.status_display}`);
             return response.data;
         } catch (error) {
@@ -847,19 +869,19 @@ useEffect(() => {
     const updateContentStatus = async (contentId: number, newStatus: number) => {
         try {
             const response = await api.patch(
-                `courses/${courseId}/contents/${contentId}/update-status/`,
+                `courses/${resolvedCourseId}/contents/${contentId}/update-status/`,
                 { status: newStatus }
             );
-            
+
             setModules(modules.map(module => ({
                 ...module,
-                contents: module.contents?.map(content => 
-                    content.id === contentId 
+                contents: module.contents?.map(content =>
+                    content.id === contentId
                         ? { ...content, status: newStatus, status_display: response.data.content.status_display }
                         : content
                 ) || []
             })));
-            
+
             alert(`Content status updated to ${response.data.content.status_display}`);
             return response.data;
         } catch (error) {
@@ -871,11 +893,11 @@ useEffect(() => {
 
     // Subscribers and Chat Functions
     const fetchSubscribers = async () => {
-        if (!courseId) return;
-        
+        if (!resolvedCourseId) return;
+
         try {
             setLoadingSubscribers(true);
-            const response = await api.get(`courses/${courseId}/subscribers/`);
+            const response = await api.get(`courses/${resolvedCourseId}/subscribers/`);
             setSubscribers(response.data.results || response.data);
             setShowSubscribersModal(true);
         } catch (error) {
@@ -993,15 +1015,15 @@ useEffect(() => {
     const markMessageAsRead = async (messageId: number) => {
         try {
             await api.patch(`chat/messages/${messageId}/read/`);
-            setChatMessages(prev => 
-                prev.map(msg => 
+            setChatMessages(prev =>
+                prev.map(msg =>
                     msg.id === messageId ? { ...msg, is_read: true } : msg
                 )
             );
         } catch (error) {
             console.error('Failed to mark message as read:', error);
-            setChatMessages(prev => 
-                prev.map(msg => 
+            setChatMessages(prev =>
+                prev.map(msg =>
                     msg.id === messageId ? { ...msg, is_read: true } : msg
                 )
             );
@@ -1011,9 +1033,9 @@ useEffect(() => {
     // Module Creation with Time Tracking
     const handleCreateModule = async () => {
         try {
-            if (!courseId) return;
+            if (!resolvedCourseId) return;
 
-            const response = await api.post(`courses/${courseId}/modules/`, {
+            const response = await api.post(`courses/${resolvedCourseId}/modules/`, {
                 ...newModuleData,
                 order: modules.length + 1,
                 status: 0,
@@ -1023,11 +1045,11 @@ useEffect(() => {
 
             setModules([...modules, { ...response.data, contents: [] }]);
             setShowNewModuleModal(false);
-            setNewModuleData({ 
-                title: '', 
-                description: '', 
+            setNewModuleData({
+                title: '',
+                description: '',
                 estimated_duration: undefined,
-                min_required_time: undefined 
+                min_required_time: undefined
             });
             alert('Module created successfully!');
 
@@ -1039,9 +1061,9 @@ useEffect(() => {
 
     const handleUpdateModule = async () => {
         try {
-            if (!selectedModuleForEdit || !courseId) return;
+            if (!selectedModuleForEdit || !resolvedCourseId) return;
 
-            const response = await api.put(`courses/${courseId}/modules/${selectedModuleForEdit.id}/`, newModuleData);
+            const response = await api.put(`courses/${resolvedCourseId}/modules/${selectedModuleForEdit.id}/`, newModuleData);
 
             const currentContents = selectedModuleForEdit.contents || [];
             setModules(modules.map(module =>
@@ -1051,11 +1073,11 @@ useEffect(() => {
             ));
             setShowNewModuleModal(false);
             setSelectedModuleForEdit(null);
-            setNewModuleData({ 
-                title: '', 
-                description: '', 
+            setNewModuleData({
+                title: '',
+                description: '',
                 estimated_duration: undefined,
-                min_required_time: undefined 
+                min_required_time: undefined
             });
             alert('Module updated successfully!');
 
@@ -1083,13 +1105,13 @@ useEffect(() => {
     // Content Creation with Time Tracking
     const handleCreateContent = async () => {
         try {
-            if (!courseId || !selectedModule) return;
+            if (!resolvedCourseId || !selectedModule) return;
 
             let endpoint = '';
             let requestData: any;
 
             if (selectedContentType === 'pdf') {
-                endpoint = `courses/${courseId}/modules/${selectedModule}/contents/pdf/`;
+                endpoint = `courses/${resolvedCourseId}/modules/${selectedModule}/contents/pdf/`;
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
                 formData.append('caption', newContentData.caption);
@@ -1108,7 +1130,7 @@ useEffect(() => {
 
                 requestData = formData;
             } else if (selectedContentType === 'Video') {
-                endpoint = `courses/${courseId}/modules/${selectedModule}/contents/video/`;
+                endpoint = `courses/${resolvedCourseId}/modules/${selectedModule}/contents/video/`;
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
                 formData.append('caption', newContentData.caption);
@@ -1127,7 +1149,7 @@ useEffect(() => {
 
                 requestData = formData;
             } else if (selectedContentType === 'QCM') {
-                endpoint = `courses/${courseId}/modules/${selectedModule}/contents/qcm/`;
+                endpoint = `courses/${resolvedCourseId}/modules/${selectedModule}/contents/qcm/`;
                 requestData = {
                     title: newContentData.title,
                     caption: newContentData.caption,
@@ -1194,7 +1216,7 @@ useEffect(() => {
 
     const handleUpdateContent = async () => {
         try {
-            if (!selectedContent || !courseId) return;
+            if (!selectedContent || !resolvedCourseId) return;
 
             let endpoint = '';
             let requestData: any;
@@ -1202,7 +1224,7 @@ useEffect(() => {
             const contentType = selectedContent.content_type_name || selectedContent.content_type;
 
             if (contentType.toLowerCase() === 'pdf') {
-                endpoint = `courses/${courseId}/contents/pdf/${selectedContent.id}/`;
+                endpoint = `courses/${resolvedCourseId}/contents/pdf/${selectedContent.id}/`;
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
                 formData.append('caption', newContentData.caption);
@@ -1219,7 +1241,7 @@ useEffect(() => {
 
                 requestData = formData;
             } else if (contentType.toLowerCase() === 'qcm') {
-                endpoint = `courses/${courseId}/contents/qcm/${selectedContent.id}/`;
+                endpoint = `courses/${resolvedCourseId}/contents/qcm/${selectedContent.id}/`;
                 requestData = {
                     title: newContentData.title,
                     caption: newContentData.caption,
@@ -1237,7 +1259,7 @@ useEffect(() => {
                     min_required_time: newContentData.min_required_time
                 };
             } else if (contentType.toLowerCase() === 'video') {
-                endpoint = `courses/${courseId}/contents/video/${selectedContent.id}/`;
+                endpoint = `courses/${resolvedCourseId}/contents/video/${selectedContent.id}/`;
                 const formData = new FormData();
                 formData.append('title', newContentData.title);
                 formData.append('caption', newContentData.caption);
@@ -1311,11 +1333,11 @@ useEffect(() => {
     const handleEditContent = (content: CourseContent) => {
         setSelectedContent(content);
         const contentType = content.content_type_name || content.content_type;
-        
-        const normalizedType = contentType.toLowerCase() === 'qcm' ? 'QCM' : 
-                              contentType.toLowerCase() === 'pdf' ? 'pdf' : 
-                              contentType.toLowerCase() === 'video' ? 'Video' : null;
-        
+
+        const normalizedType = contentType.toLowerCase() === 'qcm' ? 'QCM' :
+            contentType.toLowerCase() === 'pdf' ? 'pdf' :
+                contentType.toLowerCase() === 'video' ? 'Video' : null;
+
         setNewContentData({
             title: content.title,
             caption: content.caption || '',
@@ -1370,7 +1392,7 @@ useEffect(() => {
 
         try {
             await updateContentStatus(contentId, 2);
-            
+
             setModules(modules.map(module => {
                 if (module.id === moduleId) {
                     return {
@@ -1452,10 +1474,10 @@ useEffect(() => {
     };
 
     const handleQuizComplete = async (score: number, passed: boolean) => {
-        if (!selectedQuizContent || !courseId) return;
+        if (!selectedQuizContent || !resolvedCourseId) return;
 
         try {
-            const response = await api.post(`courses/${courseId}/contents/qcm/${selectedQuizContent.id}/attempt/`, {
+            const response = await api.post(`courses/${resolvedCourseId}/contents/qcm/${selectedQuizContent.id}/attempt/`, {
                 score: score,
                 passed: passed,
                 completed_at: new Date().toISOString()
@@ -1485,7 +1507,7 @@ useEffect(() => {
 
         return (
             <div className="dropdown">
-                <button 
+                <button
                     className="btn btn-sm btn-outline-secondary dropdown-toggle"
                     type="button"
                     onClick={() => setShowDropdown(!showDropdown)}
@@ -1494,24 +1516,24 @@ useEffect(() => {
                 </button>
                 {showDropdown && (
                     <div className="dropdown-menu show">
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(0)}
                             disabled={course.status === 0}
                         >
                             <span className="badge bg-warning text-dark me-2">Draft</span>
                             Set as Draft
                         </button>
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(1)}
                             disabled={course.status === 1}
                         >
                             <span className="badge bg-success me-2">Active</span>
                             Set as Active
                         </button>
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(2)}
                             disabled={course.status === 2}
                         >
@@ -1538,7 +1560,7 @@ useEffect(() => {
 
         return (
             <div className="dropdown">
-                <button 
+                <button
                     className="btn btn-sm btn-outline-secondary dropdown-toggle"
                     type="button"
                     onClick={() => setShowDropdown(!showDropdown)}
@@ -1547,24 +1569,24 @@ useEffect(() => {
                 </button>
                 {showDropdown && (
                     <div className="dropdown-menu show">
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(0)}
                             disabled={module.status === 0}
                         >
                             <span className="badge bg-warning text-dark me-2">Draft</span>
                             Set as Draft
                         </button>
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(1)}
                             disabled={module.status === 1}
                         >
                             <span className="badge bg-success me-2">Active</span>
                             Set as Active
                         </button>
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(2)}
                             disabled={module.status === 2}
                         >
@@ -1591,7 +1613,7 @@ useEffect(() => {
 
         return (
             <div className="dropdown">
-                <button 
+                <button
                     className="btn btn-sm btn-outline-secondary dropdown-toggle"
                     type="button"
                     onClick={() => setShowDropdown(!showDropdown)}
@@ -1600,24 +1622,24 @@ useEffect(() => {
                 </button>
                 {showDropdown && (
                     <div className="dropdown-menu show">
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(0)}
                             disabled={content.status === 0}
                         >
                             <span className="badge bg-warning text-dark me-2">Draft</span>
                             Set as Draft
                         </button>
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(1)}
                             disabled={content.status === 1}
                         >
                             <span className="badge bg-success me-2">Active</span>
                             Set as Active
                         </button>
-                        <button 
-                            className="dropdown-item" 
+                        <button
+                            className="dropdown-item"
                             onClick={() => handleStatusChange(2)}
                             disabled={content.status === 2}
                         >
@@ -1631,45 +1653,45 @@ useEffect(() => {
     };
 
     const overallCourseStats = modules.reduce((acc: CourseStats, module, index) => {
-    if (module.content_stats) {
-        // For course-level stats, take from the first module only
-        // These should be identical across all modules since they're course-level stats
-        if (index === 0) {
-            acc.total_users_enrolled = module.content_stats.total_users_enrolled;
-            acc.total_users_completed = module.content_stats.total_users_completed;
-            acc.total_modules = module.content_stats.total_modules;
-            acc.total_contents_course = module.content_stats.total_contents_course;
-            acc.completion_rate = module.content_stats.completion_rate;
-            acc.average_progress = module.content_stats.average_progress;
-            acc.average_time_spent = module.content_stats.average_time_spent;
-            acc.total_time_tracked = module.content_stats.total_time_tracked;
+        if (module.content_stats) {
+            // For course-level stats, take from the first module only
+            // These should be identical across all modules since they're course-level stats
+            if (index === 0) {
+                acc.total_users_enrolled = module.content_stats.total_users_enrolled;
+                acc.total_users_completed = module.content_stats.total_users_completed;
+                acc.total_modules = module.content_stats.total_modules;
+                acc.total_contents_course = module.content_stats.total_contents_course;
+                acc.completion_rate = module.content_stats.completion_rate;
+                acc.average_progress = module.content_stats.average_progress;
+                acc.average_time_spent = module.content_stats.average_time_spent;
+                acc.total_time_tracked = module.content_stats.total_time_tracked;
+            }
+
+            // Sum up module-specific content counts
+            acc.total_contents_module += module.content_stats.total_contents_module;
+            acc.pdf_count += module.content_stats.pdf_count;
+            acc.video_count += module.content_stats.video_count;
+            acc.qcm_count += module.content_stats.qcm_count;
         }
-        
-        // Sum up module-specific content counts
-        acc.total_contents_module += module.content_stats.total_contents_module;
-        acc.pdf_count += module.content_stats.pdf_count;
-        acc.video_count += module.content_stats.video_count;
-        acc.qcm_count += module.content_stats.qcm_count;
-    }
-    return acc;
-}, {
-    total_users_enrolled: 0,
-    total_users_completed: 0,
-    total_modules: 0,
-    total_contents_course: 0,
-    completion_rate: 0,
-    average_progress: 0,
-    total_contents_module: 0,
-    pdf_count: 0,
-    video_count: 0,
-    qcm_count: 0,
-    average_time_spent: 0,
-    total_time_tracked: 0
-} as CourseStats); // Add initial value with proper type
+        return acc;
+    }, {
+        total_users_enrolled: 0,
+        total_users_completed: 0,
+        total_modules: 0,
+        total_contents_course: 0,
+        completion_rate: 0,
+        average_progress: 0,
+        total_contents_module: 0,
+        pdf_count: 0,
+        video_count: 0,
+        qcm_count: 0,
+        average_time_spent: 0,
+        total_time_tracked: 0
+    } as CourseStats); // Add initial value with proper type
     // Add this after your overallCourseStats calculation
-console.log('Overall Course Stats:', overallCourseStats);
-console.log('total_users_completed:', overallCourseStats.total_users_completed);
-console.log('total_contents_course:', overallCourseStats.total_contents_course);
+    console.log('Overall Course Stats:', overallCourseStats);
+    console.log('total_users_completed:', overallCourseStats.total_users_completed);
+    console.log('total_contents_course:', overallCourseStats.total_contents_course);
     if (loading) {
         return (
             <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
@@ -1720,8 +1742,39 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                     </div>
                                     <p className="text-muted mb-0">{course.description}</p>
                                 </div>
+                                    {showEditCourseModal && course && (
+                                        <div className="modal fade show d-block" tabIndex={-1}>
+                                            <div className="modal-dialog">
+                                                <div className="modal-content">
+                                                    <div className="modal-header">
+                                                        <h5 className="modal-title">Edit Course: {course.title_of_course}</h5>
+                                                        <button type="button" className="btn-close" onClick={() => setShowEditCourseModal(false)}></button>
+                                                    </div>
+                                                    <div className="modal-body">
+                                                        {/* Add your course edit form here */}
+                                                        <p>Edit course form would go here...</p>
+                                                    </div>
+                                                    <div className="modal-footer">
+                                                        <button type="button" className="btn btn-secondary" onClick={() => setShowEditCourseModal(false)}>
+                                                            Cancel
+                                                        </button>
+                                                        <button type="button" className="btn btn-primary" onClick={() => {
+                                                            // Handle course update
+                                                            setShowEditCourseModal(false);
+                                                        }}>
+                                                            Save Changes
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="modal-backdrop fade show"></div>
+                                        </div>
+                                    )}
                                 <div>
-                                    <button className="btn btn-primary me-2" onClick={() => onEditCourse(course.id)}>
+                                    
+                                    <button className="btn btn-primary me-2" onClick={handleEditCourseInternal}
+                                    
+                                    >
                                         <i className="fas fa-edit me-1"></i> Edit Course
                                     </button>
                                     <button className="btn btn-success me-2" onClick={() => setShowNewModuleModal(true)}>
@@ -1746,7 +1799,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                         />
                         <div className="card-body">
                             <h5 className="card-title">Course Overview</h5>
-                            
+
                             {/* Add course time information */}
                             <div className="mb-3">
                                 <strong>Estimated Duration:</strong><br />
@@ -1758,7 +1811,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                     <span className="text-muted">Not specified</span>
                                 )}
                             </div>
-                            
+
                             <div className="mb-3">
                                 <strong>Minimum Required Time:</strong><br />
                                 {course.min_required_time ? (
@@ -1769,7 +1822,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                     <span className="text-muted">Not specified</span>
                                 )}
                             </div>
-                            
+
                             {/* <div className="mb-3">
                                 <strong>Your Time Spent:</strong><br />
                                 <TimeDisplay 
@@ -1779,17 +1832,17 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                             </div>
 
                             {/* Completion Status */}
-                            
+
                             {/* Time Requirement Progress */}
                             <div className="mb-3">
                                 <strong>Time Requirement Progress:</strong><br />
-                                <TimeRequirementBadge 
+                                <TimeRequirementBadge
                                     requiredTime={completionRequirements.course.required}
                                     actualTime={completionRequirements.course.actual}
                                     type="course"
                                 />
                             </div>
-                            
+
                             <div className="mb-3">
                                 <strong>Status:</strong><br />
                                 <StatusBadge status={course.status} statusDisplay={course.status_display} />
@@ -1829,7 +1882,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                 <div className="text-center py-5">
                                     <i className="fas fa-book-open fa-3x text-muted mb-3"></i>
                                     <h5 className="text-muted">No modules available yet</h5>
-                                    <button 
+                                    <button
                                         className="btn btn-primary btn-lg"
                                         onClick={() => setShowNewModuleModal(true)}
                                     >
@@ -1861,16 +1914,16 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                         {module.description && (
                                                                             <small className="text-muted">{module.description}</small>
                                                                         )}
-                                                                        
+
                                                                         {/* Time Requirements */}
                                                                         <div className="mt-2">
-                                                                            <TimeRequirementBadge 
+                                                                            <TimeRequirementBadge
                                                                                 requiredTime={completionRequirements.modules[module.id]?.required || 0}
                                                                                 actualTime={completionRequirements.modules[module.id]?.actual || 0}
                                                                                 type="module"
                                                                             />
                                                                         </div>
-                                                                        
+
 
                                                                         {module.content_stats && (
                                                                             <CircularStatsDisplay stats={module.content_stats} type="module" />
@@ -1894,7 +1947,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                 </button>
                                                             </div>
                                                         </div>
-                                                        
+
                                                         {isExpanded && (
                                                             <div className="card-body">
                                                                 {moduleContents.length === 0 ? (
@@ -1905,7 +1958,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                     <div className="row">
                                                                         {moduleContents.sort((a, b) => a.order - b.order).map((content) => (
                                                                             <div key={content.id} className="col-md-6 mb-3">
-                                                                                <div 
+                                                                                <div
                                                                                     className="card h-100 cursor-pointer"
                                                                                     style={{ cursor: 'pointer' }}
                                                                                     onClick={() => handleContentClick(content)}
@@ -1921,16 +1974,16 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                                                 {content.caption && (
                                                                                                     <p className="card-text text-muted small mb-2">{content.caption}</p>
                                                                                                 )}
-                                                                                                
+
                                                                                                 {/* Time Requirements for Content */}
                                                                                                 <div className="mb-2">
-                                                                                                    <TimeRequirementBadge 
+                                                                                                    <TimeRequirementBadge
                                                                                                         requiredTime={completionRequirements.contents[content.id]?.required || 0}
                                                                                                         actualTime={completionRequirements.contents[content.id]?.actual || 0}
                                                                                                         type="content"
                                                                                                     />
                                                                                                 </div>
-                                                                                                
+
                                                                                                 {/* Add time information for content */}
                                                                                                 {/* <div className="mb-2">
                                                                                                     <EstimatedTimeDisplay 
@@ -1939,7 +1992,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                                                         type="content"
                                                                                                     />
                                                                                                 </div> */}
-                                                                                                
+
                                                                                                 <div className="d-flex justify-content-between align-items-center">
                                                                                                     <small className="text-muted">
                                                                                                         {content.content_type_name || content.content_type} • Order: {content.order}
@@ -2004,9 +2057,9 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                         <i className="fas fa-users me-2"></i>
                                         Course Subscribers - {course?.title_of_course}
                                     </h5>
-                                    <button 
-                                        type="button" 
-                                        className="btn-close" 
+                                    <button
+                                        type="button"
+                                        className="btn-close"
                                         onClick={() => setShowSubscribersModal(false)}
                                     ></button>
                                 </div>
@@ -2038,13 +2091,13 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                     {subscribers.map((subscriber) => (
                                                         <tr key={subscriber.id}>
                                                             <td>
-                                                                <div 
+                                                                <div
                                                                     className="d-flex align-items-center cursor-pointer"
                                                                     onClick={() => fetchUserProfile(subscriber.user.id)}
                                                                     style={{ cursor: 'pointer' }}
                                                                 >
                                                                     <div className="avatar-placeholder bg-primary rounded-circle d-flex align-items-center justify-content-center me-3"
-                                                                         style={{ width: '40px', height: '40px' }}>
+                                                                        style={{ width: '40px', height: '40px' }}>
                                                                         <span className="text-white fw-bold">
                                                                             {subscriber.user.full_name?.charAt(0) || subscriber.user.username?.charAt(0) || 'U'}
                                                                         </span>
@@ -2060,7 +2113,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                             <td>
                                                                 <div className="d-flex align-items-center">
                                                                     <div className="progress me-2" style={{ height: '20px', width: '100px' }}>
-                                                                        <div 
+                                                                        <div
                                                                             className={`progress-bar ${subscriber.progress_percentage === 100 ? 'bg-success' : 'bg-primary'}`}
                                                                             style={{ width: `${subscriber.progress_percentage}%` }}
                                                                         >
@@ -2073,14 +2126,14 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                 </div>
                                                             </td>
                                                             <td>
-                                                                <TimeDisplay 
-                                                                    seconds={subscriber.total_time_spent || 0} 
+                                                                <TimeDisplay
+                                                                    seconds={subscriber.total_time_spent || 0}
                                                                     type="short"
                                                                 />
                                                             </td>
                                                             <td>
                                                                 {course.min_required_time && (
-                                                                    <TimeRequirementBadge 
+                                                                    <TimeRequirementBadge
                                                                         requiredTime={course.min_required_time * 60}
                                                                         actualTime={subscriber.total_time_spent || 0}
                                                                         type="course"
@@ -2166,9 +2219,9 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                             Total: {subscribers.length} subscriber{subscribers.length !== 1 ? 's' : ''}
                                         </small>
                                     </div>
-                                    <button 
-                                        type="button" 
-                                        className="btn btn-secondary" 
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
                                         onClick={() => setShowSubscribersModal(false)}
                                     >
                                         Close
@@ -2192,9 +2245,9 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                         <i className="fas fa-user me-2"></i>
                                         {selectedUser.full_name}'s Profile
                                     </h5>
-                                    <button 
-                                        type="button" 
-                                        className="btn-close" 
+                                    <button
+                                        type="button"
+                                        className="btn-close"
                                         onClick={() => {
                                             setShowUserProfile(false);
                                             setSelectedUser(null);
@@ -2274,10 +2327,10 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                         </div>
                                                     ) : (
                                                         <>
-                                                            <div 
+                                                            <div
                                                                 className="chat-messages mb-3 flex-grow-1"
-                                                                style={{ 
-                                                                    height: '250px', 
+                                                                style={{
+                                                                    height: '250px',
                                                                     overflowY: 'auto',
                                                                     border: '1px solid #e9ecef',
                                                                     borderRadius: '0.375rem',
@@ -2292,22 +2345,22 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                     </div>
                                                                 ) : (
                                                                     chatMessages.map((message) => (
-                                                                        <div 
+                                                                        <div
                                                                             key={message.id}
                                                                             className={`message mb-2 ${message.sender === selectedUser.id ? 'text-start' : 'text-end'}`}
                                                                             onMouseEnter={() => !message.is_read && message.sender === selectedUser.id && markMessageAsRead(message.id)}
                                                                         >
-                                                                            <div 
-                                                                        className={`d-inline-block p-2 rounded ${message.sender === selectedUser.id ? 'bg-light border' : 'bg-primary text-white'}`}
-                                                                        style={{ maxWidth: '80%' }}
+                                                                            <div
+                                                                                className={`d-inline-block p-2 rounded ${message.sender === selectedUser.id ? 'bg-light border' : 'bg-primary text-white'}`}
+                                                                                style={{ maxWidth: '80%' }}
                                                                             >
-                                                                        <div className="message-text">{message.message}</div>
-                                                                        <small className={`d-block mt-1 ${message.sender === selectedUser.id ? 'text-muted' : 'text-white-50'}`}>
-                                                                            {new Date(message.timestamp).toLocaleTimeString()}
-                                                                        </small>
-                                                                        {!message.is_read && message.sender === selectedUser.id && (
-                                                                            <span className="ms-1 text-primary">●</span>
-                                                                        )}
+                                                                                <div className="message-text">{message.message}</div>
+                                                                                <small className={`d-block mt-1 ${message.sender === selectedUser.id ? 'text-muted' : 'text-white-50'}`}>
+                                                                                    {new Date(message.timestamp).toLocaleTimeString()}
+                                                                                </small>
+                                                                                {!message.is_read && message.sender === selectedUser.id && (
+                                                                                    <span className="ms-1 text-primary">●</span>
+                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                     ))
@@ -2344,9 +2397,9 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                     </div>
                                 </div>
                                 <div className="modal-footer">
-                                    <button 
-                                        type="button" 
-                                        className="btn btn-secondary" 
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
                                         onClick={() => {
                                             setShowUserProfile(false);
                                             setSelectedUser(null);
@@ -2367,7 +2420,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
             {/* View Content Modal */}
             {viewContentModal && (
                 <>
-                    <ViewContentModal 
+                    <ViewContentModal
                         content={viewContentModal}
                         onClose={() => setViewContentModal(null)}
                         onEdit={handleViewContentEdit}
@@ -2379,15 +2432,114 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
             {/* Quiz Modal */}
             {selectedQuizContent && (
                 <>
-                    <QuizComponent 
-                        content={selectedQuizContent} 
+                    <QuizComponent
+                        content={selectedQuizContent}
                         onClose={() => setSelectedQuizContent(null)}
                         onComplete={handleQuizComplete}
                     />
                     <div className="modal-backdrop fade show"></div>
                 </>
             )}
+            {/* Edit Course Modal */}
+{showEditCourseModal && course && (
+    <>
+        <div className="modal fade show d-block" tabIndex={-1}>
+            <div className="modal-dialog modal-lg">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">Edit Course: {course.title_of_course}</h5>
+                        <button type="button" className="btn-close" onClick={() => setShowEditCourseModal(false)}></button>
+                    </div>
+                    <div className="modal-body">
+                        <div className="row">
+                            <div className="col-md-6">
+                                <div className="mb-3">
+                                    <label className="form-label">Course Title *</label>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        defaultValue={course.title_of_course}
+                                        placeholder="Enter course title"
+                                    />
+                                </div>
+                            </div>
+                            <div className="col-md-6">
+                                <div className="mb-3">
+                                    <label className="form-label">Status</label>
+                                    <select className="form-select" defaultValue={course.status}>
+                                        <option value={0}>Draft</option>
+                                        <option value={1}>Active</option>
+                                        <option value={2}>Archived</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="mb-3">
+                            <label className="form-label">Description</label>
+                            <textarea
+                                className="form-control"
+                                defaultValue={course.description}
+                                rows={4}
+                                placeholder="Enter course description"
+                            />
+                        </div>
 
+                        <div className="row">
+                            <div className="col-md-6">
+                                <div className="mb-3">
+                                    <label className="form-label">Estimated Duration (minutes)</label>
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        defaultValue={course.estimated_duration}
+                                        min="1"
+                                        placeholder="Estimated duration"
+                                    />
+                                </div>
+                            </div>
+                            <div className="col-md-6">
+                                <div className="mb-3">
+                                    <label className="form-label">Minimum Required Time (minutes)</label>
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        defaultValue={course.min_required_time}
+                                        min="1"
+                                        placeholder="Minimum required time"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* <div className="mb-3">
+                            <label className="form-label">Course Image</label>
+                            <input
+                                type="file"
+                                className="form-control"
+                                accept="image/*"
+                            />
+                            <small className="text-muted">Leave empty to keep current image</small>
+                        </div> */}
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowEditCourseModal(false)}>
+                            Cancel
+                        </button>
+                        <button type="button" className="btn btn-primary" onClick={() => {
+                            // Handle course update
+                            alert('Course update functionality would be implemented here');
+                            setShowEditCourseModal(false);
+                        }}>
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div className="modal-backdrop fade show"></div>
+    </>
+)}
             {/* Enhanced New Module Modal with Time Tracking */}
             {showNewModuleModal && (
                 <>
@@ -2400,11 +2552,11 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                         setShowNewModuleModal(false);
                                         setModuleEditMode(false);
                                         setSelectedModuleForEdit(null);
-                                        setNewModuleData({ 
-                                            title: '', 
-                                            description: '', 
+                                        setNewModuleData({
+                                            title: '',
+                                            description: '',
                                             estimated_duration: undefined,
-                                            min_required_time: undefined 
+                                            min_required_time: undefined
                                         });
                                     }}></button>
                                 </div>
@@ -2436,7 +2588,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="mb-3">
                                         <label className="form-label">Description</label>
                                         <textarea
@@ -2465,9 +2617,9 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                             type="number"
                                                             className="form-control"
                                                             value={newModuleData.estimated_duration || ''}
-                                                            onChange={(e) => setNewModuleData({ 
-                                                                ...newModuleData, 
-                                                                estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                                                            onChange={(e) => setNewModuleData({
+                                                                ...newModuleData,
+                                                                estimated_duration: e.target.value ? parseInt(e.target.value) : undefined
                                                             })}
                                                             min="1"
                                                             placeholder="Auto-calculated from contents"
@@ -2487,9 +2639,9 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                             type="number"
                                                             className="form-control"
                                                             value={newModuleData.min_required_time || ''}
-                                                            onChange={(e) => setNewModuleData({ 
-                                                                ...newModuleData, 
-                                                                min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                                                            onChange={(e) => setNewModuleData({
+                                                                ...newModuleData,
+                                                                min_required_time: e.target.value ? parseInt(e.target.value) : undefined
                                                             })}
                                                             min="1"
                                                             placeholder="Minimum time required"
@@ -2501,7 +2653,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                     </div>
                                                 </div>
                                             </div>
-                                            
+
                                             {/* Auto-calculation section */}
                                             {selectedModuleForEdit?.contents && selectedModuleForEdit.contents.length > 0 && (
                                                 <div className="alert alert-info">
@@ -2535,7 +2687,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                     <div className="alert alert-warning">
                                         <small>
                                             <i className="fas fa-exclamation-triangle me-2"></i>
-                                            <strong>Important:</strong> Learners must spend at least the minimum required time 
+                                            <strong>Important:</strong> Learners must spend at least the minimum required time
                                             before they can complete this module. This ensures proper learning engagement.
                                         </small>
                                     </div>
@@ -2545,16 +2697,16 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                         setShowNewModuleModal(false);
                                         setModuleEditMode(false);
                                         setSelectedModuleForEdit(null);
-                                        setNewModuleData({ 
-                                            title: '', 
-                                            description: '', 
+                                        setNewModuleData({
+                                            title: '',
+                                            description: '',
                                             estimated_duration: undefined,
-                                            min_required_time: undefined 
+                                            min_required_time: undefined
                                         });
                                     }}>
                                         Cancel
                                     </button>
-                                    <button type="button" className="btn btn-primary" onClick={moduleEditMode ? handleUpdateModule : handleCreateModule} 
+                                    <button type="button" className="btn btn-primary" onClick={moduleEditMode ? handleUpdateModule : handleCreateModule}
                                         disabled={!newModuleData.title || !newModuleData.min_required_time}>
                                         {moduleEditMode ? 'Update Module' : 'Create Module'}
                                     </button>
@@ -2662,15 +2814,15 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                     type="number"
                                                                     className="form-control"
                                                                     value={newContentData.estimated_duration || ''}
-                                                                    onChange={(e) => setNewContentData({ 
-                                                                        ...newContentData, 
-                                                                        estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                                                                    onChange={(e) => setNewContentData({
+                                                                        ...newContentData,
+                                                                        estimated_duration: e.target.value ? parseInt(e.target.value) : undefined
                                                                     })}
                                                                     min="1"
                                                                     placeholder={`Enter estimated duration`}
                                                                     required
                                                                 />
-                                                                
+
                                                                 {/* Smart time suggestions */}
                                                                 <div className="mt-2">
                                                                     <small className="text-muted d-block mb-1">
@@ -2705,9 +2857,9 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                     type="number"
                                                                     className="form-control"
                                                                     value={newContentData.min_required_time || ''}
-                                                                    onChange={(e) => setNewContentData({ 
-                                                                        ...newContentData, 
-                                                                        min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                                                                    onChange={(e) => setNewContentData({
+                                                                        ...newContentData,
+                                                                        min_required_time: e.target.value ? parseInt(e.target.value) : undefined
                                                                     })}
                                                                     min="1"
                                                                     placeholder="Minimum time required"
@@ -2734,10 +2886,10 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                     onClick={() => {
                                                                         const autoTime = calculateAutoTime('QCM', newContentData);
                                                                         if (autoTime) {
-                                                                            setNewContentData(prev => ({ 
-                                                                                ...prev, 
+                                                                            setNewContentData(prev => ({
+                                                                                ...prev,
                                                                                 estimated_duration: autoTime,
-                                                                                min_required_time: autoTime 
+                                                                                min_required_time: autoTime
                                                                             }));
                                                                         }
                                                                     }}
@@ -2753,7 +2905,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                         <div className="alert alert-info py-2">
                                                             <small>
                                                                 <i className="fas fa-lightbulb me-1"></i>
-                                                                <strong>PDF Reading Time:</strong> Average reading speed is 2-3 minutes per page. 
+                                                                <strong>PDF Reading Time:</strong> Average reading speed is 2-3 minutes per page.
                                                                 Consider complexity and technical level when setting minimum time.
                                                             </small>
                                                         </div>
@@ -2763,7 +2915,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                         <div className="alert alert-info py-2">
                                                             <small>
                                                                 <i className="fas fa-lightbulb me-1"></i>
-                                                                <strong>Video Learning Time:</strong> Include time for pausing, note-taking, 
+                                                                <strong>Video Learning Time:</strong> Include time for pausing, note-taking,
                                                                 and reviewing key concepts. Minimum time should cover actual video length.
                                                             </small>
                                                         </div>
@@ -2773,7 +2925,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                         <div className="alert alert-info py-2">
                                                             <small>
                                                                 <i className="fas fa-lightbulb me-1"></i>
-                                                                <strong>Quiz Time:</strong> Allow sufficient time for reading questions carefully 
+                                                                <strong>Quiz Time:</strong> Allow sufficient time for reading questions carefully
                                                                 and thinking. Complex questions may require more time.
                                                             </small>
                                                         </div>
@@ -2821,7 +2973,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                     const newQuestions = [...newContentData.questions];
                                                                     newQuestions[0].question_type = e.target.value as 'single' | 'multiple';
                                                                     setNewContentData({ ...newContentData, questions: newQuestions });
-                                                                    
+
                                                                     // Auto-update time estimation
                                                                     const autoTime = calculateAutoTime('QCM', {
                                                                         questions: newQuestions,
@@ -2894,10 +3046,10 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                 onClick={() => {
                                                                     const autoTime = calculateAutoTime('QCM', newContentData);
                                                                     if (autoTime) {
-                                                                        setNewContentData(prev => ({ 
-                                                                            ...prev, 
+                                                                        setNewContentData(prev => ({
+                                                                            ...prev,
                                                                             estimated_duration: autoTime,
-                                                                            min_required_time: autoTime 
+                                                                            min_required_time: autoTime
                                                                         }));
                                                                     }
                                                                 }}
@@ -2957,7 +3109,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                                     checked={option.is_correct}
                                                                                     onChange={(e) => {
                                                                                         const newQuestions = [...newContentData.questions];
-                                                                                        
+
                                                                                         if (question.question_type === 'single') {
                                                                                             newQuestions[qIndex].options.forEach((opt, idx) => {
                                                                                                 opt.is_correct = idx === oIndex;
@@ -2965,7 +3117,7 @@ console.log('total_contents_course:', overallCourseStats.total_contents_course);
                                                                                         } else {
                                                                                             newQuestions[qIndex].options[oIndex].is_correct = e.target.checked;
                                                                                         }
-                                                                                        
+
                                                                                         setNewContentData({ ...newContentData, questions: newQuestions });
                                                                                     }}
                                                                                 />
