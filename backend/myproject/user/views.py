@@ -3780,3 +3780,145 @@ class CourseTimeCalculationView(APIView):
                 {'error': f'Failed to record time: {str(e)}'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
+# views.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q
+from .models import Course, Module, CourseContent, PDFContent, VideoContent, QCM
+
+class GlobalSearchView(APIView):
+    """
+    Global search across courses, modules, and content
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            search_query = request.GET.get('q', '').strip()
+            content_type = request.GET.get('type', '').strip()
+            limit = int(request.GET.get('limit', 20))
+            
+            print(f"🔍 Backend Search: query='{search_query}', type='{content_type}', limit={limit}")
+            
+            if not search_query:
+                return Response({
+                    'results': [],
+                    'count': 0,
+                    'message': 'Please provide a search query'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            results = []
+            
+            # Determine what types to search for
+            search_types = []
+            if content_type in ['', 'all']:
+                search_types = ['course', 'module', 'content']
+            else:
+                search_types = [content_type]
+            
+            # Search Courses
+            if 'course' in search_types:
+                courses = Course.objects.filter(
+                    Q(title_of_course__icontains=search_query) |
+                    Q(description__icontains=search_query)
+                )[:limit]
+                
+                for course in courses:
+                    results.append({
+                        'id': course.id,
+                        'type': 'course',
+                        'title': course.title_of_course,
+                        'description': course.description,
+                        'creator': course.creator.username if course.creator else 'Unknown',
+                        'status': course.status,
+                        'status_display': 'Active' if course.status == 1 else 'Draft',
+                        'created_at': course.created_at.isoformat() if course.created_at else None
+                    })
+            
+            # Search Modules
+            if 'module' in search_types:
+                modules = Module.objects.filter(
+                    Q(title__icontains=search_query) |
+                    Q(description__icontains=search_query)
+                ).select_related('course')[:limit]
+                
+                for module in modules:
+                    results.append({
+                        'id': module.id,
+                        'type': 'module',
+                        'title': module.title,
+                        'description': module.description,
+                        'course_title': module.course.title_of_course,
+                        'course_id': module.course.id,
+                        'status': module.status,
+                        'status_display': 'Active' if module.status == 1 else 'Draft',
+                        'order': module.order
+                    })
+            
+            # Search Content - FIXED VERSION
+            if 'content' in search_types:
+                contents = CourseContent.objects.filter(
+                    Q(title__icontains=search_query) |
+                    Q(caption__icontains=search_query)
+                ).select_related('module', 'module__course', 'content_type')[:limit]
+                
+                for content in contents:
+                    content_data = {
+                        'id': content.id,
+                        'type': 'content',
+                        'title': content.title,
+                        'description': content.caption,
+                        'course_title': content.module.course.title_of_course,
+                        'course_id': content.module.course.id,
+                        'module_title': content.module.title,
+                        'module_id': content.module.id,
+                        'content_type': content.content_type.name if content.content_type else 'unknown',
+                        'status': content.status,
+                        'status_display': 'Active' if content.status == 1 else 'Draft',
+                        'order': content.order
+                    }
+                    
+                    # FIX: Safe way to access specific content data
+                    try:
+                        if content.content_type.name == 'pdf' and hasattr(content, 'pdf_content'):
+                            pdf_content = content.pdf_content
+                            if hasattr(pdf_content, 'file') and pdf_content.file:
+                                content_data['file_url'] = pdf_content.file.url
+                        
+                        elif content.content_type.name == 'video' and hasattr(content, 'video_content'):
+                            video_content = content.video_content
+                            if hasattr(video_content, 'video_file') and video_content.video_file:
+                                content_data['video_url'] = video_content.video_file.url
+                        
+                        elif content.content_type.name == 'qcm' and hasattr(content, 'qcm'):
+                            qcm_content = content.qcm
+                            content_data['question'] = qcm_content.question
+                            
+                    except Exception as e:
+                        print(f"Warning: Error accessing content data for {content.id}: {e}")
+                        # Continue without the specific content data
+                    
+                    results.append(content_data)
+            
+            return Response({
+                'results': results,
+                'count': len(results),
+                'query': search_query,
+                'types_searched': search_types
+            })
+            
+        except Exception as e:
+            print(f"❌ Search error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+            return Response({
+                'error': f'Search failed: {str(e)}',
+                'results': [],
+                'debug_info': {
+                    'query': search_query,
+                    'type': content_type,
+                    'error_message': str(e)
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

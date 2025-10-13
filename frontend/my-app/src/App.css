@@ -450,7 +450,7 @@ transition: transform 0.3s ease, box-shadow 0.3s ease;
   border-radius: 4px;
 }
 /* search bar */
-.search-form {
+/* .search-form {
     position: relative;
     transition: all 0.3s ease;
     width: 50px;
@@ -514,6 +514,108 @@ transition: transform 0.3s ease, box-shadow 0.3s ease;
   .search-form .search-icon {
     background: #466e96;
     /* color: white; */
-  }
+  /* } */ */
 /* end search bar */
 
+/* Search Form Styles */
+.search-form {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 40px 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.search-input:focus {
+  border-color: #86b7fe;
+  outline: 0;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.search-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  cursor: pointer;
+}
+
+.hover-bg-light:hover {
+  background-color: #f8f9fa !important;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Search Results Styles */
+.search-results-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  border-bottom: 1px solid #dee2e6;
+  transition: background-color 0.2s ease;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background-color: #f8f9fa !important;
+}
+
+/* Badge Styles for Search Results */
+.badge.bg-purple {
+  background-color: #6f42c1 !important;
+}
+
+/* Z-index for dropdown */
+.z-3 {
+  z-index: 1030;
+}
+
+/* Loading Spinner */
+.spinner-border.text-primary {
+  color: #0d6efd !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .search-form {
+    margin-bottom: 1rem;
+  }
+  
+  .search-input {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+  .search-input {
+    background-color: #212529;
+    border-color: #495057;
+    color: #f8f9fa;
+  }
+  
+  .search-input:focus {
+    background-color: #212529;
+    border-color: #86b7fe;
+    color: #f8f9fa;
+  }
+  
+  .search-icon {
+    color: #adb5bd;
+  }
+}

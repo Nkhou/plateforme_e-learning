@@ -145,7 +145,7 @@ const Dashboard = () => {
                     <div className="d-flex justify-content-between align-items-center mb-4">
                         <div>
                             <h4>My Courses</h4>
-                            <small className="text-muted">Showing only active courses</small>
+                            {/* <small className="text-muted">Showing only active courses</small> */}
                         </div>
                         <div className="btn-group">
                             <button 
@@ -225,7 +225,7 @@ const Dashboard = () => {
                     <div className="d-flex justify-content-between align-items-center mb-4 mt-5">
                         <div>
                             <h4>Recommended Courses for Your Department</h4>
-                            <small className="text-muted">Showing only active courses</small>
+                            {/* <small className="text-muted">Showing only active courses</small> */}
                         </div>
                     </div>
                     {recommendedCourses.length > 0 ? (

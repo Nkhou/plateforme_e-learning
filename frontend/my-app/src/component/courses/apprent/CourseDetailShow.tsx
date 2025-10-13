@@ -268,71 +268,72 @@ const CourseTimeStatistics: React.FC<{ modules: Module[] }> = ({ modules }) => {
   const activeMinRequiredTime = calculateTotalMinRequiredTime(modules);
 
   return (
-    <div className="card bg-light mb-4">
-      <div className="card-header">
-        <h6 className="mb-0">
-          <i className="fas fa-chart-bar me-2"></i>
-          Course Time Statistics
-        </h6>
-      </div>
-      <div className="card-body">
-        <div className="row text-center">
-          <div className="col-md-3">
-            <div className="border rounded p-2 bg-white">
-              <small className="text-muted d-block">Active Modules</small>
-              <strong className="text-primary">{activeModules.length}</strong>
-              <small className="text-muted d-block">of {allModules.length} total</small>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="border rounded p-2 bg-white">
-              <small className="text-muted d-block">Active Contents</small>
-              <strong className="text-primary">{totalActiveContents}</strong>
-              <small className="text-muted d-block">of {totalAllContents} total</small>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="border rounded p-2 bg-white">
-              <small className="text-muted d-block">Estimated Time</small>
-              <strong className="text-success">{formatTime(activeEstimatedTime)}</strong>
-              <small className="text-muted d-block">(Active content only)</small>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="border rounded p-2 bg-white">
-              <small className="text-muted d-block">Min Required</small>
-              <strong className="text-warning">{formatTime(activeMinRequiredTime)}</strong>
-              <small className="text-muted d-block">(Active content only)</small>
-            </div>
-          </div>
-        </div>
+    <></>
+    // <div className="card bg-light mb-4">
+    //   <div className="card-header">
+    //     <h6 className="mb-0">
+    //       <i className="fas fa-chart-bar me-2"></i>
+    //       Course Time Statistics
+    //     </h6>
+    //   </div>
+    //   <div className="card-body">
+    //     <div className="row text-center">
+    //       <div className="col-md-3">
+    //         <div className="border rounded p-2 bg-white">
+    //           <small className="text-muted d-block">Active Modules</small>
+    //           <strong className="text-primary">{activeModules.length}</strong>
+    //           <small className="text-muted d-block">of {allModules.length} total</small>
+    //         </div>
+    //       </div>
+    //       <div className="col-md-3">
+    //         <div className="border rounded p-2 bg-white">
+    //           <small className="text-muted d-block">Active Contents</small>
+    //           <strong className="text-primary">{totalActiveContents}</strong>
+    //           <small className="text-muted d-block">of {totalAllContents} total</small>
+    //         </div>
+    //       </div>
+    //       <div className="col-md-3">
+    //         <div className="border rounded p-2 bg-white">
+    //           <small className="text-muted d-block">Estimated Time</small>
+    //           <strong className="text-success">{formatTime(activeEstimatedTime)}</strong>
+    //           <small className="text-muted d-block">(Active content only)</small>
+    //         </div>
+    //       </div>
+    //       <div className="col-md-3">
+    //         <div className="border rounded p-2 bg-white">
+    //           <small className="text-muted d-block">Min Required</small>
+    //           <strong className="text-warning">{formatTime(activeMinRequiredTime)}</strong>
+    //           <small className="text-muted d-block">(Active content only)</small>
+    //         </div>
+    //       </div>
+    //     </div>
         
-        {/* Progress bars showing active vs total */}
-        <div className="mt-3">
-          <div className="d-flex justify-content-between mb-1">
-            <small>Module Completion</small>
-            <small>{activeModules.length}/{allModules.length}</small>
-          </div>
-          <div className="progress" style={{ height: '8px' }}>
-            <div 
-              className="progress-bar bg-primary" 
-              style={{ width: `${(activeModules.length / allModules.length) * 100}%` }}
-            ></div>
-          </div>
+    //     {/* Progress bars showing active vs total */}
+    //     <div className="mt-3">
+    //       <div className="d-flex justify-content-between mb-1">
+    //         <small>Module Completion</small>
+    //         <small>{activeModules.length}/{allModules.length}</small>
+    //       </div>
+    //       <div className="progress" style={{ height: '8px' }}>
+    //         <div 
+    //           className="progress-bar bg-primary" 
+    //           style={{ width: `${(activeModules.length / allModules.length) * 100}%` }}
+    //         ></div>
+    //       </div>
           
-          <div className="d-flex justify-content-between mb-1 mt-2">
-            <small>Content Completion</small>
-            <small>{totalActiveContents}/{totalAllContents}</small>
-          </div>
-          <div className="progress" style={{ height: '8px' }}>
-            <div 
-              className="progress-bar bg-success" 
-              style={{ width: `${(totalActiveContents / totalAllContents) * 100}%` }}
-            ></div>
-          </div>
-        </div>
-      </div>
-    </div>
+    //       <div className="d-flex justify-content-between mb-1 mt-2">
+    //         <small>Content Completion</small>
+    //         <small>{totalActiveContents}/{totalAllContents}</small>
+    //       </div>
+    //       <div className="progress" style={{ height: '8px' }}>
+    //         <div 
+    //           className="progress-bar bg-success" 
+    //           style={{ width: `${(totalActiveContents / totalAllContents) * 100}%` }}
+    //         ></div>
+    //       </div>
+    //     </div>
+    //   </div>
+    // </div>
   );
 };
 
@@ -1351,15 +1352,15 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     )}
                     
                     {/* Show original times if different */}
-                    {(course.estimated_duration !== displayEstimatedTime || course.min_required_time !== displayMinRequiredTime) && (
+                    {/* {(course.estimated_duration !== displayEstimatedTime || course.min_required_time !== displayMinRequiredTime) && (
                       <div className="mt-2 p-2 bg-light rounded">
-                        <small className="text-muted">
+                        {/* <small className="text-muted">
                           <strong>Original times (all content):</strong><br />
                           Estimated: {formatTime(course.estimated_duration || 0)}<br />
                           {course.min_required_time > 0 && `Min Required: ${formatTime(course.min_required_time)}`}
-                        </small>
-                      </div>
-                    )}
+                        </small> */}
+                      {/* </div> */}
+                  
                   </div>
 
                   {!canCompleteContent && displayMinRequiredTime > 0 && (
@@ -1374,7 +1375,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
                 {course.is_subscribed && subscription && (
                   <>
-                    <p className="mt-2"><strong>Time Spent:</strong> {formatSecondsDetailed(timeSpentSeconds)}</p>
+                    {/* <p className="mt-2"><strong>Time Spent:</strong> {formatSecondsDetailed(timeSpentSeconds)}</p>
                     {displayMinRequiredTime > 0 && (
                       <p>
                         <strong>Time Requirement:</strong>
@@ -1382,7 +1383,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                           {hasMetTimeRequirement ? ' Met' : ' Not Met'}
                         </span>
                       </p>
-                    )}
+                    )} */}
                   </>
                 )}
               </div>
@@ -1409,8 +1410,8 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
               {/* Time Progress Bar (if minimum time is required) */}
               {course.is_subscribed && displayMinRequiredTime > 0 && (
                 <div className="mb-3 px-3">
-                  <strong>Time Progress: </strong>
-                  <div className="progress mt-1">
+                  {/* <strong>Time Progress: </strong> */}
+                  {/* <div className="progress mt-1">
                     <div
                       className={`progress-bar ${hasMetTimeRequirement ? 'bg-success' : 'bg-info'}`}
                       role="progressbar"
@@ -1421,7 +1422,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     >
                       {Math.round(timeProgress)}%
                     </div>
-                  </div>
+                  </div> */}
                   <small className="text-muted">
                     {hasMetTimeRequirement
                       ? 'Time requirement met'
@@ -1458,7 +1459,7 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
 
             {/* Course Time Summary */}
             <div className="row text-center mb-4">
-              <div className="col-md-4">
+              {/* <div className="col-md-4">
                 <div className="card bg-light">
                   <div className="card-body">
                     <h6 className="card-title">Estimated Duration</h6>
@@ -1466,8 +1467,8 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     <small className="text-muted">Active content only</small>
                   </div>
                 </div>
-              </div>
-              {displayMinRequiredTime > 0 && (
+              </div> */}
+              {/* {displayMinRequiredTime > 0 && (
                 <div className="col-md-4">
                   <div className="card bg-light">
                     <div className="card-body">
@@ -1477,8 +1478,8 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     </div>
                   </div>
                 </div>
-              )}
-              {course.is_subscribed && subscription && (
+              )} */}
+              {/* {course.is_subscribed && subscription && (
                 <div className="col-md-4">
                   <div className="card bg-light">
                     <div className="card-body">
@@ -1490,16 +1491,16 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
                     </div>
                   </div>
                 </div>
-              )}
+              )} */}
             </div>
 
             {/* Time Requirement Warning Banner */}
-            {course.is_subscribed && displayMinRequiredTime > 0 && !canCompleteContent && (
+            {/* {course.is_subscribed && displayMinRequiredTime > 0 && !canCompleteContent && (
               <div className="alert alert-warning">
                 <i className="fas fa-clock me-2"></i>
                 <strong>Time requirement:</strong> You need to spend {formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.
               </div>
-            )}
+            )} */}
           </div>
 
           <div className="card">

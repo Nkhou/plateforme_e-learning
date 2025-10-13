@@ -127,5 +127,6 @@ urlpatterns = [
     # Add this to your urlpatterns in urls.py
     # path('api/courses/<int:pk>/record-time/', views.TimeTrackingRecordView.as_view(), name='record-time'),
         # Include course routes
+    path('api/search/', views.GlobalSearchView.as_view(), name='global-search'),
     path('', include(router.urls)),
 ]
