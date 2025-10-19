@@ -38,21 +38,60 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [openNotif, setOpenNotif] = useState(false);
+  const [showSearchCard, setShowSearchCard] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchCardRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const handleClickOutside = (event: any) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setOpen(false);
+        setOpenNotif(false);
+      }
+      if (searchCardRef.current && !searchCardRef.current.contains(target) &&
+        !(target as Element).closest('.search-bar')) {
+        setShowSearchCard(false);
       }
     };
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Close search card when pressing Escape key
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowSearchCard(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
   const handleMenu = () => {
-    setOpen((prev) => !prev)
-  }
+    setOpen((prev) => !prev);
+    setOpenNotif(false);
+  };
+
+  const handleNotif = () => {
+    setOpenNotif((prev) => !prev);
+    setOpen(false);
+  };
+
+  const handleSearchIconClick = () => {
+    setShowSearchCard(true);
+  };
+
   const handleSearchResultClick = (result: SearchResult) => {
     console.log('Selected result:', result);
+    // Close search card when result is selected
+    setShowSearchCard(false);
+
     // Custom logic based on result type
     switch (result.type) {
       case 'course':
@@ -78,10 +117,12 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   };
 
   useEffect(() => {
-    api.get('CheckAuthentification/', {
-      withCredentials: true,
-    })
-      .then(res => {
+    const checkAuthentication = async () => {
+      try {
+        const res = await api.get('CheckAuthentification/', {
+          withCredentials: true,
+        });
+
         const auth = res.data.authenticated;
         setIsAuthenticated(auth);
         console.log('data: ', res.data.user);
@@ -102,99 +143,89 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
             navigate('/dashboard');
           }
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error('Authentication check failed:', error);
         setIsAuthenticated(false);
         setLoading(false);
         if (location.pathname !== '/') {
           navigate('/');
         }
-      });
+      }
+    };
+
+    checkAuthentication();
   }, [navigate, location]);
-  const handleLogOut =() => {
-    api.post('logout/', {
-      withCredentials: true,
-    })
-      .then(res => {
-        console.log('res', res);
-        navigate('/');
-      })
-      .catch((error) => {
-      
-          navigate('/');
+
+  const handleLogOut = async () => {
+    try {
+      await api.post('logout/', {}, {
+        withCredentials: true,
       });
-  }
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      navigate('/');
+    }
+  };
+
   if (loading) return <div className="text-center p-5">Loading...</div>;
   if (!isAuthenticated) return <>{children}</>;
 
   return (
     <div className="d-flex" style={{ minHeight: '100vh' }}>
-      {/* Sidebar */}
-      <div
-        className={`border-end ${sidebarOpen ? 'd-block' : 'd-none'} d-md-block`}
-        style={{
-          width: '260px',
-          minHeight: '100vh',
-          background: 'rgba(5, 44, 101, 0.9)',
-          position: 'sticky',
-          top: 0
-        }}
-      >
-        <div className="p-3">
-          <h5 className="text-white mb-4">Platform</h5>
-          <ul className="nav flex-column">
-            {(user?.privilege === 'A' || user?.privilege === 'Admin') && (
-              <>
-                <li className="nav-item mb-2">
-                  <a href="/admin" className="nav-link text-white d-flex align-items-center">
-                    <img src="/dashboard.svg" alt="Dashboard" width="16" height="16" className="me-2" />
-                    Dashboard admin
-                  </a>
-                </li>
-                <li className="nav-item mb-2">
-                  <a href="/signup" className="nav-link text-white d-flex align-items-center">
-                    <img src="/add-user.svg" alt="Create User" width="16" height="16" className="me-2" />
-                    Create new user
-                  </a>
-                </li>
-              </>
-            )}
-            {user?.privilege !== 'A' && (
-              <>
-                {user?.privilege !== 'F' && (
-                  <li className="nav-item mb-2">
-                    <a href="/dashboard" className="nav-link text-white d-flex align-items-center">
-                      <img src="/dashboard.svg" alt="Dashboard" width="16" height="16" className="me-2" />
-                      Dashboard
-                    </a>
-                  </li>
-                )}
-                {user?.privilege === 'F' && (
-                  <li className="nav-item mb-2">
-                    <a href="/cours" className="nav-link text-white d-flex align-items-center">
-                      <img src="/save-icon.svg" alt="Courses" width="16" height="16" className="me-2" />
-                      My Courses
-                    </a>
-                  </li>
-                )}
-              </>
-            )}
-            <li className="nav-item mb-2">
-              <a href="/profile" className="nav-link text-white d-flex align-items-center">
-                <img src="/profile.svg" alt="Profile" width="16" height="16" className="me-2" />
-                Profile
-              </a>
-            </li>
-            <li className="nav-item mb-2">
-              <a href="/settings/general" className="nav-link text-white d-flex align-items-center">
-                <img src="/settings.svg" alt="Settings" width="16" height="16" className="me-2" />
-                General Settings
-              </a>
-            </li>
-          </ul>
+      {/* Search Overlay Card */}
+      {showSearchCard && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100"
+          style={{
+            zIndex: 1040,
+            background: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(4px)'
+          }}
+        >
+          <div
+            ref={searchCardRef}
+            className="card position-absolute top-50 start-50 translate-middle"
+            style={{
+              width: '90%',
+              maxWidth: '600px',
+              maxHeight: '80vh',
+              zIndex: 1050,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+              border: 'none',
+              borderRadius: '12px'
+            }}
+          >
+            <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center"
+              style={{ borderTopLeftRadius: '12px', borderTopRightRadius: '12px' }}>
+              <h5 className="mb-0">
+                <i className="fas fa-search me-2"></i>
+                Recherche
+              </h5>
+              <button
+                type="button"
+                className="btn-close btn-close-white"
+                onClick={() => setShowSearchCard(false)}
+                aria-label="Close"
+              ></button>
+            </div>
+            <div className="card-body p-4">
+              <SearchComponent
+                onSearchResultClick={handleSearchResultClick}
+                placeholder="Que cherchez-vous?"
+                className="w-100"
+              // autoFocus={true}
+              />
+              <div className="text-muted mt-3">
+                <small>
+                  <i className="fas fa-info-circle me-1"></i>
+                  Recherchez parmi vos cours, modules et contenus. Appuyez sur Échap pour fermer.
+                </small>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-grow-1 d-flex flex-column">
@@ -209,40 +240,148 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 className="btn btn-outline-light d-md-none me-3"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 style={{ borderColor: 'rgba(255,255,255,0.5)' }}
+                aria-label="Toggle sidebar"
               >
                 {sidebarOpen ? '×' : '☰'}
               </button>
 
               {!sidebarOpen && (
                 <div className="d-flex align-items-center justify-content-between w-100">
-                  {/* Search Form - Styled like your original */}
-                  <form className="search-form position-relative flex-grow-1 me-4" style={{ maxWidth: '500px' }}>
-                    <SearchComponent
-                      onSearchResultClick={handleSearchResultClick}
-                      placeholder="Search courses, modules, or content..."
-                      className="w-100"
-                    />
-                  </form>
+                  {/* Left Side: Logo + Search Bar */}
+                  <div className="d-flex align-items-center justify-content-between w-100">
+                    {/* Left Side: Logo + Search Bar */}
+                    <div className="d-flex align-items-center gap-3">
+                      {/* Logo Image */}
+                      <img
+                        src="/logo-colored.png"
+                        alt="Logo"
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          objectFit: 'contain',
+                        }}
+                      />
 
+                      {/* Search Bar */}
+                      <div
+                        className="search-bar-container position-relative"
+                        style={{
+                          maxWidth: '250px',
+                          minWidth: '200px',
+                        }}
+                      >
+                        <div
+                          className="search-bar d-flex align-items-center"
+                          onClick={handleSearchIconClick}
+                          style={{
+                            background: 'white',
+                            border: '1px solid #dee2e6',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                            height: '40px'
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.background = '#f8f9fa';
+                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.background = 'white';
+                            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                          }}
+                        >
+                          <i className="fas fa-search me-2" style={{ color: '#6c757d' }}></i>
+                          <span style={{ color: '#6c757d', fontWeight: '400' }}>
+                            Que cherchez-vous?
+                          </span>
 
-
-                  <div className="btn-group custom-dropdown-group" ref={dropdownRef}>
-                    <button
-                      type="button"
-                      className="btn btn-info dropdown-toggle rounded-btn"
-                      onClick={() => handleMenu()}
-                      aria-expanded={open}
-                    >
-                    </button>
-                    {open && (
-                      <div className="dropdown-menu show custom-dark-dropdown ">
-                        <h6 className="dropdown-header custom-header">Hello, {user?.username}</h6>
-                        <a className="dropdown-item custom-item" href="#">Profile</a>
-                        <a className="dropdown-item custom-item" href="#">Settings</a>
-                        <div className="dropdown-divider custom-divider"></div>
-                        <a className="dropdown-item custom-item" onClick={() => handleLogOut()}>Log out</a>
+                          <div
+                            style={{
+                              width: '1px',
+                              height: '24px',
+                              backgroundColor: '#ced4da',
+                              marginRight: '2px'
+                            }}
+                          ></div>
+                          <button
+                            type="button"
+                            className="btn bg-gray-100 text-black px-2 py-1 rounded "
+                            style={{
+                              // backgroundColor: '#d3d3d3', // light gray
+                              border: 'none'
+                            }}
+                          >
+                            🔎︎
+                          </button>
+                        </div>
                       </div>
-                    )}
+                    </div>
+                  </div>
+                  <div className="btn-group custom-dropdown-group" ref={dropdownRef}>
+                    {/* Notifications Dropdown */}
+                    <div className="dropdown me-2">
+                      <button
+                        type="button"
+                        className="btn btn-outline-light dropdown-toggle"
+                        onClick={handleNotif}
+                        aria-expanded={openNotif}
+                        aria-label="Notifications"
+                        style={{
+                          width: '45px',
+                          height: '45px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '6px'
+                        }}
+                      >
+                        🔔
+                      </button>
+                      {openNotif && (
+                        <div className="dropdown-menu show custom-dark-dropdown mt-2">
+                          <h6 className="dropdown-header custom-header">Hello, {user?.username}</h6>
+                          <a className="dropdown-item custom-item" href="#">cours</a>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* User Menu Dropdown */}
+                    <div className="dropdown">
+                      <button
+                        type="button"
+                        className="btn btn-outline-light dropdown-toggle"
+                        onClick={handleMenu}
+                        aria-expanded={open}
+                        aria-label="User menu"
+                        style={{
+                          width: '45px',
+                          height: '45px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '6px'
+                        }}
+                      >
+                        👤
+                      </button>
+                      {open && (
+                        <div className="dropdown-menu show custom-dark-dropdown mt-2">
+                          <h6 className="dropdown-header custom-header">Hello, {user?.username}</h6>
+                          <a className="dropdown-item custom-item" href="#">Profile</a>
+                          <a className="dropdown-item custom-item" href="#">Settings</a>
+                          <div className="dropdown-divider custom-divider"></div>
+                          <button
+                            className="dropdown-item custom-item"
+                            onClick={handleLogOut}
+                            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left' }}
+                          >
+                            Log out
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -251,11 +390,9 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         </nav>
 
         {/* Page Content */}
-        {!sidebarOpen && (
-          <div className="flex-grow-1 p-3" style={{ background: '#f8f9fa' }}>
-            {children}
-          </div>
-        )}
+        <div className="flex-grow-1 p-3" style={{ background: '#f8f9fa' }}>
+          {children}
+        </div>
       </div>
     </div>
   );

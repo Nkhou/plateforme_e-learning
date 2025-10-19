@@ -4,6 +4,7 @@ import ViewContentModal from './ViewContentModal'
 import CircularStatsDisplay from './CircularStatsDisplay'
 import QuizComponent from './QuizComponent'
 import { useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 interface CourseDetailProps {
     courseId?: number | null;
@@ -330,14 +331,18 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [showEditCourseModal, setShowEditCourseModal] = useState(false);
+    const navigate = useNavigate();
 
     // Add this function
     const handleEditCourseInternal = () => {
         console.log('hellllllllllllllllllllllllllllllllllllllllllllo')
         // if (course) {
-            setShowEditCourseModal(true);
+        setShowEditCourseModal(true);
         // }
     };
+    const handleBack = () => {
+        navigate('/cours');
+    }
     const [showNewContentModal, setShowNewContentModal] = useState(false);
     const [showNewModuleModal, setShowNewModuleModal] = useState(false);
     const [selectedContentType, setSelectedContentType] = useState<'pdf' | 'Video' | 'QCM' | null>(null);
@@ -1742,38 +1747,38 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
                                     </div>
                                     <p className="text-muted mb-0">{course.description}</p>
                                 </div>
-                                    {showEditCourseModal && course && (
-                                        <div className="modal fade show d-block" tabIndex={-1}>
-                                            <div className="modal-dialog">
-                                                <div className="modal-content">
-                                                    <div className="modal-header">
-                                                        <h5 className="modal-title">Edit Course: {course.title_of_course}</h5>
-                                                        <button type="button" className="btn-close" onClick={() => setShowEditCourseModal(false)}></button>
-                                                    </div>
-                                                    <div className="modal-body">
-                                                        {/* Add your course edit form here */}
-                                                        <p>Edit course form would go here...</p>
-                                                    </div>
-                                                    <div className="modal-footer">
-                                                        <button type="button" className="btn btn-secondary" onClick={() => setShowEditCourseModal(false)}>
-                                                            Cancel
-                                                        </button>
-                                                        <button type="button" className="btn btn-primary" onClick={() => {
-                                                            // Handle course update
-                                                            setShowEditCourseModal(false);
-                                                        }}>
-                                                            Save Changes
-                                                        </button>
-                                                    </div>
+                                {showEditCourseModal && course && (
+                                    <div className="modal fade show d-block" tabIndex={-1}>
+                                        <div className="modal-dialog">
+                                            <div className="modal-content">
+                                                <div className="modal-header">
+                                                    <h5 className="modal-title">Edit Course: {course.title_of_course}</h5>
+                                                    <button type="button" className="btn-close" onClick={() => setShowEditCourseModal(false)}></button>
+                                                </div>
+                                                <div className="modal-body">
+                                                    {/* Add your course edit form here */}
+                                                    <p>Edit course form would go here...</p>
+                                                </div>
+                                                <div className="modal-footer">
+                                                    <button type="button" className="btn btn-secondary" onClick={() => setShowEditCourseModal(false)}>
+                                                        Cancel
+                                                    </button>
+                                                    <button type="button" className="btn btn-primary" onClick={() => {
+                                                        // Handle course update
+                                                        setShowEditCourseModal(false);
+                                                    }}>
+                                                        Save Changes
+                                                    </button>
                                                 </div>
                                             </div>
-                                            <div className="modal-backdrop fade show"></div>
                                         </div>
-                                    )}
+                                        <div className="modal-backdrop fade show"></div>
+                                    </div>
+                                )}
                                 <div>
-                                    
+
                                     <button className="btn btn-primary me-2" onClick={handleEditCourseInternal}
-                                    
+
                                     >
                                         <i className="fas fa-edit me-1"></i> Edit Course
                                     </button>
@@ -2441,105 +2446,95 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
                 </>
             )}
             {/* Edit Course Modal */}
-{showEditCourseModal && course && (
-    <>
-        <div className="modal fade show d-block" tabIndex={-1}>
-            <div className="modal-dialog modal-lg">
-                <div className="modal-content">
-                    <div className="modal-header">
-                        <h5 className="modal-title">Edit Course: {course.title_of_course}</h5>
-                        <button type="button" className="btn-close" onClick={() => setShowEditCourseModal(false)}></button>
-                    </div>
-                    <div className="modal-body">
-                        <div className="row">
-                            <div className="col-md-6">
-                                <div className="mb-3">
-                                    <label className="form-label">Course Title *</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        defaultValue={course.title_of_course}
-                                        placeholder="Enter course title"
-                                    />
+            {showEditCourseModal && course && (
+                <>
+                    <div className="modal fade show d-block" tabIndex={-1}>
+                        <div className="modal-dialog modal-lg">
+                            <div className="modal-content">
+                                <div className="modal-header">
+                                    <h5 className="modal-title">Edit Course: {course.title_of_course}</h5>
+                                    <button type="button" className="btn-close" onClick={() => setShowEditCourseModal(false)}></button>
                                 </div>
-                            </div>
-                            <div className="col-md-6">
-                                <div className="mb-3">
-                                    <label className="form-label">Status</label>
-                                    <select className="form-select" defaultValue={course.status}>
-                                        <option value={0}>Draft</option>
-                                        <option value={1}>Active</option>
-                                        <option value={2}>Archived</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div className="mb-3">
-                            <label className="form-label">Description</label>
-                            <textarea
-                                className="form-control"
-                                defaultValue={course.description}
-                                rows={4}
-                                placeholder="Enter course description"
-                            />
-                        </div>
+                                <div className="modal-body">
+                                    <div className="row">
+                                        <div className="col-md-6">
+                                            <div className="mb-3">
+                                                <label className="form-label">Course Title *</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    defaultValue={course.title_of_course}
+                                                    placeholder="Enter course title"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="col-md-6">
+                                            <div className="mb-3">
+                                                <label className="form-label">Status</label>
+                                                <select className="form-select" defaultValue={course.status}>
+                                                    <option value={0}>Draft</option>
+                                                    <option value={1}>Active</option>
+                                                    <option value={2}>Archived</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
 
-                        <div className="row">
-                            <div className="col-md-6">
-                                <div className="mb-3">
-                                    <label className="form-label">Estimated Duration (minutes)</label>
-                                    <input
-                                        type="number"
-                                        className="form-control"
-                                        defaultValue={course.estimated_duration}
-                                        min="1"
-                                        placeholder="Estimated duration"
-                                    />
+                                    <div className="mb-3">
+                                        <label className="form-label">Description</label>
+                                        <textarea
+                                            className="form-control"
+                                            defaultValue={course.description}
+                                            rows={4}
+                                            placeholder="Enter course description"
+                                        />
+                                    </div>
+
+                                    <div className="row">
+                                        <div className="col-md-6">
+                                            <div className="mb-3">
+                                                <label className="form-label">Estimated Duration (minutes)</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    defaultValue={course.estimated_duration}
+                                                    min="1"
+                                                    placeholder="Estimated duration"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="col-md-6">
+                                            <div className="mb-3">
+                                                <label className="form-label">Minimum Required Time (minutes)</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    defaultValue={course.min_required_time}
+                                                    min="1"
+                                                    placeholder="Minimum required time"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="col-md-6">
-                                <div className="mb-3">
-                                    <label className="form-label">Minimum Required Time (minutes)</label>
-                                    <input
-                                        type="number"
-                                        className="form-control"
-                                        defaultValue={course.min_required_time}
-                                        min="1"
-                                        placeholder="Minimum required time"
-                                    />
+                                <div className="modal-footer">
+                                    <button type="button" className="btn btn-secondary" onClick={() => setShowEditCourseModal(false)}>
+                                        Cancel
+                                    </button>
+                                    <button type="button" className="btn btn-primary" onClick={() => {
+                                        // Handle course update
+                                        alert('Course update functionality would be implemented here');
+                                        setShowEditCourseModal(false);
+                                    }}>
+                                        Save Changes
+                                    </button>
                                 </div>
                             </div>
                         </div>
-
-                        {/* <div className="mb-3">
-                            <label className="form-label">Course Image</label>
-                            <input
-                                type="file"
-                                className="form-control"
-                                accept="image/*"
-                            />
-                            <small className="text-muted">Leave empty to keep current image</small>
-                        </div> */}
                     </div>
-                    <div className="modal-footer">
-                        <button type="button" className="btn btn-secondary" onClick={() => setShowEditCourseModal(false)}>
-                            Cancel
-                        </button>
-                        <button type="button" className="btn btn-primary" onClick={() => {
-                            // Handle course update
-                            alert('Course update functionality would be implemented here');
-                            setShowEditCourseModal(false);
-                        }}>
-                            Save Changes
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div className="modal-backdrop fade show"></div>
-    </>
-)}
+                    <div className="modal-backdrop fade show"></div>
+                </>
+            )}
             {/* Enhanced New Module Modal with Time Tracking */}
             {showNewModuleModal && (
                 <>
@@ -3172,8 +3167,15 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
                                         </button>
                                     )}
                                 </div>
+                            <div className="text-center mt-4">
+                                <button className="btn btn-secondary" onClick={handleBack}>
+                                    <i className="bi bi-arrow-left me-2"></i>
+                                    Back to Courses
+                                </button>
+                            </div>
                             </div>
                         </div>
+
                     </div>
                     <div className="modal-backdrop fade show"></div>
                 </>

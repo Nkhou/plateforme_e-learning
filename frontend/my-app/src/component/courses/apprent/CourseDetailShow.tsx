@@ -205,16 +205,16 @@ const calculateTotalEstimatedTime = (modules: Module[]): number => {
           case 'video':
             totalMinutes += content.video_content?.duration 
               ? Math.ceil(content.video_content.duration / 60) 
-              : 10;
+              : 0;
             break;
           case 'pdf':
-            totalMinutes += 15;
+            totalMinutes += 0;
             break;
           case 'qcm':
-            totalMinutes += 5;
+            totalMinutes += 0;
             break;
           default:
-            totalMinutes += 10;
+            totalMinutes += 0;
         }
       }
     });
@@ -354,7 +354,6 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
   const params = useParams<{ id: string }>();
   const id = courseId ?? (params.id ? parseInt(params.id, 10) : null);
   const navigate = useNavigate();
-  console.log('helllooooooovovovov', id, id)
   if (id === null) {
     return <div>Aucun cours sélectionné</div>;
   }
@@ -881,13 +880,13 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     const contentType = content.content_type_name?.toLowerCase();
     switch (contentType) {
       case 'video':
-        return content.video_content?.duration ? formatTime(Math.ceil(content.video_content.duration / 60)) : '10 min';
+        return content.video_content?.duration ? formatTime(Math.ceil(content.video_content.duration / 60)) : '0 min';
       case 'pdf':
-        return '15 min';
+        return '0 min';
       case 'qcm':
         return content.qcm?.estimated_time ? formatTime(content.qcm.estimated_time) : '5 min';
       default:
-        return '10 min';
+        return '0 min';
     }
   };
 
@@ -900,13 +899,13 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
     const contentType = content.content_type_name?.toLowerCase();
     switch (contentType) {
       case 'video':
-        return content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 10;
+        return content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 0;
       case 'pdf':
-        return 15;
+        return 0;
       case 'qcm':
         return content.qcm?.estimated_time || 5;
       default:
-        return 10;
+        return 0;
     }
   };
 
@@ -922,13 +921,13 @@ const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) =>
       // Default estimates for active content
       switch (content.content_type_name?.toLowerCase()) {
         case 'video':
-          return total + (content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 10);
+          return total + (content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 0);
         case 'pdf':
-          return total + 15;
+          return total + 0;
         case 'qcm':
-          return total + 5;
+          return total + 0;
         default:
-          return total + 10;
+          return total + 0;
       }
     }, 0);
   };
