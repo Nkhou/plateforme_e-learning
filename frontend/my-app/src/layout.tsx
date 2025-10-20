@@ -196,7 +196,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               borderRadius: '12px'
             }}
           >
-            <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center"
+            {/* <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center"
               style={{ borderTopLeftRadius: '12px', borderTopRightRadius: '12px' }}>
               <h5 className="mb-0">
                 <i className="fas fa-search me-2"></i>
@@ -208,7 +208,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 onClick={() => setShowSearchCard(false)}
                 aria-label="Close"
               ></button>
-            </div>
+            </div> */}
             <div className="card-body p-4">
               <SearchComponent
                 onSearchResultClick={handleSearchResultClick}
@@ -217,10 +217,10 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               // autoFocus={true}
               />
               <div className="text-muted mt-3">
-                <small>
+                {/* <small>
                   <i className="fas fa-info-circle me-1"></i>
                   Recherchez parmi vos cours, modules et contenus. Appuyez sur Échap pour fermer.
-                </small>
+                </small> */}
               </div>
             </div>
           </div>

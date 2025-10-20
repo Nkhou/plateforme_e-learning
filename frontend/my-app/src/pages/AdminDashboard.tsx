@@ -221,10 +221,10 @@ const AdminDashboard: React.FC = () => {
   }
 
   const userRegistrationData = {
-    labels: stats?.user_registration_chart?.labels || ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+    labels: stats?.user_registration_chart?.labels || [],
     datasets: [{
       label: 'Nouveaux utilisateurs',
-      data: stats?.user_registration_chart?.data || [0, 0, 0, 0, 0],
+      data: stats?.user_registration_chart?.data || [],
       backgroundColor: '#818CF8',
       borderRadius: 4,
       barThickness: 40,
@@ -243,9 +243,9 @@ const AdminDashboard: React.FC = () => {
   } : null;
 
   const userDistributionData = {
-    labels: stats?.user_distribution?.map(d => getSafeString(d.privilege, 'Unknown')) || ['Admin', 'User', 'Guest'],
+    labels: stats?.user_distribution?.map(d => getSafeString(d.privilege)) || [],
     datasets: [{
-      data: stats?.user_distribution?.map(d => getSafeNumber(d.count, 0)) || [1, 1, 1],
+      data: stats?.user_distribution?.map(d => getSafeNumber(d.count)) || [],
       backgroundColor: ['#4F46E5', '#818CF8', '#C7D2FE'],
       borderWidth: 0,
       hoverOffset: 4
@@ -253,9 +253,9 @@ const AdminDashboard: React.FC = () => {
   };
 
   const accountStatusData = stats?.account_status ? {
-    labels: stats.account_status.map(d => getSafeString(d.status, 'Unknown')),
+    labels: stats.account_status.map(d => getSafeString(d.status)),
     datasets: [{
-      data: stats.account_status.map(d => getSafeNumber(d.count, 0)),
+      data: stats.account_status.map(d => getSafeNumber(d.count)),
       backgroundColor: ['#4F46E5', '#818CF8'],
       borderWidth: 0,
       hoverOffset: 4
@@ -334,18 +334,18 @@ const AdminDashboard: React.FC = () => {
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%' }}>
       {/* Top Navigation Bar */}
-      <nav style={{ backgroundColor: '#2D3748', padding: '0.75rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+      <nav style={{ backgroundColor: '#12114a', padding: '0.75rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', maxWidth: '1400px', margin: '0 auto' }}>
-          <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="⊞" label="Dashboard" />
-          <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="📚" label="Formations" />
-          <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="👤" label="Utilisateurs" />
-          <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="✉" label="Messages" />
-          <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="⭐" label="Favoris" />
+          <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
+          <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
+          <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
+          <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
+          <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
         </div>
       </nav>
 
       {/* Breadcrumb and Title Header */}
-      <div style={{ backgroundColor: '#3730A3', color: 'white', padding: '1.25rem 2rem' }}>
+      <div style={{ backgroundColor: '#212068', color: 'white', padding: '1.25rem 2rem' }}>
         <div style={{ fontSize: '0.875rem', marginBottom: '0.5rem', opacity: 0.9 }}>
           Main {'>'} <span style={{ color: '#FCD34D', fontWeight: '500' }}>{getBreadcrumb()}</span>
         </div>
@@ -362,9 +362,9 @@ const AdminDashboard: React.FC = () => {
       {/* Dashboard Content */}
       {activeNavItem === 'dashboard' && stats && (
         <>
-          <div style={{ backgroundColor: '#4338CA', padding: '2rem', color: 'white' }}>
+          <div style={{ backgroundColor: '#212068', padding: '2rem', color: 'white' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-              <StatCard title="N° des utilisateurs" value={getSafeNumber(stats.overview.total_users).toLocaleString()} subtitle="En total" trend="+4.8% vs mois dernier" trendUp={true} />
+              <StatCard title="N° des utilisateurs" value={getSafeNumber(stats.overview.total_users).toLocaleString()} subtitle="" trend="+4.8% vs mois dernier" trendUp={true} />
               <StatCard title="N° de formations" value={getSafeNumber(stats.overview.total_courses)} subtitle="" trend="+4.8% vs mois dernier" trendUp={true} />
               <StatCard title="Nouveaux utilisateurs" value={getSafeNumber(stats.overview.recent_users)} subtitle="" trend="-3.92% vs 7 jours derniers" trendUp={false} />
               <StatCard title="Utilisateurs actifs" value={getSafeNumber(stats.overview.active_subscriptions)} subtitle="" trend="+4.8% vs mois dernier" trendUp={true} />
@@ -387,29 +387,61 @@ const AdminDashboard: React.FC = () => {
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
                   <ChartCard title="Nouveaux utilisateurs (Derniers 30 jours)" subtitle="Bar chart">
-                    <div style={{ height: '300px', position: 'relative' }}><Bar data={userRegistrationData} options={chartOptions} /></div>
+                    <div style={{ height: '300px', position: 'relative' }}>
+                      {stats.user_registration_chart && stats.user_registration_chart.data.length > 0 ? (
+                        <Bar data={userRegistrationData} options={chartOptions} />
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>
+                          No user registration data available
+                        </div>
+                      )}
+                    </div>
                   </ChartCard>
                   {dauData ? (
                     <ChartCard title="DAU / semaine" subtitle="Bar chart">
-                      <div style={{ height: '300px', position: 'relative' }}><Bar data={dauData} options={chartOptions} /></div>
+                      <div style={{ height: '300px', position: 'relative' }}>
+                        {stats.dau_weekly && stats.dau_weekly.data.length > 0 ? (
+                          <Bar data={dauData} options={chartOptions} />
+                        ) : (
+                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>
+                            No DAU data available
+                          </div>
+                        )}
+                      </div>
                     </ChartCard>
                   ) : (
                     <ChartCard title="DAU / semaine" subtitle="Bar chart">
-                      <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No data available</div>
+                      <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No DAU data available</div>
                     </ChartCard>
                   )}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
                   <ChartCard title="Distribution par rôle du compte" subtitle="Doughnut chart">
-                    <div style={{ height: '300px', position: 'relative' }}><Doughnut data={userDistributionData} options={doughnutOptions} /></div>
+                    <div style={{ height: '300px', position: 'relative' }}>
+                      {stats.user_distribution && stats.user_distribution.length > 0 ? (
+                        <Doughnut data={userDistributionData} options={doughnutOptions} />
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>
+                          No user distribution data available
+                        </div>
+                      )}
+                    </div>
                   </ChartCard>
                   {accountStatusData ? (
                     <ChartCard title="Distribution par statut du compte" subtitle="Pie chart">
-                      <div style={{ height: '300px', position: 'relative' }}><Pie data={accountStatusData} options={doughnutOptions} /></div>
+                      <div style={{ height: '300px', position: 'relative' }}>
+                        {stats.account_status && stats.account_status.length > 0 ? (
+                          <Pie data={accountStatusData} options={doughnutOptions} />
+                        ) : (
+                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>
+                            No account status data available
+                          </div>
+                        )}
+                      </div>
                     </ChartCard>
                   ) : (
                     <ChartCard title="Distribution par statut du compte" subtitle="Pie chart">
-                      <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No data available</div>
+                      <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No account status data available</div>
                     </ChartCard>
                   )}
                 </div>
@@ -418,7 +450,125 @@ const AdminDashboard: React.FC = () => {
             {activeTab === 'analytics' && (
               <div>
                 {analytics ? (
-                  <AnalyticsDashboard analytics={analytics} />
+                  <>
+                    {/* Charts Grid - Top Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                      {/* Progress Distribution Chart */}
+                      <ChartCard title="Progress distribution" subtitle="Doughnut / Pie chart">
+                        <div style={{ height: '300px', position: 'relative' }}>
+                          {analytics.progress_distribution && analytics.progress_distribution.length > 0 ? (
+                            <Doughnut 
+                              data={{
+                                labels: analytics.progress_distribution.map(d => d.range),
+                                datasets: [{
+                                  data: analytics.progress_distribution.map(d => d.count),
+                                  backgroundColor: ['#4F46E5', '#818CF8', '#C7D2FE', '#E0E7FF'],
+                                  borderWidth: 0,
+                                  hoverOffset: 4
+                                }]
+                              }}
+                              options={doughnutOptions}
+                            />
+                          ) : (
+                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}>
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📊</div>
+                                <div>No progress distribution data available</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </ChartCard>
+
+                      {/* Statistics by Content Type */}
+                      <ChartCard title="Statistiques par type de contenu" subtitle="Doughnut / Pie chart">
+                        <div style={{ height: '300px', position: 'relative' }}>
+                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📈</div>
+                              <div>Chart placeholder</div>
+                            </div>
+                          </div>
+                        </div>
+                      </ChartCard>
+                    </div>
+
+                    {/* Formations Statistics Table */}
+                    <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                      <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#1F2937', marginBottom: '1.5rem' }}>
+                        Statistiques de formations
+                      </h3>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#E5E7EB' }}>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Titre de la formation</th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Créé par</th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscribers</th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Completed</th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Completion rate</th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Avg. Score</th>
+                              <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analytics.course_statistics && analytics.course_statistics.length > 0 ? (
+                              analytics.course_statistics.map((course: any, index: number) => (
+                                <tr key={course.id || index} style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                  <td style={{ padding: '0.75rem', color: '#1F2937' }}>
+                                    {getSafeString(course.title, 'Lorem ipsum dolor sit amet, consectetur')}
+                                  </td>
+                                  <td style={{ padding: '0.75rem', color: '#6B7280' }}>
+                                    {getSafeString(course.creator, 'Hannah Arendt')}
+                                  </td>
+                                  <td style={{ padding: '0.75rem', color: '#1F2937' }}>
+                                    {getSafeNumber(course.total_subscribers || course.subscribers, 10)} subsc.
+                                  </td>
+                                  <td style={{ padding: '0.75rem', color: '#1F2937' }}>
+                                    {getSafeNumber(course.completed_count || course.completed, 4)}
+                                  </td>
+                                  <td style={{ padding: '0.75rem' }}>
+                                    <span style={{ 
+                                      color: getSafeNumber(course.completion_rate, 40) >= 70 ? '#10B981' : '#EF4444',
+                                      fontWeight: '500'
+                                    }}>
+                                      {getSafeNumber(course.completion_rate, 40)} %
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.75rem', color: '#1F2937' }}>
+                                    {getSafeNumber(course.average_score || course.avg_score, 76.3)}%
+                                  </td>
+                                  <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: '1.25rem' }}>⋯</button>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <>
+                                {[1, 2, 3, 4].map((i) => (
+                                  <tr key={i} style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: i % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                    <td style={{ padding: '0.75rem', color: '#1F2937' }}>Lorem ipsum dolor sit amet, consectetur</td>
+                                    <td style={{ padding: '0.75rem', color: '#6B7280' }}>{i % 2 === 0 ? 'Hannah Arendt' : 'Bell Hooks'}</td>
+                                    <td style={{ padding: '0.75rem', color: '#1F2937' }}>{i === 3 ? '14' : '10'} subsc.</td>
+                                    <td style={{ padding: '0.75rem', color: '#1F2937' }}>{i === 2 ? '8' : i === 3 ? '6' : '4'}</td>
+                                    <td style={{ padding: '0.75rem' }}>
+                                      <span style={{ color: i === 2 ? '#10B981' : '#EF4444', fontWeight: '500' }}>
+                                        {i === 2 ? '80' : '40'} %
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '0.75rem', color: '#1F2937' }}>76.3%</td>
+                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: '1.25rem' }}>⋯</button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                     <h3 style={{ color: '#4B5563', marginBottom: '0.5rem' }}>Analytics Dashboard</h3>
