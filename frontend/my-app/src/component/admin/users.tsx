@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import SignUp from '../user/sigUnp';
 
 interface User {
   id: number;
@@ -55,41 +56,50 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
   };
 
   const filteredUsers = users.users.filter(user => {
-    const matchesStatus = statusFilter === 'all' || 
+    const matchesStatus = statusFilter === 'all' ||
       (statusFilter === 'active' && user.is_active) ||
       (statusFilter === 'inactive' && !user.is_active);
-    
-    const matchesPrivilege = privilegeFilter === 'all' || 
+
+    const matchesPrivilege = privilegeFilter === 'all' ||
       user.privilege.toLowerCase() === privilegeFilter.toLowerCase();
-    
+
     return matchesStatus && matchesPrivilege;
   });
+  const [showSignUp, setShowSignUp] = useState(false);
+
+  const handleNewUser = () => {
+    setShowSignUp(true);
+  };
+
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
       <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         {/* Header with filters and button */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1F2937', margin: 0 }}>
-              {filteredUsers.length} utilisateurs ajoutés
-            </h2>
-            
-          </div>
-          
+        {showSignUp ? <SignUp /> : <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1F2937', margin: 0 }}>
+                {filteredUsers.length} utilisateurs ajoutés
+              </h2>
+
+            </div>
+
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               {/* Status Filter */}
-              <select 
+              <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                style={{ 
-                  backgroundColor: '#EEF2FF', 
-                  border: '1px solid #C7D2FE', 
-                  borderRadius: '6px', 
-                  padding: '0.5rem 2rem 0.5rem 0.75rem', 
-                  fontSize: '0.875rem', 
-                  fontWeight: '500', 
-                  color: '#4338CA', 
+                style={{
+                  backgroundColor: '#EEF2FF',
+                  border: '1px solid #C7D2FE',
+                  borderRadius: '6px',
+                  padding: '0.5rem 2rem 0.5rem 0.75rem',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  color: '#4338CA',
                   cursor: 'pointer',
                   appearance: 'none',
                   backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
@@ -106,14 +116,14 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
               <select
                 value={privilegeFilter}
                 onChange={(e) => setPrivilegeFilter(e.target.value)}
-                style={{ 
-                  backgroundColor: '#EEF2FF', 
-                  border: '1px solid #C7D2FE', 
-                  borderRadius: '6px', 
-                  padding: '0.5rem 2rem 0.5rem 0.75rem', 
-                  fontSize: '0.875rem', 
-                  fontWeight: '500', 
-                  color: '#4338CA', 
+                style={{
+                  backgroundColor: '#EEF2FF',
+                  border: '1px solid #C7D2FE',
+                  borderRadius: '6px',
+                  padding: '0.5rem 2rem 0.5rem 0.75rem',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  color: '#4338CA',
                   cursor: 'pointer',
                   appearance: 'none',
                   backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
@@ -126,28 +136,29 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
                 <option value="F">Formateur</option>
                 <option value="Ap">Apprenant</option>
               </select>
-          <button 
-            style={{ 
-              backgroundColor: '#4338CA', 
-              color: 'white', 
-              border: 'none', 
-              padding: '0.625rem 1.25rem', 
-              borderRadius: '6px', 
-              fontSize: '0.9375rem', 
-              fontWeight: '500', 
-              cursor: 'pointer', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.5rem',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3730A3'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
-          >
-            + Nouvel utilisateur
-          </button>
+              <button
+                style={{
+                  backgroundColor: '#4338CA',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.625rem 1.25rem',
+                  borderRadius: '6px',
+                  fontSize: '0.9375rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3730A3'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
+                onClick={handleNewUser}
+              >
+                + Nouvel utilisateur
+              </button>
             </div>
-        </div>
+          </div>
 
         {/* Users Table */}
         <div style={{ overflowX: 'auto' }}>
@@ -167,10 +178,10 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
             </thead>
             <tbody>
               {filteredUsers.map((user, index) => (
-                <tr 
-                  key={user.id} 
-                  style={{ 
-                    borderBottom: '1px solid #E5E7EB', 
+                <tr
+                  key={user.id}
+                  style={{
+                    borderBottom: '1px solid #E5E7EB',
                     backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB',
                     transition: 'background-color 0.2s'
                   }}
@@ -181,13 +192,13 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
                   <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
                   <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
                   <td style={{ padding: '0.75rem' }}>
-                    <span style={{ 
-                      backgroundColor: getPrivilegeColor(user.privilege), 
-                      color: 'white', 
-                      padding: '0.25rem 0.75rem', 
-                      borderRadius: '12px', 
-                      fontSize: '0.8125rem', 
-                      fontWeight: '500' 
+                    <span style={{
+                      backgroundColor: getPrivilegeColor(user.privilege),
+                      color: 'white',
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '12px',
+                      fontSize: '0.8125rem',
+                      fontWeight: '500'
                     }}>
                       {getPrivilegeLabel(user.privilege)}
                     </span>
@@ -202,23 +213,23 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
                     {user.subscription_count}
                   </td>
                   <td style={{ padding: '0.75rem' }}>
-                    <span style={{ 
-                      color: user.is_active ? '#10B981' : '#6B7280', 
-                      fontWeight: '500' 
+                    <span style={{
+                      color: user.is_active ? '#10B981' : '#6B7280',
+                      fontWeight: '500'
                     }}>
                       {user.is_active ? 'Actif' : 'Inactif'}
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
-                    <button 
+                    <button
                       onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
-                      style={{ 
-                        background: 'none', 
-                        border: 'none', 
-                        cursor: 'pointer', 
-                        color: '#6B7280', 
-                        fontSize: '1.25rem', 
-                        padding: '0.25rem' 
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6B7280',
+                        fontSize: '1.25rem',
+                        padding: '0.25rem'
                       }}
                     >
                       ⋯
@@ -328,15 +339,15 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
 
         {/* Load More Button */}
         <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-          <button 
-            style={{ 
-              backgroundColor: '#8B5A3C', 
-              color: 'white', 
-              border: 'none', 
-              padding: '0.75rem 2rem', 
-              borderRadius: '6px', 
-              fontSize: '0.9375rem', 
-              fontWeight: '500', 
+          <button
+            style={{
+              backgroundColor: '#8B5A3C',
+              color: 'white',
+              border: 'none',
+              padding: '0.75rem 2rem',
+              borderRadius: '6px',
+              fontSize: '0.9375rem',
+              fontWeight: '500',
               cursor: 'pointer',
               transition: 'background-color 0.2s'
             }}
@@ -346,6 +357,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users }) => {
             Afficher plus de résultat
           </button>
         </div>
+        </>}
       </div>
     </div>
   );

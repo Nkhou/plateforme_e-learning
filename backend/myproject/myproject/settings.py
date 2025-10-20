@@ -35,6 +35,7 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '0.0.0.0',
+    '51.178.87.234',
     'backend',  # Docker service name
     # Add your production domain here
     os.getenv('DOMAIN_NAME', ''),  # e.g., 'yourdomain.com'
@@ -82,7 +83,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",      # React dev server
     "http://127.0.0.1:3000",      # React dev server
     "http://172.21.0.5:3000",     # Docker internal IP
-    "http://frontend:3000",       # Docker service name
+    "http://frontend:3000",
+    "http://51.178.87.234:3000", # Docker service name
 ]
 
 # Allow credentials
@@ -116,21 +118,6 @@ if DEBUG:
 
 BASE_URL = 'http://localhost:8000'  # For development
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
 # Custom User Model
 AUTH_USER_MODEL = 'user.CustomUser'
 
@@ -324,6 +311,8 @@ if USE_SSL or PRODUCTION:
     CORS_ALLOWED_ORIGINS = [
         f"https://{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
         f"https://www.{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
+        f"https://{os.getenv('FRONTEND_DOMAIN', '51.178.87.234:3000')}",
+        f"https://www.{os.getenv('FRONTEND_DOMAIN', '51.178.87.234:3000')}",
     ]
     
     CSRF_TRUSTED_ORIGINS = [
@@ -331,6 +320,11 @@ if USE_SSL or PRODUCTION:
         f"https://www.{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
         f"https://{os.getenv('DOMAIN_NAME', 'localhost')}",
         f"https://www.{os.getenv('DOMAIN_NAME', 'localhost')}",
+
+        f"https://{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
+        f"https://www.{os.getenv('FRONTEND_DOMAIN', 'localhost:3000')}",
+        f"https://{os.getenv('DOMAIN_NAME', '51.178.87.234')}",
+        f"https://www.{os.getenv('DOMAIN_NAME', '51.178.87.234')}",
     ]
 else:
     # Development HTTP origins
@@ -338,14 +332,17 @@ else:
         "http://localhost:3000",      # React default port
         "http://127.0.0.1:3000",      # React default port
         "http://localhost:5173",      # Vite default port
-        "http://127.0.0.1:5173",      # Vite default port
+        "http://127.0.0.1:5173",     # Vite default port
+        "http://51.178.87.234:3000",
     ]
 
     CSRF_TRUSTED_ORIGINS = [
         "http://localhost:3000",
+        "http://51.178.87.234:3000",
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        
     ]
 
 CORS_ALLOW_CREDENTIALS = True

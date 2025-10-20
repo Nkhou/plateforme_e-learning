@@ -122,7 +122,6 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses }) => {
               <option value="draft">Brouillon</option>
               <option value="archived">Archivé</option>
             </select>
-
             {/* Category/Department Filter */}
             <select
               value={categoryFilter}
