@@ -19,7 +19,7 @@ from .views import (
     UpdateQCMContentView, ModuleStatusUpdateView, ContentStatusUpdateView,
     
     # QCM Views
-    SubmitQCM,
+    SubmitQCM,CourseList,
     
     # Time Tracking Views - ADD THESE
     CourseTimeStatsView, TimeTrackingRecordView
@@ -121,6 +121,9 @@ urlpatterns = [
     path('admin/analytics/', SystemAnalyticsView.as_view(), name='admin-analytics'),
     path('admin/contents/', ContentManagementView.as_view(), name='admin-contents'),
     path('admin/system-health/', SystemHealthView.as_view(), name='system-health'),
+    path('admin/CourseList/', CourseList.as_view(), name='CourseList'),
+
+    # In your CourseList view
     # Content completion endpoints
     path('courses/<int:pk>/complete-content/', views.MarkContentCompletedView.as_view(), name='complete-content'),
     path('courses/<int:pk>/check-completion/', views.CheckCourseCompletionView.as_view(), name='check-completion'),
@@ -128,5 +131,4 @@ urlpatterns = [
     # path('api/courses/<int:pk>/record-time/', views.TimeTrackingRecordView.as_view(), name='record-time'),
         # Include course routes
     path('api/search/', views.GlobalSearchView.as_view(), name='global-search'),
-    path('', include(router.urls)),
 ]

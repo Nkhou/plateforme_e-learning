@@ -147,7 +147,7 @@ const Cours = () => {
 
     const handleCardClick = (courseId: number) => {
         setSelectedCourseId(courseId);
-        navigate(`/mycreatecours/${courseId}`);
+        navigate(`/formations/${courseId}`);
         setShowCourseDetail(true);
     };
 

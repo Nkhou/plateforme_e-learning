@@ -246,6 +246,7 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+    'EXCEPTION_HANDLER': 'user.exceptions.custom_exception_handler',
 }
 
 # JWT Configuration

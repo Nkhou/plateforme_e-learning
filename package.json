@@ -2,7 +2,7 @@
   "dependencies": {
     "@coreui/icons": "^3.0.1",
     "express": "^5.1.0",
+    "lucide-react": "^0.546.0",
     "mdb-react-ui-kit": "^9.0.0"
   }
-  
 }

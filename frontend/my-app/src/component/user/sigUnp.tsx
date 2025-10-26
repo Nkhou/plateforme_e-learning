@@ -288,7 +288,7 @@ function SignUp() {
     };
 
     const titleStyle: React.CSSProperties = {
-        textAlign: 'center',
+        // textAlign: 'center',
         marginBottom: '2rem',
         fontSize: '24px',
         color: '#333'
@@ -297,11 +297,11 @@ function SignUp() {
     return (
         <div style={containerStyle}>
             <div style={cardStyle}>
-                <h2 style={titleStyle}>Register</h2>
+                <h2 style={titleStyle}>Nouveau</h2>
 
                 <form onSubmit={handleSubmit}>
                     <div style={formGroupStyle}>
-                        <label style={labelStyle}>Registration Type:</label>
+                        <label style={labelStyle}>Nomber d'utilisateurs</label>
                         <div style={radioContainerStyle}>
                             <div style={radioItemStyle}>
                                 <input
@@ -312,7 +312,7 @@ function SignUp() {
                                     checked={!toggle}
                                     onChange={(e) => setToggle(e.target.value === "more_than_one")}
                                 />
-                                <label htmlFor="singleUser">Register one user</label>
+                                <label htmlFor="singleUser">Ajouter un utilisateur</label>
                             </div>
                             <div style={radioItemStyle}>
                                 <input
@@ -323,9 +323,92 @@ function SignUp() {
                                     checked={toggle}
                                     onChange={(e) => setToggle(e.target.value === "more_than_one")}
                                 />
-                                <label htmlFor="multipleUsers">Register multiple users</label>
+                                <label htmlFor="multipleUsers">Ajouter des utilisateur multiples</label>
                             </div>
                         </div>
+
+
+                        
+                        
+                    </div>
+                    <div style={formGroupStyle}>
+                        <label style={labelStyle}>Rôle de(s) utilisateur(s)</label>
+                        <div style={radioContainerStyle}>
+                            
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="userRole"
+                                    id="roleLearner"
+                                    value="AP"
+                                    checked={selectedRole === 'AP'}
+                                    onChange={(e) => setSelectedRole(e.target.value)}
+                                />
+                                <label htmlFor="roleLearner">Apprenant</label>
+                            </div>
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="userRole"
+                                    id="roleTrainer"
+                                    value="F"
+                                    checked={selectedRole === 'F'}
+                                    onChange={(e) => setSelectedRole(e.target.value)}
+                                />
+                                <label htmlFor="roleTrainer">Formateur</label>
+                            </div>
+                            <div style={radioItemStyle}>
+                                <input
+                                    type="radio"
+                                    name="userRole"
+                                    id="roleAdmin"
+                                    value="A"
+                                    checked={selectedRole === 'A'}
+                                    onChange={(e) => setSelectedRole(e.target.value)}
+                                />
+                                <label htmlFor="roleAdmin">Admin</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div style={formGroupStyle}>
+                        <label style={labelStyle} htmlFor="department">Department:</label>
+                        <select
+                            id="department"
+                            style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: '2px solid #e1e5e9',
+                                borderRadius: '8px',
+                                fontSize: '16px',
+                                backgroundColor: 'white',
+                                color: '#2d3748',
+                                transition: 'all 0.2s ease',
+                                outline: 'none',
+                                cursor: 'pointer',
+                                appearance: 'none',
+                                // backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                                // backgroundRepeat: 'no-repeat',
+                                // backgroundPosition: 'right 16px center',
+                                // backgroundSize: '16px'
+                            }}
+                            value={selectedDepartment}
+                            onChange={(e) => setSelectedDepartment(e.target.value)}
+                            required
+                            onFocus={(e) => {
+                                e.target.style.borderColor = '#3b82f6';
+                                e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                            }}
+                            onBlur={(e) => {
+                                e.target.style.borderColor = '#e1e5e9';
+                                e.target.style.boxShadow = 'none';
+                            }}
+                        >
+                            <option value="F">FINANCE</option>
+                            <option value="H">Human RESOURCES</option>
+                            <option value="M">MARKETING</option>
+                            <option value="O">OPERATIONS/PRODUCTION</option>
+                            <option value="S">Sales</option>
+                        </select>
                     </div>
 
                     {toggle ? (
@@ -381,85 +464,9 @@ function SignUp() {
                         </>
                     )}
 
-                    <div style={formGroupStyle}>
-                        <label style={labelStyle}>User Role:</label>
-                        <div style={radioContainerStyle}>
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="userRole"
-                                    id="roleLearner"
-                                    value="AP"
-                                    checked={selectedRole === 'AP'}
-                                    onChange={(e) => setSelectedRole(e.target.value)}
-                                />
-                                <label htmlFor="roleLearner">Apprenant</label>
-                            </div>
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="userRole"
-                                    id="roleTrainer"
-                                    value="F"
-                                    checked={selectedRole === 'F'}
-                                    onChange={(e) => setSelectedRole(e.target.value)}
-                                />
-                                <label htmlFor="roleTrainer">Formateur</label>
-                            </div>
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="userRole"
-                                    id="roleAdmin"
-                                    value="A"
-                                    checked={selectedRole === 'A'}
-                                    onChange={(e) => setSelectedRole(e.target.value)}
-                                />
-                                <label htmlFor="roleAdmin">Admin</label>
-                            </div>
-                        </div>
-                    </div>
+                    
 
-                    <div style={formGroupStyle}>
-                        <label style={labelStyle} htmlFor="department">Department:</label>
-                        <select
-                            id="department"
-                            style={{
-                                width: '100%',
-                                padding: '12px 16px',
-                                border: '2px solid #e1e5e9',
-                                borderRadius: '8px',
-                                fontSize: '16px',
-                                backgroundColor: 'white',
-                                color: '#2d3748',
-                                transition: 'all 0.2s ease',
-                                outline: 'none',
-                                cursor: 'pointer',
-                                appearance: 'none',
-                                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'right 16px center',
-                                backgroundSize: '16px'
-                            }}
-                            value={selectedDepartment}
-                            onChange={(e) => setSelectedDepartment(e.target.value)}
-                            required
-                            onFocus={(e) => {
-                                e.target.style.borderColor = '#3b82f6';
-                                e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.borderColor = '#e1e5e9';
-                                e.target.style.boxShadow = 'none';
-                            }}
-                        >
-                            <option value="F">FINANCE</option>
-                            <option value="H">Human RESOURCES</option>
-                            <option value="M">MARKETING</option>
-                            <option value="O">OPERATIONS/PRODUCTION</option>
-                            <option value="S">Sales</option>
-                        </select>
-                    </div>
+                    
 
                     <div style={{ textAlign: 'center' }}>
                         <button

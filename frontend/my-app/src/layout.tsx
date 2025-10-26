@@ -29,7 +29,28 @@ interface SearchResult {
   course_id?: number;
   module_id?: number;
 }
-
+const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
+  <button
+    onClick={onClick}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
+      backgroundColor: active ? '#4338CA' : 'transparent',
+      color: active ? 'white' : '#A0AEC0',
+      border: 'none',
+      padding: '0.625rem 1rem',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      fontSize: '0.9375rem',
+      fontWeight: '500',
+      transition: 'all 0.2s ease'
+    }}
+  >
+    <span style={{ fontSize: '1.125rem' }}>{icon}</span>
+    {label}
+  </button>
+);
 const AuthGuard = ({ children }: AuthGuardProps) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -42,24 +63,27 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const [showSearchCard, setShowSearchCard] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchCardRef = useRef<HTMLDivElement>(null);
+  const [activeNavItem, setActiveNavItem] = useState('dashboard');
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
+  const handleClickOutside = (event: MouseEvent) => {
+    const target = event.target as Node;
 
-      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
-        setOpen(false);
-        setOpenNotif(false);
-      }
-      if (searchCardRef.current && !searchCardRef.current.contains(target) &&
-        !(target as Element).closest('.search-bar')) {
-        setShowSearchCard(false);
-      }
-    };
+    if (dropdownRef.current && !dropdownRef.current.contains(target)) {
+      setOpen(false);
+      setOpenNotif(false);
+    }
+    
+    // Don't close if clicking inside the search card (including buttons)
+    if (searchCardRef.current && !searchCardRef.current.contains(target) &&
+      !(target as Element).closest('.search-bar')) {
+      setShowSearchCard(false);
+    }
+  };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, []);
 
   // Close search card when pressing Escape key
   useEffect(() => {
@@ -155,7 +179,44 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
     checkAuthentication();
   }, [navigate, location]);
+  const handleNavigation = (item: string) => {
+    // update active nav item
+    setActiveNavItem(item);
 
+    // read privilege from current user state
+    const privilege = user?.privilege;
+
+    switch (item) {
+      case 'dashboard':
+        if (privilege === 'A' || privilege === 'Admin') {
+          navigate('/admin');
+        } else if (privilege === 'F') {
+          navigate('/cours');
+        } else {
+          navigate('/dashboard');
+        }
+        break;
+      case 'formations':
+        navigate('/formations');
+        break;
+      case 'utilisateurs':
+        navigate('/utilisateurs');
+        break;
+      case 'messages':
+        navigate('/messages');
+        break;
+      case 'favoris':
+        navigate('/favoris');
+        break;
+      default:
+        navigate('/dashboard');
+        break;
+    }
+    // setActiveNavItem(item);
+    // if (item === 'dashboard') {
+    //   setActiveTab('overview');
+    // }
+  };
   const handleLogOut = async () => {
     try {
       await api.post('logout/', {}, {
@@ -214,7 +275,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 onSearchResultClick={handleSearchResultClick}
                 placeholder="Que cherchez-vous?"
                 className="w-100"
-              // autoFocus={true}
+              autoFocus={true}
               />
               <div className="text-muted mt-3">
                 {/* <small>
@@ -387,10 +448,18 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               )}
             </div>
           </div>
+      </nav>
+        <nav style={{ backgroundColor: '#12114a', padding: '0.80rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', maxWidth: '1400px', margin: '0 auto' }}>
+          <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
+          <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
+          <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
+          <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
+          <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
+        </div>
         </nav>
-
         {/* Page Content */}
-        <div className="flex-grow-1 p-3" style={{ background: '#f8f9fa' }}>
+        <div className="flex-grow-1 " style={{ background: '#f8f9fa' }}>
           {children}
         </div>
       </div>

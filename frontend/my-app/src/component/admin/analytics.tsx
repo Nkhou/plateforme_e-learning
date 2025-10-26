@@ -24,6 +24,7 @@ interface AnalyticsDashboardProps {
 }
 
 const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ analytics }) => {
+  console.log('Progress distribution+++++++++++++++++++++++++');
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -75,6 +76,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ analytics }) =>
               <h5 style={{ color: '#052c65' }}>Progress Distribution</h5>
             </div>
             <div className="card-body" style={{ height: '300px' }}>
+              <h6 className="mb-3">Total ranges: {analytics.progress_distribution.length}</h6>
               <Pie
                 data={{
                   labels: analytics.progress_distribution.map(item => item.range),

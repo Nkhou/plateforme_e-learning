@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/api';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -24,20 +24,46 @@ interface SearchComponentProps {
   onSearchResultClick?: (result: SearchResult) => void;
   placeholder?: string;
   className?: string;
+  autoFocus?: boolean;
 }
 
 const SearchComponent: React.FC<SearchComponentProps> = ({
   onSearchResultClick,
   placeholder = "Que cherchez vous ?",
-  className = ""
+  className = "",
+  autoFocus = false
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [selectedType, setSelectedType] = useState<'all' | 'course' | 'module'>('all');
+  const [selectedIndex, setSelectedIndex] = useState(-1);
 
   const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    if (autoFocus && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [autoFocus]);
+
+  // Reset selected index when results change
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [searchResults, selectedType]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    if (selectedIndex >= 0 && resultRefs.current[selectedIndex]) {
+      resultRefs.current[selectedIndex]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [selectedIndex]);
 
   // Debounced search function
   const debouncedSearch = useCallback(
@@ -81,6 +107,34 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
     setSearchTerm(event.target.value);
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const courses = searchResults.filter(result => result.type === 'course');
+    const modules = searchResults.filter(result => result.type === 'module');
+    
+    // Filter based on selected type
+    let visibleResults: SearchResult[] = [];
+    if (selectedType === 'all') {
+      visibleResults = [...courses, ...modules];
+    } else if (selectedType === 'course') {
+      visibleResults = courses;
+    } else if (selectedType === 'module') {
+      visibleResults = modules;
+    }
+    
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSelectedIndex((prev) => 
+        prev < visibleResults.length - 1 ? prev + 1 : prev
+      );
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+    } else if (event.key === 'Enter' && selectedIndex >= 0 && visibleResults[selectedIndex]) {
+      event.preventDefault();
+      handleResultClick(visibleResults[selectedIndex]);
+    }
+  };
+
   const handleTypeChange = (type: 'all' | 'course' | 'module') => {
     setSelectedType(type);
   };
@@ -118,13 +172,14 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
       <div className="search-form">
         <div className="input-group" style={{ position: 'relative', width: '100%' }}>
           <input
+            ref={inputRef}
             type="text"
             className="search-input form-control"
             placeholder={placeholder}
             value={searchTerm}
             onChange={handleSearchChange}
+            onKeyDown={handleKeyDown}
             onFocus={() => setShowResults(true)}
-            onBlur={() => setTimeout(() => setShowResults(false), 200)}
             style={{
               fontSize: '0.9375rem',
               padding: '0.875rem 1rem 0.875rem 3rem',
@@ -136,9 +191,9 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
             }}
           />
-          <span 
-            className="search-icon" 
-            style={{ 
+          <span
+            className="search-icon"
+            style={{
               position: 'absolute',
               left: '1.25rem',
               top: '50%',
@@ -156,7 +211,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
 
       {/* Search Results */}
       {showResults && (searchTerm.trim() || isLoading) && (
-        <div 
+        <div
           className="position-absolute start-0 mt-2 shadow-lg"
           style={{
             borderRadius: '16px',
@@ -180,7 +235,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
           ) : searchResults.length > 0 ? (
             <div className="search-results-list">
               {/* Search Input Display */}
-              <div 
+              <div
                 className="p-4"
                 style={{
                   backgroundColor: 'white',
@@ -189,7 +244,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <span style={{ fontSize: '1.125rem', color: '#6B7280' }}>🔍</span>
-                  <span 
+                  <span
                     style={{
                       fontSize: '0.9375rem',
                       color: '#1F2937',
@@ -202,7 +257,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               </div>
 
               {/* Filter Buttons */}
-              <div 
+              <div
                 className="p-4"
                 style={{
                   backgroundColor: 'white',
@@ -211,7 +266,10 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               >
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                   <button
-                    onClick={() => handleTypeChange('all')}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleTypeChange('all');
+                    }}
                     style={{
                       padding: '0.5rem 1.25rem',
                       borderRadius: '20px',
@@ -227,7 +285,10 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                     Tous
                   </button>
                   <button
-                    onClick={() => handleTypeChange('course')}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleTypeChange('course');
+                    }}
                     style={{
                       padding: '0.5rem 1.25rem',
                       borderRadius: '20px',
@@ -243,7 +304,10 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                     Formations
                   </button>
                   <button
-                    onClick={() => handleTypeChange('module')}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleTypeChange('module');
+                    }}
                     style={{
                       padding: '0.5rem 1.25rem',
                       borderRadius: '20px',
@@ -264,13 +328,13 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               {/* Formations Section */}
               {(selectedType === 'all' || selectedType === 'course') && courses.length > 0 && (
                 <div>
-                  <div 
+                  <div
                     className="px-4 py-2"
                     style={{
                       backgroundColor: 'white'
                     }}
                   >
-                    <h6 
+                    <h6
                       style={{
                         fontSize: '0.8125rem',
                         fontWeight: '600',
@@ -284,25 +348,28 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                     </h6>
                   </div>
                   <div className="p-0">
-                    {courses.map((course) => (
+                    {courses.map((course, index) => (
                       <div
                         key={`course-${course.id}`}
+                        ref={(el) => { resultRefs.current[index] = el; }}
                         className="px-4 py-3"
                         onClick={() => handleResultClick(course)}
                         style={{
                           transition: 'background-color 0.2s ease',
                           cursor: 'pointer',
-                          backgroundColor: 'white'
+                          backgroundColor: selectedIndex === index ? '#F3F4F6' : 'white'
                         }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#F9FAFB';
+                        onMouseEnter={() => {
+                          setSelectedIndex(index);
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'white';
+                          if (selectedIndex === index) {
+                            e.currentTarget.style.backgroundColor = '#F3F4F6';
+                          }
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          <div 
+                          <div
                             style={{
                               width: '32px',
                               height: '32px',
@@ -320,7 +387,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                             F
                           </div>
                           <div style={{ flex: 1 }}>
-                            <h6 
+                            <h6
                               style={{
                                 fontSize: '0.9375rem',
                                 fontWeight: '400',
@@ -330,7 +397,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                             >
                               {course.title}
                             </h6>
-                            <p 
+                            <p
                               style={{
                                 fontSize: '0.8125rem',
                                 color: '#9CA3AF',
@@ -350,13 +417,13 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               {/* Modules Section */}
               {(selectedType === 'all' || selectedType === 'module') && modules.length > 0 && (
                 <div>
-                  <div 
+                  <div
                     className="px-4 py-2"
                     style={{
                       backgroundColor: 'white'
                     }}
                   >
-                    <h6 
+                    <h6
                       style={{
                         fontSize: '0.8125rem',
                         fontWeight: '600',
@@ -370,71 +437,77 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                     </h6>
                   </div>
                   <div className="p-0">
-                    {modules.map((module) => (
-                      <div
-                        key={`module-${module.id}`}
-                        className="px-4 py-3"
-                        onClick={() => handleResultClick(module)}
-                        style={{
-                          transition: 'background-color 0.2s ease',
-                          cursor: 'pointer',
-                          backgroundColor: 'white'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#F9FAFB';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'white';
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          <div 
-                            style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
-                              backgroundColor: '#BEF264',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#365314',
-                              fontWeight: '600',
-                              fontSize: '0.875rem',
-                              flexShrink: 0
-                            }}
-                          >
-                            M
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <h6 
+                    {modules.map((module, index) => {
+                      const moduleIndex = courses.length + index;
+                      return (
+                        <div
+                          key={`module-${module.id}`}
+                          ref={(el) => { resultRefs.current[moduleIndex] = el; }}
+                          className="px-4 py-3"
+                          onClick={() => handleResultClick(module)}
+                          style={{
+                            transition: 'background-color 0.2s ease',
+                            cursor: 'pointer',
+                            backgroundColor: selectedIndex === moduleIndex ? '#F3F4F6' : 'white'
+                          }}
+                          onMouseEnter={() => {
+                            setSelectedIndex(moduleIndex);
+                          }}
+                          onMouseLeave={(e) => {
+                            if (selectedIndex === moduleIndex) {
+                              e.currentTarget.style.backgroundColor = '#F3F4F6';
+                            }
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div
                               style={{
-                                fontSize: '0.9375rem',
-                                fontWeight: '400',
-                                color: '#1F2937',
-                                margin: '0 0 0.25rem 0'
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '8px',
+                                backgroundColor: '#BEF264',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#365314',
+                                fontWeight: '600',
+                                fontSize: '0.875rem',
+                                flexShrink: 0
                               }}
                             >
-                              {module.title}
-                            </h6>
-                            <p 
-                              style={{
-                                fontSize: '0.8125rem',
-                                color: '#9CA3AF',
-                                margin: 0
-                              }}
-                            >
-                              • {module.element_count || 2} elements
-                            </p>
+                              M
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <h6
+                                style={{
+                                  fontSize: '0.9375rem',
+                                  fontWeight: '400',
+                                  color: '#1F2937',
+                                  margin: '0 0 0.25rem 0'
+                                }}
+                              >
+                                {module.title}
+                              </h6>
+                              <p
+                                style={{
+                                  fontSize: '0.8125rem',
+                                  color: '#9CA3AF',
+                                  margin: 0
+                                }}
+                              >
+                                • {module.element_count || 2} elements
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
               {/* Footer Navigation */}
-              <div 
+              <div
                 className="px-4 py-3"
                 style={{
                   backgroundColor: '#F9FAFB',
@@ -453,9 +526,9 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span 
-                      style={{ 
-                        fontSize: '0.6875rem', 
+                    <span
+                      style={{
+                        fontSize: '0.6875rem',
                         color: '#9CA3AF',
                         backgroundColor: 'white',
                         padding: '0.125rem 0.375rem',
@@ -471,20 +544,20 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               </div>
             </div>
           ) : searchTerm.trim() ? (
-            <div 
+            <div
               className="text-center p-5"
               style={{
                 backgroundColor: 'white'
               }}
             >
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
-              <p 
+              <p
                 className="text-muted mb-2"
                 style={{ fontSize: '0.9375rem', fontWeight: '500', color: '#374151' }}
               >
                 No results found for "{searchTerm}"
               </p>
-              <small 
+              <small
                 className="text-muted"
                 style={{ fontSize: '0.8125rem', color: '#9CA3AF' }}
               >

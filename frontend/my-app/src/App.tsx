@@ -13,7 +13,8 @@ import Cours from "./pages/courses";
 import AdminDashboard from "./pages/AdminDashboard";
 import CourseDetailShow from "./component/courses/apprent/CourseDetailShow";
 import CourseDetail from "./component/courses/formateur/CourseDetail";
-
+// import { Import } from "lucide-react";
+import CoursesManagement from "./component/admin/courses";
 function App() {
   axios.defaults.withCredentials = true;
 
@@ -31,6 +32,12 @@ function App() {
             <AdminDashboard />
           </AuthGuard>
         } />
+        <Route path="/formations" element={
+          <AuthGuard>
+            <CoursesManagement/>
+          </AuthGuard>
+        }
+        />
         <Route
           path="/dashboard"
           element={
@@ -41,7 +48,7 @@ function App() {
           }
         />
         <Route
-          path="/mycreatecours/:id"
+          path="/formations/:id"
           element={
             <AuthGuard>
               <CourseDetail />

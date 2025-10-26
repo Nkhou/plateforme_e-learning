@@ -315,6 +315,7 @@ class Module(models.Model):
             self.min_required_time = self.calculate_min_required_time()
         super().save(*args, **kwargs)
 
+# models.py - Ajouter ces champs au modèle CourseContent
 class CourseContent(models.Model):
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='contents', null=True, blank=True)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -322,6 +323,7 @@ class CourseContent(models.Model):
     caption = models.CharField(max_length=200, blank=True)
     status = models.IntegerField(choices=COURSE_STATUS_CHOICES, default=1)
     order = models.PositiveIntegerField(default=0)
+    
     # NEW FIELDS - Added for time tracking
     estimated_duration = models.IntegerField(
         default=0,
@@ -333,6 +335,13 @@ class CourseContent(models.Model):
         validators=[MinValueValidator(0)],
         help_text="Minimum time required for content in minutes"
     )
+    
+    # NEW FIELDS - Added for statistics
+    views_count = models.PositiveIntegerField(default=0, verbose_name="Nombre de vues")
+    completed_count = models.PositiveIntegerField(default=0, verbose_name="Nombre de complétions")
+    average_rating = models.FloatField(default=0, verbose_name="Note moyenne")
+    completion_rate = models.FloatField(default=0, verbose_name="Taux de complétion")
+    
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -351,6 +360,19 @@ class CourseContent(models.Model):
     def status_display(self):
         return dict(COURSE_STATUS_CHOICES).get(self.status, 'Unknown')
 
+    def update_completion_rate(self):
+        """Update completion rate based on subscriptions"""
+        total_subscriptions = Subscription.objects.filter(
+            course=self.module.course,
+            is_active=True
+        ).count()
+        
+        if total_subscriptions > 0:
+            completed_count = self.completed_by_users.filter(
+                subscription__is_active=True
+            ).count()
+            self.completion_rate = (completed_count / total_subscriptions) * 100
+            self.save()
 class ContentProgress(models.Model):
     enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, related_name='content_progress')
     content = models.ForeignKey(CourseContent, on_delete=models.CASCADE)
