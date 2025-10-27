@@ -511,7 +511,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%' }}>
       {/* Top Navigation Bar */}
-      <nav style={{ backgroundColor: '#12114a', padding: '0.75rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+      {/* <nav style={{ backgroundColor: '#12114a', padding: '0.75rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', maxWidth: '1400px', margin: '0 auto' }}>
           <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
           <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
@@ -519,7 +519,7 @@ const AdminDashboard: React.FC = () => {
           <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
           <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
         </div>
-      </nav>
+      </nav> */}
 
       {/* Breadcrumb and Title Header */}
       <div style={{ backgroundColor: '#212068', color: 'white', padding: '1.25rem 2rem' }}>
@@ -795,7 +795,7 @@ const AdminDashboard: React.FC = () => {
       )}
 
       {/* Users Section */}
-      {activeNavItem === 'utilisateurs' && users && <UsersManagement users={users} />}
+      {/* {activeNavItem === 'utilisateurs' && users && <UsersManagement users={users} />} */}
 
       {/* Courses Section */}
       {/* {activeNavItem === 'formations' && courses && <CoursesManagement courses={courses} />} */}

@@ -16,7 +16,7 @@ from .views import (
     # Module & Content Views
     ModuleDetailAPIView, ModuleListCreateAPIView,
     RecommendedCoursesView, UpdatePDFContentView, UpdateVideoContentView, 
-    UpdateQCMContentView, ModuleStatusUpdateView, ContentStatusUpdateView,
+    UpdateQCMContentView, ModuleStatusUpdateView, ContentStatusUpdateView,CourseManagementView,
     
     # QCM Views
     SubmitQCM,CourseList,
@@ -112,7 +112,7 @@ urlpatterns = [
     path('courses/<int:course_id>/contents/pdf/<int:content_id>/', UpdatePDFContentView.as_view(), name='update-pdf-content'),
     path('courses/<int:course_id>/contents/video/<int:content_id>/', UpdateVideoContentView.as_view(), name='update-video-content'),
     path('courses/<int:course_id>/contents/qcm/<int:content_id>/', UpdateQCMContentView.as_view(), name='update-qcm-content'),
-    
+    path('courses/', CourseManagementView.as_view(), name='courses'),
     # Admin endpoints
     path('admin/dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
     path('admin/users/', UserManagementView.as_view(), name='admin-users'),

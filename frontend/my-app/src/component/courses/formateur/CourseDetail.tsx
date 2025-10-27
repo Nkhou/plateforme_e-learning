@@ -1,25 +1,57 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../api/api';
+
+interface VideoContent {
+  video_file: string;
+  duration?: number;
+}
+
+interface PDFContent {
+  pdf_file: string;
+  page_count?: number;
+}
+
+interface QCMOption {
+  id: number;
+  text: string;
+  is_correct: boolean;
+}
+
+interface QCMQuestion {
+  id: number;
+  question: string;
+  question_type?: 'single' | 'multiple';
+  options: QCMOption[];
+}
+
+interface QCM {
+  id: number;
+  title: string;
+  question?: string;
+  questions?: QCMQuestion[];
+  question_type?: 'single' | 'multiple';
+  options?: QCMOption[];
+  points?: number;
+  passing_score?: number;
+  max_attempts?: number;
+  time_limit?: number;
+}
+
 
 interface Content {
   id: number;
   title: string;
-  content_type: string;
+  content_type_name: string;
   caption?: string;
   order: number;
   status: number;
   estimated_duration?: number;
   min_required_time?: number;
-  video_content?: {
-    video_file: string;
-    duration?: number;
-  };
-  pdf_content?: {
-    pdf_file: string;
-    page_count?: number;
-  };
-  qcm?: any;
+  video_content?: VideoContent;
+  pdf_content?: PDFContent;
+  qcm?: QCM;
+  video_file?: string;
   is_completed?: boolean;
   progress?: number;
 }
@@ -30,6 +62,8 @@ interface Module {
   description?: string;
   order: number;
   status: number;
+  estimated_duration?: number;
+  min_required_time?: number;
   contents: Content[];
 }
 
@@ -37,16 +71,18 @@ interface Course {
   id: number;
   title_of_course: string;
   description: string;
-  image?: string;
+  image_url?: string;
   status: number;
   department?: string;
   category?: string;
-  creator: {
+  subscribers_count?: number;
+  creator?: {
     id: number;
     username: string;
     first_name: string;
     last_name: string;
   };
+  creator_username?: string;
   created_at: string;
   updated_at: string;
   estimated_duration?: number;
@@ -54,127 +90,169 @@ interface Course {
   modules: Module[];
 }
 
-const FormationDetailsPage = () => {
-  const { id } = useParams<{ id: string }>();
+const CourseDetail = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [courseData, setCourseData] = useState<Course | null>(null);
+  const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [showNewModuleModal, setShowNewModuleModal] = useState(false);
-  const [showNewContentModal, setShowNewContentModal] = useState(false);
-  const [selectedModule, setSelectedModule] = useState<number | null>(null);
-  const [selectedContentType, setSelectedContentType] = useState<'pdf' | 'video' | 'qcm' | null>(null);
-  const [viewContentModal, setViewContentModal] = useState<Content | null>(null);
-  const [timeElapsed, setTimeElapsed] = useState(0);
+  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [timeSpent, setTimeSpent] = useState(0);
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
-  const [showEditContentModal, setShowEditContentModal] = useState(false);
-  const [editingContent, setEditingContent] = useState<Content | null>(null);
-  const [showContentMenu, setShowContentMenu] = useState<number | null>(null);
+  const [showNewModuleModal, setShowNewModuleModal] = useState(false);
   const [showEditModuleModal, setShowEditModuleModal] = useState(false);
+  const [showNewContentModal, setShowNewContentModal] = useState(false);
+  const [showEditContentModal, setShowEditContentModal] = useState(false);
   const [editingModule, setEditingModule] = useState<Module | null>(null);
-  const [showEditCourseModal, setShowEditCourseModal] = useState(false);
+  const [editingContent, setEditingContent] = useState<Content | null>(null);
+  const [selectedModule, setSelectedModule] = useState<number | null>(null);
+  const [selectedContentType, setSelectedContentType] = useState<string | null>(null);
+  const [showContentMenu, setShowContentMenu] = useState<number | null>(null);
+  
+  // Enhanced form states with time tracking
+  const [moduleForm, setModuleForm] = useState({
+    title: '',
+    description: '',
+    estimated_duration: undefined as number | undefined,
+    min_required_time: undefined as number | undefined
+  });
 
-  // Form states
-  const [moduleForm, setModuleForm] = useState({ title: '', description: '' });
-  const [contentForm, setContentForm] = useState({ 
-    title: '', 
-    caption: '', 
+  const [contentForm, setContentForm] = useState({
+    title: '',
+    caption: '',
     file: null as File | null,
-    question: '',
-    question_type: 'single',
-    options: [] as any[],
+    questions: [{
+      question: '',
+      question_type: 'single' as 'single' | 'multiple',
+      options: [
+        { text: '', is_correct: false },
+        { text: '', is_correct: false }
+      ]
+    }],
     points: 1,
     passing_score: 80,
     max_attempts: 3,
-    time_limit: 0
+    time_limit: 0,
+    estimated_duration: undefined as number | undefined,
+    min_required_time: undefined as number | undefined
   });
 
-  const courseId = React.useMemo(() => {
-    if (!id) return null;
-    const parsed = parseInt(id, 10);
-    return isNaN(parsed) ? null : parsed;
-  }, [id]);
+  // Time tracking state
+  const [timeTracking, setTimeTracking] = useState<{
+    isTracking: boolean;
+    startTime: Date | null;
+    currentContent: number | null;
+  }>({
+    isTracking: false,
+    startTime: null,
+    currentContent: null
+  });
 
+  // User progress state
+  const [userProgress, setUserProgress] = useState<{
+    completedContents: number[];
+    timeSpent: { [contentId: number]: number };
+  }>({
+    completedContents: [],
+    timeSpent: {}
+  });
+
+  // Références pour détecter les clics extérieurs
+  const contentMenuRef = useRef<HTMLDivElement>(null);
+  const newModuleModalRef = useRef<HTMLDivElement>(null);
+  const editModuleModalRef = useRef<HTMLDivElement>(null);
+  const newContentModalRef = useRef<HTMLDivElement>(null);
+  const editContentModalRef = useRef<HTMLDivElement>(null);
+  const contentViewerModalRef = useRef<HTMLDivElement>(null);
+
+  // Enhanced click outside handler
   useEffect(() => {
-    const fetchCourseData = async () => {
-      if (!courseId || isNaN(courseId)) {
-        setError(`Invalid course ID: ${id}`);
-        setLoading(false);
-        return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contentMenuRef.current && !contentMenuRef.current.contains(event.target as Node)) {
+        setShowContentMenu(null);
+        setSelectedContent(null);
       }
 
+      const modals = [
+        { show: showNewModuleModal, ref: newModuleModalRef, reset: () => { setShowNewModuleModal(false); setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined }); } },
+        { show: showEditModuleModal, ref: editModuleModalRef, reset: () => { setShowEditModuleModal(false); setEditingModule(null); setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined }); } },
+        { show: showNewContentModal, ref: newContentModalRef, reset: () => { setShowNewContentModal(false); setSelectedContentType(null); setSelectedModule(null); resetContentForm(); } },
+        { show: showEditContentModal, ref: editContentModalRef, reset: () => { setShowEditContentModal(false); setEditingContent(null); resetContentForm(); } },
+        { show: showModal, ref: contentViewerModalRef, reset: () => { setShowModal(false); setSelectedContent(null); } }
+      ];
+
+      modals.forEach(({ show, ref, reset }) => {
+        if (show && ref.current && !ref.current.contains(event.target as Node)) {
+          reset();
+        }
+      });
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNewModuleModal, showEditModuleModal, showNewContentModal, showEditContentModal, showModal]);
+
+  // Reset content form helper
+  const resetContentForm = () => {
+    setContentForm({
+      title: '',
+      caption: '',
+      file: null,
+      questions: [{
+        question: '',
+        question_type: 'single',
+        options: [
+          { text: '', is_correct: false },
+          { text: '', is_correct: false }
+        ]
+      }],
+      points: 1,
+      passing_score: 80,
+      max_attempts: 3,
+      time_limit: 0,
+      estimated_duration: undefined,
+      min_required_time: undefined
+    });
+  };
+
+  // Enhanced course fetching with progress
+  useEffect(() => {
+    const fetchCourse = async () => {
       try {
         setLoading(true);
-        
-        const [courseResponse, modulesResponse] = await Promise.all([
-          api.get(`courses/${courseId}/`),
-          api.get(`courses/${courseId}/modules/`)
-        ]);
-
-        const course = courseResponse.data;
-        const modules = Array.isArray(modulesResponse.data) ? modulesResponse.data : [];
-
-        const transformedCourse: Course = {
-          id: course.id,
-          title_of_course: course.title_of_course || 'No Title',
-          description: course.description || 'No description available',
-          image: course.image,
-          status: course.status ?? 1,
-          department: course.department,
-          category: course.category,
-          creator: course.creator || { 
-            id: 0, 
-            username: 'Unknown', 
-            first_name: 'Unknown', 
-            last_name: 'User' 
-          },
-          created_at: course.created_at,
-          updated_at: course.updated_at,
-          estimated_duration: course.estimated_duration,
-          min_required_time: course.min_required_time,
-          modules: modules.map((module: any) => ({
-            id: module.id,
-            title: module.title || 'Untitled Module',
-            description: module.description,
-            order: module.order ?? 0,
-            status: module.status ?? 1,
-            contents: Array.isArray(module.contents) ? module.contents : []
-          }))
-        };
-
-        setCourseData(transformedCourse);
-        setError(null);
-
-      } catch (error: any) {
-        console.error('Error fetching course data:', error);
-        
-        if (error.response) {
-          setError(`Course not found (Error ${error.response.status})`);
-        } else if (error.request) {
-          setError('No response from server. Please check your connection.');
-        } else {
-          setError(`Request error: ${error.message}`);
+        const response = await api.get(`courses/${id}/`);
+        setCourse(response.data);
+        console.log('i need it', response.data);
+        // Load user progress from localStorage
+        const savedProgress = localStorage.getItem(`course_progress_${id}`);
+        if (savedProgress) {
+          setUserProgress(JSON.parse(savedProgress));
         }
+      } catch (error) {
+        console.error('Error fetching course:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    if (courseId) {
-      fetchCourseData();
-    }
-  }, [courseId, id]);
+    fetchCourse();
+  }, [id]);
 
-  // Timer for content viewing
+  // Enhanced time tracking with auto-save
   useEffect(() => {
-    if (viewContentModal) {
-      setTimeElapsed(0);
+    if (showModal && selectedContent) {
+      // Start time tracking
+      setTimeTracking({
+        isTracking: true,
+        startTime: new Date(),
+        currentContent: selectedContent.id
+      });
+
       const interval = setInterval(() => {
-        setTimeElapsed(prev => prev + 1);
+        setTimeSpent(prev => prev + 1);
       }, 1000);
       setTimerInterval(interval);
-      
+
       return () => {
         if (interval) clearInterval(interval);
       };
@@ -183,126 +261,451 @@ const FormationDetailsPage = () => {
         clearInterval(timerInterval);
         setTimerInterval(null);
       }
-    }
-  }, [viewContentModal]);
+      
+      // Save time spent when modal closes
+      if (timeTracking.isTracking && timeTracking.startTime && timeTracking.currentContent) {
+        const endTime = new Date();
+        const duration = Math.floor((endTime.getTime() - timeTracking.startTime.getTime()) / 1000);
+        
+        setUserProgress(prev => {
+          const newProgress = {
+            ...prev,
+            timeSpent: {
+              ...prev.timeSpent,
+              [timeTracking.currentContent!]: (prev.timeSpent[timeTracking.currentContent!] || 0) + duration
+            }
+          };
+          
+          // Save to localStorage
+          localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+          return newProgress;
+        });
 
+        setTimeTracking({
+          isTracking: false,
+          startTime: null,
+          currentContent: null
+        });
+      }
+      
+      setTimeSpent(0);
+    }
+  }, [showModal, selectedContent]);
+
+  // Utility functions
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const formatDuration = (minutes?: number) => {
+    if (!minutes) return '';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}min`;
+    }
+    return `${mins}min`;
+  };
+
+  const getContentIcon = (contentType: string) => {
+    if (!contentType) return '📌';
+    switch (contentType.toLowerCase()) {
+      case 'video' :
+        return '🎬';
+      case 'pdf':
+        return '📄';
+      case 'qcm':
+        return <img src="/cerveau.png" alt="QCM" width={20} height={20} />;;
+      default:
+        return '📌';
+    }
+  };
+
+  const getContentTypeDisplay = (contentType: string | undefined) => {
+    if (!contentType) return 'Contenu';
+    
+    switch (contentType.toLowerCase()) {
+      case 'video':
+        return 'Vidéo';
+      case 'pdf':
+        return 'Document PDF';
+      case 'qcm':
+        return 'Quiz QCM';
+      default:
+        return contentType;
+    }
+  };
+
+  const getStatusBadge = (status: number) => {
+    switch (status) {
+      case 0:
+        return { text: 'Brouillon', color: '#F59E0B' };
+      case 1:
+        return { text: 'Actif', color: '#10B981' };
+      case 2:
+        return { text: 'Archivé', color: '#6B7280' };
+      default:
+        return { text: 'Inconnu', color: '#6B7280' };
+    }
+  };
+
+  // Enhanced content click handler with time tracking
+  const handleContentClick = (content: Content) => {
+  const normalizedContent = { ...content };
+
+  if (content.content_type_name?.toLowerCase() === 'qcm' && content.qcm) {
+    const qcm = content.qcm;
+
+    // 🔧 Normalize questions
+    const questions: QCMQuestion[] = Array.isArray(qcm.questions)
+      ? qcm.questions.map((q: any) => ({
+          id: q.id,
+          question: q.question,
+          question_type: q.question_type ?? 'single',
+          options: q.options ?? [],
+        }))
+      : qcm.question // if there’s just one
+      ? [
+          {
+            id: qcm.id,
+            question: qcm.question,
+            question_type: qcm.question_type ?? 'single',
+            options: qcm.options ?? [],
+          },
+        ]
+      : [];
+
+    // 🔧 Build normalized QCM object
+    normalizedContent.qcm = {
+      id: qcm.id,
+      title: qcm.title ?? content.title,
+      questions,
+      points: qcm.points,
+      passing_score: qcm.passing_score,
+      max_attempts: qcm.max_attempts,
+      time_limit: qcm.time_limit,
+    };
+
+    console.log('✅ Normalized QCM:', normalizedContent.qcm);
+  }
+
+  setSelectedContent(normalizedContent);
+  setShowModal(true);
+  setTimeSpent(userProgress.timeSpent[content.id] || 0);
+};
+
+
+  // Enhanced mark as completed with time validation
+  const handleMarkAsCompleted = async () => {
+    if (selectedContent) {
+      const hasMetTimeRequirement = !selectedContent.min_required_time || 
+        (userProgress.timeSpent[selectedContent.id] || 0) >= (selectedContent.min_required_time * 60);
+
+      if (!hasMetTimeRequirement) {
+        alert(`Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`);
+        return;
+      }
+
+      try {
+        await api.patch(`contents/${selectedContent.id}/complete/`);
+        
+        // Update local state
+        setUserProgress(prev => {
+          const newProgress = {
+            ...prev,
+            completedContents: [...prev.completedContents, selectedContent.id]
+          };
+          localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+          return newProgress;
+        });
+
+        alert('Contenu marqué comme terminé');
+        setShowModal(false);
+        setSelectedContent(null);
+        
+        // Refresh course data
+        const response = await api.get(`courses/${id}/`);
+        setCourse(response.data);
+      } catch (error) {
+        console.error('Error marking content as completed:', error);
+        alert('Erreur lors de la mise à jour');
+      }
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setSelectedContent(null);
+  };
+
+  // Enhanced module creation with time tracking
   const handleCreateModule = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!courseId || !moduleForm.title.trim()) {
-      alert('Please enter a module title');
+    if (!id || !moduleForm.title.trim()) {
+      alert('Veuillez entrer un titre pour le module');
       return;
     }
 
     try {
-      await api.post(`courses/${courseId}/modules/`, {
+      await api.post(`courses/${id}/modules/`, {
         title: moduleForm.title,
         description: moduleForm.description,
-        order: (courseData?.modules.length || 0) + 1,
-        status: 1
+        order: (course?.modules.length || 0) + 1,
+        status: 1,
+        estimated_duration: moduleForm.estimated_duration,
+        min_required_time: moduleForm.min_required_time
       });
 
-      const modulesResponse = await api.get(`courses/${courseId}/modules/`);
-      setCourseData(prev => prev ? {
-        ...prev,
-        modules: modulesResponse.data
-      } : null);
+      const response = await api.get(`courses/${id}/`);
+      setCourse(response.data);
       
       setShowNewModuleModal(false);
-      setModuleForm({ title: '', description: '' });
-      alert('Module created successfully!');
+      setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
+      alert('Module créé avec succès!');
     } catch (error: any) {
       console.error('Failed to create module:', error);
-      alert(`Failed to create module: ${error.response?.data?.message || error.message}`);
+      alert(`Échec de création du module: ${error.response?.data?.message || error.message}`);
     }
   };
 
+  const handleEditModule = (module: Module) => {
+    setEditingModule(module);
+    setModuleForm({ 
+      title: module.title, 
+      description: module.description || '',
+      estimated_duration: module.estimated_duration,
+      min_required_time: module.min_required_time
+    });
+    setShowEditModuleModal(true);
+  };
+
+  const handleUpdateModule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!id || !editingModule || !moduleForm.title.trim()) {
+      alert('Veuillez entrer un titre pour le module');
+      return;
+    }
+
+    try {
+      await api.put(`courses/${id}/modules/${editingModule.id}/`, {
+        title: moduleForm.title,
+        description: moduleForm.description,
+        estimated_duration: moduleForm.estimated_duration,
+        min_required_time: moduleForm.min_required_time
+      });
+
+      const response = await api.get(`courses/${id}/`);
+      setCourse(response.data);
+      
+      setShowEditModuleModal(false);
+      setEditingModule(null);
+      setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
+      alert('Module mis à jour avec succès!');
+    } catch (error: any) {
+      console.error('Failed to update module:', error);
+      alert(`Échec de mise à jour: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
+  // Enhanced content editing
+  const handleEditContent = (content: Content) => {
+    setEditingContent(content);
+    const contentType = content.content_type_name?.toLowerCase();
+    
+    setContentForm({
+      title: content.title,
+      caption: content.caption || '',
+      file: null,
+      questions: content.qcm ? [{
+        question: content.qcm.questions?.[0]?.question || '',
+        question_type: (content.qcm.questions?.[0] as any)?.question_type || 'single',
+        options: content.qcm.questions?.[0]?.options || []
+      }] : [{
+        question: '',
+        question_type: 'single',
+        options: [
+          { text: '', is_correct: false },
+          { text: '', is_correct: false }
+        ]
+      }],
+      points: content.qcm?.points || 1,
+      passing_score: 80,
+      max_attempts: content.qcm?.max_attempts || 3,
+      time_limit: content.qcm?.time_limit || 0,
+      estimated_duration: content.estimated_duration,
+      min_required_time: content.min_required_time
+    });
+    
+    setSelectedContentType(contentType || null);
+    setShowEditContentModal(true);
+    setShowContentMenu(null);
+  };
+
+  const handleUpdateContent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!id || !editingContent || !contentForm.title.trim()) {
+      alert('Veuillez remplir tous les champs requis');
+      return;
+    }
+
+    try {
+      const contentType = editingContent.content_type_name?.toLowerCase();
+      let endpoint = '';
+      let requestData: any;
+
+      if (contentType === 'pdf') {
+        endpoint = `courses/${id}/contents/pdf/${editingContent.id}/`;
+        const formData = new FormData();
+        formData.append('title', contentForm.title);
+        formData.append('caption', contentForm.caption || '');
+        if (contentForm.estimated_duration) formData.append('estimated_duration', contentForm.estimated_duration.toString());
+        if (contentForm.min_required_time) formData.append('min_required_time', contentForm.min_required_time.toString());
+
+        if (contentForm.file) {
+          formData.append('pdf_file', contentForm.file);
+        }
+
+        requestData = formData;
+      } else if (contentType === 'video') {
+        endpoint = `courses/${id}/contents/video/${editingContent.id}/`;
+        const formData = new FormData();
+        formData.append('title', contentForm.title);
+        formData.append('caption', contentForm.caption || '');
+        if (contentForm.estimated_duration) formData.append('estimated_duration', contentForm.estimated_duration.toString());
+        if (contentForm.min_required_time) formData.append('min_required_time', contentForm.min_required_time.toString());
+
+        if (contentForm.file) {
+          formData.append('video_file', contentForm.file);
+        }
+
+        requestData = formData;
+      } else if (contentType === 'qcm') {
+        endpoint = `courses/${id}/contents/qcm/${editingContent.id}/`;
+        requestData = {
+          title: contentForm.title,
+          caption: contentForm.caption || '',
+          qcm_question: contentForm.questions[0].question,
+          question_type: contentForm.questions[0].question_type,
+          qcm_options: contentForm.questions[0].options.map((option: any) => ({
+            text: option.text,
+            is_correct: option.is_correct
+          })),
+          points: contentForm.points,
+          passing_score: contentForm.passing_score,
+          max_attempts: contentForm.max_attempts,
+          time_limit: contentForm.time_limit,
+          estimated_duration: contentForm.estimated_duration,
+          min_required_time: contentForm.min_required_time
+        };
+      }
+
+      if (!endpoint) {
+        alert(`Type de contenu non supporté: ${contentType}`);
+        return;
+      }
+
+      await api.put(endpoint, requestData, {
+        headers: contentType === 'qcm' ? { 'Content-Type': 'application/json' } : { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const response = await api.get(`courses/${id}/`);
+      setCourse(response.data);
+      
+      setShowEditContentModal(false);
+      setEditingContent(null);
+      resetContentForm();
+      alert('Contenu mis à jour avec succès!');
+    } catch (error: any) {
+      console.error('Failed to update content:', error);
+      alert(`Échec de mise à jour du contenu: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
+  // Enhanced content creation with QCM support
   const handleCreateContent = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!courseId || !selectedModule || !selectedContentType || !contentForm.title.trim()) {
-      alert('Please fill in all required fields');
+    if (!id || !selectedModule || !selectedContentType || !contentForm.title.trim()) {
+      alert('Veuillez remplir tous les champs requis');
       return;
     }
 
     try {
       let endpoint = '';
       let requestData: any;
-      let headers: any = {};
 
       if (selectedContentType === 'pdf') {
         if (!contentForm.file) {
-          alert('Please select a PDF file');
+          alert('Veuillez sélectionner un fichier PDF');
           return;
         }
-        endpoint = `courses/${courseId}/modules/${selectedModule}/contents/pdf/`;
+        endpoint = `courses/${id}/modules/${selectedModule}/contents/pdf/`;
         const formData = new FormData();
         formData.append('title', contentForm.title);
         formData.append('caption', contentForm.caption || '');
         formData.append('order', '1');
         formData.append('status', '1');
         formData.append('pdf_file', contentForm.file);
+        if (contentForm.estimated_duration) formData.append('estimated_duration', contentForm.estimated_duration.toString());
+        if (contentForm.min_required_time) formData.append('min_required_time', contentForm.min_required_time.toString());
         requestData = formData;
-        headers = { 'Content-Type': 'multipart/form-data' };
       } else if (selectedContentType === 'video') {
         if (!contentForm.file) {
-          alert('Please select a video file');
+          alert('Veuillez sélectionner un fichier vidéo');
           return;
         }
-        endpoint = `courses/${courseId}/modules/${selectedModule}/contents/video/`;
+        endpoint = `courses/${id}/modules/${selectedModule}/contents/video/`;
         const formData = new FormData();
         formData.append('title', contentForm.title);
         formData.append('caption', contentForm.caption || '');
         formData.append('order', '1');
         formData.append('status', '1');
         formData.append('video_file', contentForm.file);
+        if (contentForm.estimated_duration) formData.append('estimated_duration', contentForm.estimated_duration.toString());
+        if (contentForm.min_required_time) formData.append('min_required_time', contentForm.min_required_time.toString());
         requestData = formData;
-        headers = { 'Content-Type': 'multipart/form-data' };
       } else if (selectedContentType === 'qcm') {
-        endpoint = `courses/${courseId}/modules/${selectedModule}/contents/qcm/`;
+        endpoint = `courses/${id}/modules/${selectedModule}/contents/qcm/`;
         requestData = {
           title: contentForm.title,
           caption: contentForm.caption || '',
           order: 1,
           status: 1,
-          qcm_question: contentForm.question,
-          question_type: contentForm.question_type,
-          qcm_options: contentForm.options,
+          qcm_question: contentForm.questions[0].question,
+          question_type: contentForm.questions[0].question_type,
+          qcm_options: contentForm.questions[0].options.map((option: any) => ({
+            text: option.text,
+            is_correct: option.is_correct
+          })),
           points: contentForm.points,
           passing_score: contentForm.passing_score,
           max_attempts: contentForm.max_attempts,
-          time_limit: contentForm.time_limit
+          time_limit: contentForm.time_limit,
+          estimated_duration: contentForm.estimated_duration,
+          min_required_time: contentForm.min_required_time
         };
-        headers = { 'Content-Type': 'application/json' };
       }
 
-      await api.post(endpoint, requestData, { headers });
+      await api.post(endpoint, requestData, {
+        headers: selectedContentType === 'qcm' ? { 'Content-Type': 'application/json' } : { 'Content-Type': 'multipart/form-data' }
+      });
 
-      const modulesResponse = await api.get(`courses/${courseId}/modules/`);
-      setCourseData(prev => prev ? {
-        ...prev,
-        modules: modulesResponse.data
-      } : null);
+      const response = await api.get(`courses/${id}/`);
+      setCourse(response.data);
       
       setShowNewContentModal(false);
       setSelectedContentType(null);
       setSelectedModule(null);
-      setContentForm({ 
-        title: '', 
-        caption: '', 
-        file: null,
-        question: '',
-        question_type: 'single',
-        options: [],
-        points: 1,
-        passing_score: 80,
-        max_attempts: 3,
-        time_limit: 0
-      });
-      alert('Content created successfully!');
+      resetContentForm();
+      alert('Contenu créé avec succès!');
     } catch (error: any) {
       console.error('Failed to create content:', error);
-      alert(`Failed to create content: ${error.response?.data?.message || error.message}`);
+      alert(`Échec de création du contenu: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -312,235 +715,182 @@ const FormationDetailsPage = () => {
     }
   };
 
-  const handleContentClick = (content: Content) => {
-    setViewContentModal(content);
-  };
-
-  const handleMarkCompleted = async () => {
-    if (!viewContentModal || !courseId) return;
-    
-    try {
-      await api.post(`courses/${courseId}/complete-content/`, {
-        content_id: viewContentModal.id,
-        time_spent: timeElapsed
-      });
-      
-      alert('Content marked as completed!');
-      setViewContentModal(null);
-      
-      // Refresh course data
-      const modulesResponse = await api.get(`courses/${courseId}/modules/`);
-      setCourseData(prev => prev ? {
-        ...prev,
-        modules: modulesResponse.data
-      } : null);
-    } catch (error) {
-      console.error('Failed to mark content as completed:', error);
-      alert('Failed to mark as completed. Please try again.');
-    }
-  };
-
-  const handleEditModule = (module: Module) => {
-    setEditingModule(module);
-    setModuleForm({ title: module.title, description: module.description || '' });
-    setShowEditModuleModal(true);
-  };
-
-  const handleUpdateModule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!courseId || !editingModule || !moduleForm.title.trim()) {
-      alert('Please enter a module title');
-      return;
-    }
-
-    try {
-      await api.put(`courses/${courseId}/modules/${editingModule.id}/`, {
-        title: moduleForm.title,
-        description: moduleForm.description
-      });
-
-      const modulesResponse = await api.get(`courses/${courseId}/modules/`);
-      setCourseData(prev => prev ? {
-        ...prev,
-        modules: modulesResponse.data
-      } : null);
-      
-      setShowEditModuleModal(false);
-      setEditingModule(null);
-      setModuleForm({ title: '', description: '' });
-      alert('Module updated successfully!');
-    } catch (error: any) {
-      console.error('Failed to update module:', error);
-      alert(`Failed to update module: ${error.response?.data?.message || error.message}`);
-    }
-  };
-
-  const handleEditContent = (content: Content) => {
-    setEditingContent(content);
-    setContentForm({
-      title: content.title,
-      caption: content.caption || '',
-      file: null,
-      question: '',
-      question_type: 'single',
-      options: [],
-      points: 1,
-      passing_score: 80,
-      max_attempts: 3,
-      time_limit: content.estimated_duration || 0
-    });
-    setSelectedContentType(content.content_type.toLowerCase() as 'pdf' | 'video' | 'qcm');
-    setShowEditContentModal(true);
-    setShowContentMenu(null);
-  };
-
-  const handleUpdateContent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!courseId || !editingContent || !contentForm.title.trim()) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      let endpoint = '';
-      let requestData: any;
-      let headers: any = {};
-
-      if (editingContent.content_type.toLowerCase() === 'pdf') {
-        endpoint = `courses/${courseId}/contents/pdf/${editingContent.id}/`;
-        if (contentForm.file) {
-          const formData = new FormData();
-          formData.append('title', contentForm.title);
-          formData.append('caption', contentForm.caption || '');
-          formData.append('pdf_file', contentForm.file);
-          requestData = formData;
-          headers = { 'Content-Type': 'multipart/form-data' };
-        } else {
-          requestData = {
-            title: contentForm.title,
-            caption: contentForm.caption || ''
-          };
-          headers = { 'Content-Type': 'application/json' };
+  // Enhanced QCM form handlers
+  const addQuestion = () => {
+    setContentForm(prev => ({
+      ...prev,
+      questions: [
+        ...prev.questions,
+        {
+          question: '',
+          question_type: 'single',
+          options: [
+            { text: '', is_correct: false },
+            { text: '', is_correct: false }
+          ]
         }
-      } else if (editingContent.content_type.toLowerCase() === 'video') {
-        endpoint = `courses/${courseId}/contents/video/${editingContent.id}/`;
-        if (contentForm.file) {
-          const formData = new FormData();
-          formData.append('title', contentForm.title);
-          formData.append('caption', contentForm.caption || '');
-          formData.append('video_file', contentForm.file);
-          requestData = formData;
-          headers = { 'Content-Type': 'multipart/form-data' };
-        } else {
-          requestData = {
-            title: contentForm.title,
-            caption: contentForm.caption || ''
-          };
-          headers = { 'Content-Type': 'application/json' };
-        }
-      } else if (editingContent.content_type.toLowerCase() === 'qcm') {
-        endpoint = `courses/${courseId}/contents/qcm/${editingContent.id}/`;
-        requestData = {
-          title: contentForm.title,
-          caption: contentForm.caption || '',
-          qcm_question: contentForm.question,
-          question_type: contentForm.question_type,
-          points: contentForm.points
-        };
-        headers = { 'Content-Type': 'application/json' };
-      }
+      ]
+    }));
+  };
 
-      await api.put(endpoint, requestData, { headers });
+  const removeQuestion = (questionIndex: number) => {
+    setContentForm(prev => ({
+      ...prev,
+      questions: prev.questions.filter((_, idx) => idx !== questionIndex)
+    }));
+  };
 
-      const modulesResponse = await api.get(`courses/${courseId}/modules/`);
-      setCourseData(prev => prev ? {
-        ...prev,
-        modules: modulesResponse.data
-      } : null);
-      
-      setShowEditContentModal(false);
-      setEditingContent(null);
-      setSelectedContentType(null);
-      setContentForm({ 
-        title: '', 
-        caption: '', 
-        file: null,
-        question: '',
-        question_type: 'single',
-        options: [],
-        points: 1,
-        passing_score: 80,
-        max_attempts: 3,
-        time_limit: 0
-      });
-      alert('Content updated successfully!');
-    } catch (error: any) {
-      console.error('Failed to update content:', error);
-      alert(`Failed to update content: ${error.response?.data?.message || error.message}`);
-    }
+  const addOption = (questionIndex: number) => {
+    setContentForm(prev => ({
+      ...prev,
+      questions: prev.questions.map((q, idx) =>
+        idx === questionIndex
+          ? { ...q, options: [...q.options, { text: '', is_correct: false }] }
+          : q
+      )
+    }));
+  };
+
+  const removeOption = (questionIndex: number, optionIndex: number) => {
+    setContentForm(prev => ({
+      ...prev,
+      questions: prev.questions.map((q, idx) =>
+        idx === questionIndex
+          ? { ...q, options: q.options.filter((_, oIdx) => oIdx !== optionIndex) }
+          : q
+      )
+    }));
+  };
+
+  const handleQuestionChange = (questionIndex: number, field: string, value: any) => {
+    setContentForm(prev => ({
+      ...prev,
+      questions: prev.questions.map((q, idx) =>
+        idx === questionIndex ? { ...q, [field]: value } : q
+      )
+    }));
+  };
+
+  const handleOptionChange = (questionIndex: number, optionIndex: number, field: string, value: any) => {
+    setContentForm(prev => ({
+      ...prev,
+      questions: prev.questions.map((q, idx) =>
+        idx === questionIndex
+          ? {
+              ...q,
+              options: q.options.map((opt, oIdx) =>
+                oIdx === optionIndex ? { ...opt, [field]: value } : opt
+              )
+            }
+          : q
+      )
+    }));
   };
 
   const handleChangeContentStatus = async (content: Content, newStatus: number) => {
-    if (!courseId) return;
+    if (!id) return;
     
     try {
-      await api.patch(`courses/${courseId}/contents/${content.id}/update-status/`, {
+      await api.patch(`courses/${id}/contents/${content.id}/update-status/`, {
         status: newStatus
       });
 
-      const modulesResponse = await api.get(`courses/${courseId}/modules/`);
-      setCourseData(prev => prev ? {
-        ...prev,
-        modules: modulesResponse.data
-      } : null);
+      const response = await api.get(`courses/${id}/`);
+      setCourse(response.data);
       
       setShowContentMenu(null);
-      alert('Status updated successfully!');
+      alert('Statut mis à jour avec succès!');
     } catch (error) {
       console.error('Failed to update status:', error);
-      alert('Failed to update status. Please try again.');
+      alert('Échec de mise à jour du statut.');
     }
   };
 
-  const getFileUrl = (fileUrl: string) => {
-    if (!fileUrl) return '';
-    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      return fileUrl;
+  // Enhanced URL getters
+  const BASE_URL = 'http://localhost:8000';
+
+const getVideoUrl = (content: Content) => {
+  console.log(content)
+  const videoFile = content.video_content?.video_file;
+  if (videoFile) {
+    let url = videoFile;
+
+    // Replace backend domain with localhost if necessary
+    url = url.replace('http://backend:8000', BASE_URL);
+    console.log('url', url);
+
+    if (!url.startsWith('http')) {
+      url = `${BASE_URL}${url}`;
     }
-    if (fileUrl.startsWith('/media/')) {
-      return `${api.defaults.baseURL}${fileUrl}`;
+
+    return url;
+  }
+  return null;
+};
+
+const getimageUrl = (contentOrPath: Content | string | undefined): string | undefined => {
+  // Accept either a Content object or a direct string path (e.g. course.image_url)
+  if (!contentOrPath) return undefined;
+
+  let imagePath: string | undefined;
+
+  if (typeof contentOrPath === 'string') {
+    imagePath = contentOrPath;
+  } else {
+    // Try common fields that might contain an image/video path on a Content object
+    imagePath = contentOrPath.video_content?.video_file
+      || (contentOrPath as any).video_file
+      || contentOrPath.pdf_content?.pdf_file
+      || (contentOrPath as any).image_url;
+  }
+
+  if (!imagePath) return undefined;
+
+  let url = imagePath.replace('http://backend:8000', BASE_URL);
+
+  if (!url.startsWith('http')) {
+    url = `${BASE_URL}${url}`;
+  }
+
+  return url;
+};
+
+const getPdfUrl = (content: Content) => {
+  if (content.pdf_content?.pdf_file) {
+    let pdfPath = content.pdf_content.pdf_file;
+
+    // Replace backend domain with localhost if necessary
+    pdfPath = pdfPath.replace('http://backend:8000', BASE_URL);
+
+    if (!pdfPath.startsWith('http')) {
+      pdfPath = `${BASE_URL}${pdfPath}`;
     }
-    return `${api.defaults.baseURL}/media/${fileUrl}`;
+
+    return pdfPath;
+  }
+  return null;
+};
+
+
+  const getFileName = (content: Content): string => {
+    if (content.pdf_content?.pdf_file) {
+      const parts = content.pdf_content.pdf_file.split('/');
+      return parts[parts.length - 1] || 'document.pdf';
+    } else if (content.video_content?.video_file) {
+      const parts = content.video_content.video_file.split('/');
+      return parts[parts.length - 1] || 'video.mp4';
+    }
+    return 'fichier';
   };
 
-  const getContentIcon = (contentType: string): string => {
-    switch (contentType?.toLowerCase()) {
-      case 'video': return '🎥';
-      case 'pdf': case 'document': return '📄';
-      case 'qcm': return '📝';
-      case 'audio': return '🎵';
-      default: return '📄';
+  const getFileSize = (content: Content): string => {
+    // This would typically come from your API
+    if (content.content_type_name?.toLowerCase() === 'pdf') {
+      return '~2MB';
+    } else if (content.content_type_name?.toLowerCase() === 'video') {
+      return '~50MB';
     }
-  };
-
-  const getStatusLabel = (status: number): string => {
-    switch (status) {
-      case 0: return 'Brouillon';
-      case 1: return 'Actif';
-      case 2: return 'Archivé';
-      default: return 'Actif';
-    }
-  };
-
-  const getStatusColor = (status: number): string => {
-    switch (status) {
-      case 0: return '#F59E0B';
-      case 1: return '#10B981';
-      case 2: return '#6B7280';
-      default: return '#10B981';
-    }
+    return '';
   };
 
   const formatDate = (dateString: string): string => {
@@ -557,163 +907,90 @@ const FormationDetailsPage = () => {
     }
   };
 
-  const formatTime = (minutes?: number): string => {
-    if (!minutes) return '0min';
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours > 0) return `${hours}h ${mins}min`;
-    return `${mins}min`;
-  };
-
-  const formatTimer = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const calculateStats = () => {
-    if (!courseData) return null;
-
-    const totalContent = courseData.modules.reduce((total, module) => 
-      total + (module.contents?.length || 0), 0
-    );
-
-    return {
-      totalContent,
-      modules: courseData.modules.length,
-      learners: 0,
-      avgProgress: 0,
-      yourProgress: 0,
-      estimatedTime: formatTime(courseData.estimated_duration)
-    };
-  };
-
-  const getFileSize = (content: Content): string => {
-    // Mock file size - you would get this from your backend
-    if (content.content_type?.toLowerCase() === 'pdf') {
-      return '2.6MB';
-    } else if (content.content_type?.toLowerCase() === 'video') {
-      return '26.8MB';
-    }
-    return '';
-  };
-
-  const getFileName = (content: Content): string => {
-    if (content.pdf_content?.pdf_file) {
-      const parts = content.pdf_content.pdf_file.split('/');
-      return parts[parts.length - 1] || 'nom_du_fichier.pdf';
-    } else if (content.video_content?.video_file) {
-      const parts = content.video_content.video_file.split('/');
-      return parts[parts.length - 1] || 'nom_du_fichier.mp4';
-    }
-    return 'nom_du_fichier';
-  };
+  // Calculate progress statistics
+  const totalContents = course?.modules?.reduce((total, module) => total + (module.contents?.length || 0), 0) || 0;
+  const completedContents = userProgress.completedContents.length;
+  const progressPercentage = totalContents > 0 ? Math.round((completedContents / totalContents) * 100) : 0;
+  const totalTimeSpent = Object.values(userProgress.timeSpent).reduce((total, time) => total + time, 0);
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
-        <div style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Loading course details...</div>
+      <div style={{ 
+        backgroundColor: '#F3F4F6',
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        <div style={{ color: '#374151', fontSize: '1.5rem' }}>⏳ Chargement...</div>
       </div>
     );
   }
 
-  if (error) {
+  if (!course) {
     return (
-      <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ textAlign: 'center', maxWidth: '500px', padding: '2rem' }}>
-          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>⚠️</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: '500', marginBottom: '0.5rem', color: '#DC2626' }}>Error loading course</div>
-          <div style={{ fontSize: '1rem', color: '#6B7280', marginBottom: '2rem' }}>{error}</div>
-          <button 
-            onClick={() => navigate(-1)}
-            style={{
-              backgroundColor: '#2D2B6B',
-              color: 'white',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-          >
-            ← Retour
-          </button>
-        </div>
+      <div style={{ 
+        backgroundColor: '#F3F4F6',
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        <div style={{ color: '#374151', fontSize: '1.5rem' }}>Formation non trouvée</div>
       </div>
     );
   }
 
-  if (!courseData) {
-    return (
-      <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📚</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: '500', marginBottom: '0.5rem' }}>Course not found</div>
-          <button 
-            onClick={() => navigate(-1)}
-            style={{
-              backgroundColor: '#2D2B6B',
-              color: 'white',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-          >
-            ← Retour aux formations
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const stats = calculateStats();
+  const statusBadge = getStatusBadge(course.status);
 
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ backgroundColor: '#2D2B6B', color: 'white', padding: '1.5rem 2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>{courseData.title_of_course}</h1>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>{course.title_of_course}</h1>
           <span style={{ 
-            backgroundColor: getStatusColor(courseData.status), 
+            backgroundColor: statusBadge.color, 
             color: 'white', 
             padding: '0.25rem 0.75rem', 
             borderRadius: '12px', 
             fontSize: '0.75rem'
           }}>
-            {getStatusLabel(courseData.status)}
+            {statusBadge.text}
           </span>
         </div>
-        <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.9 }}>{courseData.description}</p>
+        <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.9 }}>{course.description}</p>
       </div>
 
-      {/* Stats Bar */}
+      {/* Enhanced Stats Bar */}
       <div style={{ backgroundColor: '#2D2B6B', padding: '0 2rem 2rem 2rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2rem', color: 'white' }}>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Contenu total</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0{stats?.totalContent || 0}</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              {totalContents.toString().padStart(2, '0')}
+            </div>
           </div>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° de modules</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0{stats?.modules || 0}</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0{course.modules?.length || 0}</div>
           </div>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° d'apprenants</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats?.learners || 0}</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{course.subscribers_count || 0}</div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Avg. du progrès</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats?.avgProgress || 0}%</div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
           </div>
-          <div>
+          {/* <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats?.yourProgress || 0}%</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps estimé</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats?.estimatedTime || '0min'}</div>
-          </div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{progressPercentage}%</div>
+          </div> */}
+          {/* <div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps passé</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{formatTime(totalTimeSpent)}</div>
+          </div> */}
         </div>
       </div>
 
@@ -730,8 +1007,8 @@ const FormationDetailsPage = () => {
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            {courseData.image ? (
-              <img src={courseData.image} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+            {course.image_url ? (
+              <img src={getimageUrl(course.image_url)} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
             ) : (
               <div style={{ textAlign: 'center', color: '#9CA3AF' }}>
                 <div style={{ fontSize: '3rem' }}>📚</div>
@@ -740,7 +1017,7 @@ const FormationDetailsPage = () => {
             )}
           </div>
 
-          {(courseData.department || courseData.category) && (
+          {(course.department || course.category) && (
             <div style={{ 
               backgroundColor: '#FED7AA', 
               color: '#9A3412', 
@@ -750,20 +1027,39 @@ const FormationDetailsPage = () => {
               display: 'inline-block',
               marginBottom: '1rem'
             }}>
-              {courseData.department || courseData.category}
+              {course.department || course.category}
             </div>
           )}
 
           <p style={{ fontSize: '0.875rem', color: '#4B5563', lineHeight: '1.6', marginBottom: '1rem' }}>
-            {courseData.description}
+            {course.description}
           </p>
+
+          {/* Enhanced course info with time tracking */}
+          {/* <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '8px' }}>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <span>⏱️ </span>
+              <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Durée estimée:</span>
+            </div>
+            <div style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '1rem' }}>
+              {formatDuration(course.estimated_duration) || 'Non spécifiée'}
+            </div>
+
+            <div style={{ marginBottom: '0.5rem' }}>
+              <span>🎯 </span>
+              <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Temps requis min:</span>
+            </div>
+            <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>
+              {formatDuration(course.min_required_time) || 'Non spécifié'}
+            </div>
+          </div> */}
 
           <div style={{ marginBottom: '0.5rem' }}>
             <span>👤 </span>
             <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée par</span>
           </div>
           <div style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '1rem' }}>
-            {courseData.creator.first_name} {courseData.creator.last_name}
+            {course.creator?.username || course.creator_username || 'Inconnu'}
           </div>
 
           <div style={{ marginBottom: '0.5rem' }}>
@@ -771,31 +1067,13 @@ const FormationDetailsPage = () => {
             <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée le</span>
           </div>
           <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>
-            {formatDate(courseData.created_at)}
+            {formatDate(course.created_at)}
           </div>
         </div>
 
         {/* Right Content - Modules */}
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
-            <button 
-              onClick={() => setShowEditCourseModal(true)}
-              style={{
-                backgroundColor: '#F97316',
-                color: 'white',
-                border: 'none',
-                padding: '0.625rem 1.25rem',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}
-            >
-              ✏️ Modifier la formation
-            </button>
             <button 
               onClick={() => setShowNewModuleModal(true)}
               style={{
@@ -813,12 +1091,12 @@ const FormationDetailsPage = () => {
             </button>
           </div>
 
-          {courseData.modules && courseData.modules.length > 0 ? (
-            courseData.modules.map((module) => (
+          {course.modules && course.modules.length > 0 ? (
+            course.modules.map((module) => (
               <div key={module.id} style={{ marginBottom: '1.5rem' }}>
                 <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1rem 1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: '600', margin: 0 }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: '200', margin: 0 }}>
                       Module {module.order} • {module.title}
                     </h3>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -837,11 +1115,11 @@ const FormationDetailsPage = () => {
                         Modifier
                       </button>
                       <button 
-                        style={{ color: '#2D2B6B', cursor: 'pointer', background: 'none', border: 'none', fontSize: '0.875rem', fontWeight: '500', padding: 0 }}
                         onClick={() => {
                           setSelectedModule(module.id);
                           setShowNewContentModal(true);
                         }}
+                        style={{ color: '#2D2B6B', cursor: 'pointer', background: 'none', border: 'none', fontSize: '0.875rem', fontWeight: '500', padding: 0 }}
                       >
                         + nouveau contenu
                       </button>
@@ -849,217 +1127,235 @@ const FormationDetailsPage = () => {
                   </div>
 
                   {module.contents && module.contents.length > 0 ? (
-                    module.contents.map((content) => (
-                      <div 
-                        key={content.id}
-                        onClick={() => handleContentClick(content)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '0.75rem',
-                          backgroundColor: '#F9FAFB',
-                          borderRadius: '6px',
-                          marginBottom: '0.5rem',
-                          border: '1px solid #E5E7EB',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#EEF2FF';
-                          e.currentTarget.style.borderColor = '#2D2B6B';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#F9FAFB';
-                          e.currentTarget.style.borderColor = '#E5E7EB';
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                          <span>{getContentIcon(content.content_type)}</span>
-                          <span style={{ fontSize: '0.875rem', color: '#1F2937' }}>{content.title}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          {content.estimated_duration && (
-                            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>
-                              {formatTime(content.estimated_duration)}
-                            </span>
-                          )}
-                          {content.is_completed && (
-                            <span style={{ fontSize: '0.875rem', color: '#10B981', fontWeight: '500' }}>
-                              ✓ Complété
-                            </span>
-                          )}
-                          <div style={{ position: 'relative' }}>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowContentMenu(showContentMenu === content.id ? null : content.id);
-                              }}
-                              style={{ 
-                                background: 'none', 
-                                border: 'none', 
-                                cursor: 'pointer', 
-                                color: '#6B7280',
-                                fontSize: '1.25rem',
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                            >
-                              ⋯
-                            </button>
-                            
-                            {showContentMenu === content.id && (
-                              <div 
-                                style={{
-                                  position: 'absolute',
-                                  right: 0,
-                                  top: '100%',
-                                  backgroundColor: 'white',
-                                  border: '1px solid #E5E7EB',
-                                  borderRadius: '6px',
-                                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                                  minWidth: '180px',
-                                  zIndex: 10,
-                                  marginTop: '0.25rem'
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setViewContentModal(content);
-                                    setShowContentMenu(null);
-                                  }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.75rem 1rem',
-                                    textAlign: 'left',
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    color: '#374151',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                                >
-                                  👁️ Voir le contenu
-                                </button>
-                                
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditContent(content);
-                                  }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.75rem 1rem',
-                                    textAlign: 'left',
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    color: '#374151',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                                >
-                                  ✏️ Modifier
-                                </button>
+                    module.contents.map((content) => {
+                      const isCompleted = userProgress.completedContents.includes(content.id);
+                      const contentTimeSpent = userProgress.timeSpent[content.id] || 0;
+                      const hasMetTimeRequirement = !content.min_required_time || contentTimeSpent >= (content.min_required_time * 60);
 
-                                <div style={{ borderTop: '1px solid #E5E7EB', margin: '0.25rem 0' }} />
-                                
-                                <div style={{ padding: '0.5rem 1rem' }}>
-                                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6B7280', marginBottom: '0.5rem' }}>
-                                    Changer le statut
-                                  </div>
+                      return (
+                        <div 
+                          key={content.id}
+                          onClick={() => handleContentClick(content)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.75rem',
+                            backgroundColor: isCompleted ? '#F0F9FF' : '#F9FAFB',
+                            borderRadius: '6px',
+                            marginBottom: '0.5rem',
+                            border: `1px solid ${isCompleted ? '#0EA5E9' : '#E5E7EB'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = isCompleted ? '#E0F2FE' : '#EEF2FF';
+                            e.currentTarget.style.borderColor = '#2D2B6B';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = isCompleted ? '#F0F9FF' : '#F9FAFB';
+                            e.currentTarget.style.borderColor = isCompleted ? '#0EA5E9' : '#E5E7EB';
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                            <span style={{ fontSize: '1.2rem' }}>{getContentIcon(content.content_type_name || '')}</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '0.875rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {content.title}
+                                {isCompleted && (
+                                  <span style={{ color: '#10B981', fontSize: '0.75rem' }}>✓</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                <span>{getContentTypeDisplay(content.content_type_name)}</span>
+                                {content.estimated_duration && (
+                                  <span>⏱️ {formatDuration(content.estimated_duration)}</span>
+                                )}
+                                {contentTimeSpent > 0 && (
+                                  <span>🕒 {formatTime(contentTimeSpent)}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            {/* {!hasMetTimeRequirement && content.min_required_time && (
+                              <span style={{ fontSize: '0.75rem', color: '#F59E0B', fontWeight: '500' }}>
+                                {content.min_required_time}min requis
+                              </span>
+                            )} */}
+                            <div style={{ position: 'relative' }}>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowContentMenu(showContentMenu === content.id ? null : content.id);
+                                }}
+                                style={{ 
+                                  background: 'none', 
+                                  border: 'none', 
+                                  cursor: 'pointer', 
+                                  color: '#6B7280',
+                                  fontSize: '1.25rem',
+                                  padding: '0.25rem 0.5rem',
+                                  borderRadius: '4px'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                ⋯
+                              </button>
+                              
+                              {showContentMenu === content.id && (
+                                <div 
+                                  ref={contentMenuRef}
+                                  style={{
+                                    position: 'absolute',
+                                    right: 0,
+                                    top: '100%',
+                                    backgroundColor: 'white',
+                                    border: '1px solid #E5E7EB',
+                                    borderRadius: '6px',
+                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                    minWidth: '180px',
+                                    zIndex: 10,
+                                    marginTop: '0.25rem'
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleChangeContentStatus(content, 0);
+                                      handleContentClick(content);
+                                      setShowContentMenu(null);
                                     }}
                                     style={{
                                       width: '100%',
-                                      padding: '0.5rem 0.75rem',
+                                      padding: '0.75rem 1rem',
                                       textAlign: 'left',
                                       background: 'none',
                                       border: 'none',
                                       cursor: 'pointer',
                                       fontSize: '0.875rem',
-                                      color: '#F59E0B',
+                                      color: '#374151',
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: '0.5rem',
-                                      borderRadius: '4px'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                  >
-                                    📝 Brouillon
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleChangeContentStatus(content, 1);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.5rem 0.75rem',
-                                      textAlign: 'left',
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      fontSize: '0.875rem',
-                                      color: '#10B981',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem',
-                                      borderRadius: '4px'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D1FAE5'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                  >
-                                    ✓ Actif
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleChangeContentStatus(content, 2);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.5rem 0.75rem',
-                                      textAlign: 'left',
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      fontSize: '0.875rem',
-                                      color: '#6B7280',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem',
-                                      borderRadius: '4px'
+                                      gap: '0.5rem'
                                     }}
                                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
                                   >
-                                    📦 Archivé
+                                    👁️ Voir le contenu
                                   </button>
+
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditContent(content);
+                                    }}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.75rem 1rem',
+                                      textAlign: 'left',
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      fontSize: '0.875rem',
+                                      color: '#374151',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                  >
+                                    ✏️ Modifier
+                                  </button>
+
+                                  <div style={{ borderTop: '1px solid #E5E7EB', margin: '0.25rem 0' }} />
+                                  
+                                  <div style={{ padding: '0.5rem 1rem' }}>
+                                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6B7280', marginBottom: '0.5rem' }}>
+                                      Changer le statut
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleChangeContentStatus(content, 0);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        textAlign: 'left',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#F59E0B',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        borderRadius: '4px'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      📝 Brouillon
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleChangeContentStatus(content, 1);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        textAlign: 'left',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#10B981',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        borderRadius: '4px'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D1FAE5'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      ✓ Actif
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleChangeContentStatus(content, 2);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        textAlign: 'left',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#6B7280',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        borderRadius: '4px'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      📦 Archivé
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div style={{ padding: '1rem', textAlign: 'center', color: '#6B7280', fontSize: '0.875rem' }}>
                       Aucun contenu dans ce module
@@ -1078,8 +1374,8 @@ const FormationDetailsPage = () => {
         </div>
       </div>
 
-      {/* Content Viewer Modal */}
-      {viewContentModal && (
+      {/* Enhanced Content Viewer Modal */}
+      {showModal && selectedContent && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -1093,49 +1389,42 @@ const FormationDetailsPage = () => {
           zIndex: 1000,
           padding: '2rem'
         }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            width: '100%',
-            maxWidth: '900px',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden'
-          }}>
+          <div 
+            ref={contentViewerModalRef}
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              width: '100%',
+              maxWidth: '900px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
             {/* Header */}
             <div style={{ padding: '1.5rem', borderBottom: '1px solid #E5E7EB' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '1.5rem' }}>{getContentIcon(viewContentModal.content_type)}</span>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>{viewContentModal.title}</h3>
+                <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type_name || '')}</span>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>{selectedContent.title}</h3>
               </div>
               <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
-                Module {courseData.modules.find(m => m.contents.some(c => c.id === viewContentModal.id))?.order} • {courseData.modules.find(m => m.contents.some(c => c.id === viewContentModal.id))?.title}
+                Module {course.modules.find(m => m.contents.some(c => c.id === selectedContent.id))?.order} • {course.modules.find(m => m.contents.some(c => c.id === selectedContent.id))?.title}
               </div>
             </div>
 
-            {/* Time Required Banner */}
-            {viewContentModal.min_required_time && (
-              <div style={{ 
-                backgroundColor: '#FEF3C7', 
-                padding: '1rem 1.5rem',
-                borderBottom: '1px solid #E5E7EB'
-              }}>
-                <p style={{ margin: 0, fontSize: '0.875rem', color: '#92400E' }}>
-                  <strong>Temps requis :</strong> Vous devez passer {viewContentModal.min_required_time} minutes ou plus dans ce cours avant de pouvoir marquer le contenu comme terminé.
-                </p>
-              </div>
-            )}
+            {/* Enhanced Time Required Banner */}
+            {/*  */}
 
             {/* Content Description */}
-            {viewContentModal.caption && (
+            {selectedContent.caption && (
               <div style={{ padding: '1rem 1.5rem', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
                 <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>À propos du contenu</h4>
-                <p style={{ margin: 0, fontSize: '0.875rem', color: '#6B7280', lineHeight: '1.5' }}>{viewContentModal.caption}</p>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#6B7280', lineHeight: '1.5' }}>{selectedContent.caption}</p>
               </div>
             )}
 
-            {/* Timer Display */}
+            {/* Enhanced Timer Display */}
             <div style={{ 
               padding: '0.75rem 1.5rem',
               backgroundColor: '#EEF2FF',
@@ -1147,11 +1436,11 @@ const FormationDetailsPage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ fontSize: '1.25rem' }}>⏱️</span>
                 <span style={{ fontSize: '0.875rem', color: '#4338CA', fontWeight: '500' }}>
-                  Temps estimé de lecture : {viewContentModal.estimated_duration || 15}min
+                  Temps estimé : {selectedContent.estimated_duration || 15}min
                 </span>
               </div>
               <div style={{ fontSize: '1rem', fontWeight: '600', color: '#4338CA' }}>
-                {formatTimer(timeElapsed)} / {formatTimer((viewContentModal.estimated_duration || 15) * 60)}
+                {formatTime(timeSpent)} / {formatTime((selectedContent.estimated_duration || 15) * 60)}
               </div>
             </div>
 
@@ -1160,74 +1449,120 @@ const FormationDetailsPage = () => {
               <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Contenu à lire</h4>
 
               {/* PDF Content */}
-              {viewContentModal.content_type?.toLowerCase() === 'pdf' && viewContentModal.pdf_content && (
+              {/* {selectedContent.content_type_name?.toLowerCase() === 'pdf' && (
                 <div>
-                  <iframe 
-                    src={getFileUrl(viewContentModal.pdf_content.pdf_file)}
-                    style={{
-                      width: '100%',
-                      height: '500px',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '6px',
-                      backgroundColor: '#000'
-                    }}
-                    title={viewContentModal.title}
-                  />
+                  {getPdfUrl(selectedContent) ? (
+                    <iframe 
+                      src={getPdfUrl(selectedContent)!}
+                      style={{
+                        width: '100%',
+                        height: '500px',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '6px',
+                        backgroundColor: '#000'
+                      }}
+                      title={selectedContent.title}
+                    />
+                  ) : (
+                    <div style={{
+                      backgroundColor: '#F3F4F6',
+                      borderRadius: '8px',
+                      padding: '3rem',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
+                      <div style={{ color: '#6B7280' }}>Document PDF non disponible</div>
+                    </div>
+                  )}
                 </div>
-              )}
+              )} */}
 
               {/* Video Content */}
-              {viewContentModal.content_type?.toLowerCase() === 'video' && viewContentModal.video_content && (
+              {selectedContent.content_type_name?.toLowerCase() === 'video' && (
+
                 <div>
-                  <video 
-                    controls
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      maxHeight: '500px',
-                      backgroundColor: '#000',
-                      borderRadius: '6px'
-                    }}
-                  >
-                    <source src={getFileUrl(viewContentModal.video_content.video_file)} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
+                  {getVideoUrl(selectedContent) ? (
+                    <video 
+                      controls
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        maxHeight: '500px',
+                        backgroundColor: '#000',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      <source src={getVideoUrl(selectedContent)!} type="video/mp4" />
+                      Votre navigateur ne supporte pas la lecture de vidéos.
+                    </video>
+                  ) : (
+                    <div style={{
+                      backgroundColor: '#1F2937',
+                      borderRadius: '8px',
+                      padding: '3rem',
+                      textAlign: 'center',
+                      color: 'white'
+                    }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎬</div>
+                      <div>Vidéo non disponible</div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* QCM Content */}
-              {viewContentModal.content_type?.toLowerCase() === 'qcm' && viewContentModal.qcm && (
+              {/* Enhanced QCM Content */}
+              {selectedContent.content_type_name?.toLowerCase() === 'qcm' && selectedContent.qcm && (
                 <div style={{
                   padding: '1.5rem',
                   backgroundColor: '#F9FAFB',
                   borderRadius: '6px',
                   border: '1px solid #E5E7EB'
                 }}>
-                  <h5 style={{ marginBottom: '1rem', fontSize: '1rem' }}>{viewContentModal.qcm.question}</h5>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {viewContentModal.qcm.options?.map((option: any, index: number) => (
-                      <label 
-                        key={index}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.75rem',
-                          padding: '0.75rem',
-                          backgroundColor: 'white',
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <input type="radio" name="quiz-option" />
-                        <span style={{ fontSize: '0.875rem' }}>{option.text}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <h5 style={{ marginBottom: '1rem', fontSize: '1rem' }}>{selectedContent.qcm.title}</h5>
+                  {selectedContent.qcm.questions?.map((question, qIndex) => (
+                    <div key={question.id} style={{ marginBottom: '2rem' }}>
+                      <div style={{ 
+                        fontWeight: '500', 
+                        marginBottom: '1rem',
+                        fontSize: '1rem'
+                      }}>
+                        {qIndex + 1}. {question.question}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {question.options.map((option) => (
+                          <label 
+                            key={option.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              padding: '0.75rem',
+                              backgroundColor: 'white',
+                              border: '1px solid #E5E7EB',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <input 
+                              type="radio" 
+                              name={`question-${question.id}`} 
+                              style={{ cursor: 'pointer' }} 
+                            />
+                            <span style={{ fontSize: '0.875rem' }}>{option.text}</span>
+                            {option.is_correct && (
+                              <span style={{ fontSize: '0.75rem', color: '#10B981', marginLeft: 'auto' }}>
+                                ✓ Correct
+                              </span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {/* File Download Section */}
+              {/* Enhanced File Download Section */}
               <div style={{ 
                 marginTop: '1rem',
                 padding: '1rem',
@@ -1238,17 +1573,20 @@ const FormationDetailsPage = () => {
                 justifyContent: 'space-between'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>{getContentIcon(viewContentModal.content_type)}</span>
+                  <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type_name || '')}</span>
                   <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>{getFileName(viewContentModal)}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>{getFileSize(viewContentModal)}</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>{getFileName(selectedContent)}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>
+                      {getFileSize(selectedContent)}
+                      {selectedContent.estimated_duration && ` • ${formatDuration(selectedContent.estimated_duration)}`}
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  {(viewContentModal.pdf_content || viewContentModal.video_content) && (
+                  {(selectedContent.pdf_content || selectedContent.video_content) && (
                     <>
                       <a
-                        href={getFileUrl(viewContentModal.pdf_content?.pdf_file || viewContentModal.video_content?.video_file || '')}
+                        href={getPdfUrl(selectedContent) || getVideoUrl(selectedContent) || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -1259,11 +1597,11 @@ const FormationDetailsPage = () => {
                           fontWeight: '500'
                         }}
                       >
-                        Ouvrir
+                        Ouvrir dans un nouvel onglet
                       </a>
                       <span style={{ color: '#E5E7EB' }}>•</span>
                       <a
-                        href={getFileUrl(viewContentModal.pdf_content?.pdf_file || viewContentModal.video_content?.video_file || '')}
+                        href={getPdfUrl(selectedContent) || getVideoUrl(selectedContent) || '#'}
                         download
                         style={{
                           padding: '0.5rem 1rem',
@@ -1281,237 +1619,75 @@ const FormationDetailsPage = () => {
               </div>
             </div>
 
-            {/* Footer Actions */}
+            {/* Enhanced Footer Actions */}
             <div style={{ 
               padding: '1.5rem',
               borderTop: '1px solid #E5E7EB',
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               gap: '1rem'
             }}>
-              <button
-                onClick={() => setViewContentModal(null)}
-                style={{
-                  padding: '0.625rem 1.5rem',
-                  backgroundColor: '#6B7280',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-              >
-                Fermer
-              </button>
-              <button
-                onClick={handleMarkCompleted}
-                disabled={viewContentModal.min_required_time ? timeElapsed < (viewContentModal.min_required_time * 60) : false}
-                style={{
-                  padding: '0.625rem 1.5rem',
-                  backgroundColor: (viewContentModal.min_required_time && timeElapsed < (viewContentModal.min_required_time * 60)) ? '#9CA3AF' : '#4338CA',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  cursor: (viewContentModal.min_required_time && timeElapsed < (viewContentModal.min_required_time * 60)) ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                <span>✓</span>
-                Mark as completed
-              </button>
+              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                {userProgress.completedContents.includes(selectedContent.id) ? (
+                  <span style={{ color: '#10B981', fontWeight: '500' }}>✓ Contenu terminé</span>
+                ) : (
+                  <span>Temps passé: {formatTime(userProgress.timeSpent[selectedContent.id] || 0)}</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button
+                  onClick={handleCloseModal}
+                  style={{
+                    padding: '0.625rem 1.5rem',
+                    backgroundColor: '#6B7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Fermer
+                </button>
+                <button
+                  onClick={handleMarkAsCompleted}
+                  disabled={
+                    userProgress.completedContents.includes(selectedContent.id) || 
+                    (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                  }
+                  style={{
+                    padding: '0.625rem 1.5rem',
+                    backgroundColor: userProgress.completedContents.includes(selectedContent.id) 
+                      ? '#10B981' 
+                      : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60)) 
+                        ? '#9CA3AF' 
+                        : '#4338CA',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    cursor: userProgress.completedContents.includes(selectedContent.id) || 
+                           (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                      ? 'not-allowed' 
+                      : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <span>✓</span>
+                  {userProgress.completedContents.includes(selectedContent.id) ? 'Terminé' : 'Marquer comme terminé'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Course Modal */}
-      {showEditCourseModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '8px',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflow: 'auto'
-          }}>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>
-              Modifier la formation
-            </h3>
-            
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              // Handle course update
-              try {
-                if (!courseId) return;
-                
-                const formData = new FormData(e.currentTarget);
-                await api.put(`courses/${courseId}/`, {
-                  title_of_course: formData.get('title'),
-                  description: formData.get('description'),
-                  department: formData.get('department'),
-                  category: formData.get('category')
-                });
-                
-                // Refresh course data
-                const courseResponse = await api.get(`courses/${courseId}/`);
-                const modulesResponse = await api.get(`courses/${courseId}/modules/`);
-                
-                setCourseData({
-                  ...courseResponse.data,
-                  modules: modulesResponse.data
-                });
-                
-                setShowEditCourseModal(false);
-                alert('Formation modifiée avec succès!');
-              } catch (error) {
-                console.error('Failed to update course:', error);
-                alert('Échec de la modification. Veuillez réessayer.');
-              }
-            }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                  Titre de la formation *
-                </label>
-                <input
-                  type="text"
-                  name="title"
-                  defaultValue={courseData?.title_of_course}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #D1D5DB',
-                    borderRadius: '6px',
-                    fontSize: '0.875rem',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  defaultValue={courseData?.description}
-                  rows={4}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #D1D5DB',
-                    borderRadius: '6px',
-                    fontSize: '0.875rem',
-                    boxSizing: 'border-box',
-                    resize: 'vertical'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Département
-                  </label>
-                  <input
-                    type="text"
-                    name="department"
-                    defaultValue={courseData?.department}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Catégorie
-                  </label>
-                  <input
-                    type="text"
-                    name="category"
-                    defaultValue={courseData?.category}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ 
-                display: 'flex', 
-                gap: '1rem', 
-                justifyContent: 'flex-end',
-                marginTop: '1.5rem',
-                paddingTop: '1.5rem',
-                borderTop: '1px solid #E5E7EB'
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowEditCourseModal(false)}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    backgroundColor: '#6B7280',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    fontWeight: '500'
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    backgroundColor: '#F97316',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    fontWeight: '500'
-                  }}
-                >
-                  Enregistrer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* New Module Modal */}
+      {/* Enhanced New Module Modal */}
       {showNewModuleModal && (
         <div style={{
           position: 'fixed',
@@ -1525,13 +1701,16 @@ const FormationDetailsPage = () => {
           alignItems: 'center',
           zIndex: 1000
         }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '8px',
-            width: '90%',
-            maxWidth: '500px'
-          }}>
+          <div 
+            ref={newModuleModalRef}
+            style={{
+              backgroundColor: 'white',
+              padding: '2rem',
+              borderRadius: '8px',
+              width: '90%',
+              maxWidth: '500px'
+            }}
+          >
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Créer un nouveau module</h3>
             <form onSubmit={handleCreateModule}>
               <div style={{ marginBottom: '1rem' }}>
@@ -1553,7 +1732,7 @@ const FormationDetailsPage = () => {
                   }}
                 />
               </div>
-              <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
                   Description
                 </label>
@@ -1572,18 +1751,71 @@ const FormationDetailsPage = () => {
                   }}
                 />
               </div>
+              
+              {/* Enhanced Module Time Settings */}
+              {/* <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    Durée estimée (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={moduleForm.estimated_duration || ''}
+                    onChange={(e) => setModuleForm(prev => ({ 
+                      ...prev, 
+                      estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="1"
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: '0.875rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    Temps minimum requis (minutes) *
+                  </label>
+                  <input
+                    type="number"
+                    value={moduleForm.min_required_time || ''}
+                    onChange={(e) => setModuleForm(prev => ({ 
+                      ...prev, 
+                      min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="1"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: '0.875rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div> */}
+
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                 <button 
                   type="button"
                   onClick={() => {
                     setShowNewModuleModal(false);
-                    setModuleForm({ title: '', description: '' });
+                    setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
                   }}
                   style={{
                     padding: '0.5rem 1rem',
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
-                    background: 'white',
+                    background: '#6D6F71',
                     cursor: 'pointer',
                     fontSize: '0.875rem'
                   }}
@@ -1611,7 +1843,164 @@ const FormationDetailsPage = () => {
         </div>
       )}
 
-      {/* New Content Modal */}
+      {/* Enhanced Edit Module Modal */}
+      {showEditModuleModal && editingModule && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div 
+            ref={editModuleModalRef}
+            style={{
+              backgroundColor: 'white',
+              padding: '2rem',
+              borderRadius: '8px',
+              width: '90%',
+              maxWidth: '500px'
+            }}
+          >
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Modifier le module</h3>
+            <form onSubmit={handleUpdateModule}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                  Titre du module *
+                </label>
+                <input
+                  type="text"
+                  value={moduleForm.title}
+                  onChange={(e) => setModuleForm(prev => ({ ...prev, title: e.target.value }))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #6D6F71',
+                    borderRadius: '4px',
+                    fontSize: '0.875rem',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                  Description
+                </label>
+                <textarea
+                  value={moduleForm.description}
+                  onChange={(e) => setModuleForm(prev => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: '0.875rem',
+                    boxSizing: 'border-box',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Enhanced Module Time Settings */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    Durée estimée (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={moduleForm.estimated_duration || ''}
+                    onChange={(e) => setModuleForm(prev => ({ 
+                      ...prev, 
+                      estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="1"
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: '0.875rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    Temps minimum requis (minutes) *
+                  </label>
+                  <input
+                    type="number"
+                    value={moduleForm.min_required_time || ''}
+                    onChange={(e) => setModuleForm(prev => ({ 
+                      ...prev, 
+                      min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="1"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: '0.875rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowEditModuleModal(false);
+                    setEditingModule(null);
+                    setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
+                  }}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    background: '#6D6F71',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit"
+                  style={{
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#F97316',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced New Content Modal */}
       {showNewContentModal && (
         <div style={{
           position: 'fixed',
@@ -1625,512 +2014,700 @@ const FormationDetailsPage = () => {
           alignItems: 'center',
           zIndex: 1000
         }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '8px',
-            width: '90%',
-            maxWidth: '500px',
-            maxHeight: '90vh',
-            overflow: 'auto'
-          }}>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Ajouter du contenu</h3>
-            {!selectedContentType ? (
-              <div>
-                <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#6B7280' }}>Sélectionnez le type de contenu:</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <button 
-                    onClick={() => setSelectedContentType('pdf')}
-                    style={{
-                      padding: '1rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      background: 'white',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      fontSize: '0.875rem',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                  >
-                    📄 PDF Document
-                  </button>
-                  <button 
-                    onClick={() => setSelectedContentType('video')}
-                    style={{
-                      padding: '1rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      background: 'white',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      fontSize: '0.875rem',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                  >
-                    🎥 Vidéo
-                  </button>
-                  <button 
-                    onClick={() => setSelectedContentType('qcm')}
-                    style={{
-                      padding: '1rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      background: 'white',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      fontSize: '0.875rem',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                  >
-                    📝 Quiz (QCM)
-                  </button>
-                </div>
-                <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
-                  <button 
-                    onClick={() => {
-                      setShowNewContentModal(false);
-                      setSelectedModule(null);
-                    }}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      background: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateContent} style={{ maxHeight: 'calc(90vh - 200px)', overflowY: 'auto' }}>
-                {/* Section 1: Informations générales */}
-                <div style={{ backgroundColor: '#E5E7EB', padding: '0.75rem 1rem', marginBottom: '1.5rem', borderRadius: '4px' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>
-                    1. Informations générales
-                  </h4>
-                </div>
-
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Titre du contenu *
-                  </label>
-                  <input
-                    type="text"
-                    value={contentForm.title}
-                    onChange={(e) => setContentForm(prev => ({ ...prev, title: e.target.value }))}
-                    required
-                    placeholder="Entrez le titre du contenu"
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Description
-                  </label>
-                  <textarea
-                    value={contentForm.caption}
-                    onChange={(e) => setContentForm(prev => ({ ...prev, caption: e.target.value }))}
-                    rows={4}
-                    placeholder="Ajoutez une description..."
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box',
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-
-                {/* Section 2: Configuration du temps */}
-                <div style={{ backgroundColor: '#E5E7EB', padding: '0.75rem 1rem', marginBottom: '1.5rem', borderRadius: '4px' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>
-                    2. Configuration du temps
-                  </h4>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                      Durée estimée *
-                    </label>
-                    <input
-                      type="number"
-                      value={contentForm.time_limit || ''}
-                      onChange={(e) => setContentForm(prev => ({ ...prev, time_limit: parseInt(e.target.value) || 0 }))}
-                      placeholder="15"
-                      min="0"
+          <div 
+            ref={newContentModalRef}
+            style={{
+              backgroundColor: 'white',
+              padding: '2rem',
+              borderRadius: '8px',
+              width: '90%',
+              maxWidth: '600px',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+          >
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Créer un nouveau contenu</h3>
+            <form onSubmit={handleCreateContent}>
+              {!selectedContentType ? (
+                <div className="text-center">
+                  <h6 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Choisir le type de contenu</h6>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                    <button 
+                      type="button"
+                      className="btn btn-outline-primary" 
+                      onClick={() => setSelectedContentType('pdf')}
                       style={{
-                        width: '100%',
-                        padding: '0.75rem',
-                        border: '1px solid #D1D5DB',
+                        padding: '1rem 1.5rem',
+                        border: '1px solid #2D2B6B',
                         borderRadius: '6px',
-                        fontSize: '0.875rem',
-                        boxSizing: 'border-box'
+                        background: 'white',
+                        color: '#2D2B6B',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        minWidth: '120px'
                       }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                      Temps min requis *
-                    </label>
-                    <input
-                      type="number"
-                      value={contentForm.max_attempts || ''}
-                      onChange={(e) => setContentForm(prev => ({ ...prev, max_attempts: parseInt(e.target.value) || 0 }))}
-                      placeholder="12"
-                      min="0"
+                    >
+                      <span style={{ fontSize: '1.5rem' }}>📄</span>
+                      <span>PDF</span>
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn btn-outline-primary" 
+                      onClick={() => setSelectedContentType('video')}
                       style={{
-                        width: '100%',
-                        padding: '0.75rem',
-                        border: '1px solid #D1D5DB',
+                        padding: '1rem 1.5rem',
+                        border: '1px solid #2D2B6B',
                         borderRadius: '6px',
-                        fontSize: '0.875rem',
-                        boxSizing: 'border-box'
+                        background: 'white',
+                        color: '#2D2B6B',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        minWidth: '120px'
                       }}
-                    />
+                    >
+                      <span style={{ fontSize: '1.5rem' }}>🎬</span>
+                      <span>Vidéo</span>
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn btn-outline-primary" 
+                      onClick={() => setSelectedContentType('qcm')}
+                      style={{
+                        padding: '1rem 1.5rem',
+                        border: '1px solid #2D2B6B',
+                        borderRadius: '6px',
+                        background: 'white',
+                        color: '#2D2B6B',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        minWidth: '120px'
+                      }}
+                    >
+                      <span style={{ fontSize: '1.5rem' }}>✏️</span>
+                      <span>Quiz QCM</span>
+                    </button>
                   </div>
                 </div>
-
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Choisissez une durée *
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    {[5, 10, 15, 20, 30].map((duration) => (
-                      <button
-                        key={duration}
+              ) : (
+                <div>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                      Type de contenu *
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', backgroundColor: '#F9FAFB', borderRadius: '4px' }}>
+                      <span style={{ fontSize: '1.25rem' }}>{getContentIcon(selectedContentType)}</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>
+                        {selectedContentType === 'pdf' && 'Document PDF'}
+                        {selectedContentType === 'video' && 'Vidéo'}
+                        {selectedContentType === 'qcm' && 'Quiz QCM'}
+                      </span>
+                      <button 
                         type="button"
-                        onClick={() => setContentForm(prev => ({ ...prev, time_limit: duration }))}
+                        onClick={() => setSelectedContentType(null)}
                         style={{
-                          padding: '0.625rem 1.25rem',
-                          backgroundColor: contentForm.time_limit === duration ? '#EEF2FF' : 'white',
-                          border: `2px solid ${contentForm.time_limit === duration ? '#4338CA' : '#D1D5DB'}`,
-                          borderRadius: '6px',
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
+                          marginLeft: 'auto',
+                          background: 'none',
+                          border: 'none',
+                          color: '#6B7280',
                           cursor: 'pointer',
-                          color: contentForm.time_limit === duration ? '#4338CA' : '#6B7280',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          transition: 'all 0.2s'
+                          fontSize: '0.875rem'
                         }}
                       >
-                        {contentForm.time_limit === duration && <span>✓</span>}
-                        {duration} min
+                        Changer
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Note informative */}
-                <div style={{ 
-                  backgroundColor: '#DBEAFE', 
-                  border: '1px solid #93C5FD',
-                  padding: '1rem', 
-                  borderRadius: '6px',
-                  marginBottom: '1.5rem'
-                }}>
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: '#1E40AF', lineHeight: '1.5' }}>
-                    <strong>Note :</strong> Prévoyez suffisamment de temps pour lire attentivement les questions et réfléchir. Les questions complexes peuvent nécessiter plus de temps.
-                  </p>
-                </div>
-
-                {/* Section 3: Données du contenu */}
-                <div style={{ backgroundColor: '#E5E7EB', padding: '0.75rem 1rem', marginBottom: '1.5rem', borderRadius: '4px' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>
-                    3. Données du contenu
-                  </h4>
-                </div>
-
-                {/* PDF Upload */}
-                {selectedContentType === 'pdf' && (
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <div 
-                      style={{
-                        border: '2px dashed #D1D5DB',
-                        borderRadius: '8px',
-                        padding: '2rem',
-                        textAlign: 'center',
-                        backgroundColor: '#F9FAFB',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = '#4338CA';
-                        e.currentTarget.style.backgroundColor = '#EEF2FF';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = '#D1D5DB';
-                        e.currentTarget.style.backgroundColor = '#F9FAFB';
-                      }}
-                      onClick={() => document.getElementById('pdf-upload')?.click()}
-                    >
-                      <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📄</div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem' }}>
-                        Charger un PDF
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>
-                        Les formats supportés : PDF
-                      </div>
-                      <input
-                        id="pdf-upload"
-                        type="file"
-                        accept=".pdf"
-                        onChange={handleFileChange}
-                        required
-                        style={{ display: 'none' }}
-                      />
                     </div>
-                    {contentForm.file && (
-                      <div style={{ 
-                        marginTop: '0.75rem', 
-                        padding: '0.75rem', 
-                        backgroundColor: '#EEF2FF',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span>📄</span>
-                          <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>{contentForm.file.name}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setContentForm(prev => ({ ...prev, file: null }))}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#DC2626',
-                            cursor: 'pointer',
-                            fontSize: '1.25rem'
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
                   </div>
-                )}
 
-                {/* Video Upload */}
-                {selectedContentType === 'video' && (
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <div 
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                      Module *
+                    </label>
+                    <select
+                      value={selectedModule || ''}
+                      onChange={(e) => setSelectedModule(Number(e.target.value))}
+                      required
                       style={{
-                        border: '2px dashed #D1D5DB',
-                        borderRadius: '8px',
-                        padding: '2rem',
-                        textAlign: 'center',
-                        backgroundColor: '#F9FAFB',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
+                        width: '100%',
+                        padding: '0.5rem',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px',
+                        fontSize: '0.875rem',
+                        boxSizing: 'border-box'
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = '#4338CA';
-                        e.currentTarget.style.backgroundColor = '#EEF2FF';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = '#D1D5DB';
-                        e.currentTarget.style.backgroundColor = '#F9FAFB';
-                      }}
-                      onClick={() => document.getElementById('video-upload')?.click()}
                     >
-                      <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎥</div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem' }}>
-                        Charger une vidéo
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>
-                        Les formats supportés : MP4, AVI, MOV
-                      </div>
-                      <input
-                        id="video-upload"
-                        type="file"
-                        accept="video/*,.mp4,.avi,.mov"
-                        onChange={handleFileChange}
-                        required
-                        style={{ display: 'none' }}
-                      />
-                    </div>
-                    {contentForm.file && (
-                      <div style={{ 
-                        marginTop: '0.75rem', 
-                        padding: '0.75rem', 
-                        backgroundColor: '#EEF2FF',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span>🎥</span>
-                          <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>{contentForm.file.name}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setContentForm(prev => ({ ...prev, file: null }))}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#DC2626',
-                            cursor: 'pointer',
-                            fontSize: '1.25rem'
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
+                      <option value="">Sélectionner un module</option>
+                      {course?.modules?.map(module => (
+                        <option key={module.id} value={module.id}>
+                          {module.title}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
 
-                {/* QCM Fields */}
-                {selectedContentType === 'qcm' && (
-                  <div style={{ marginBottom: '1.5rem' }}>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                      Titre du contenu *
+                    </label>
+                    <input
+                      type="text"
+                      value={contentForm.title}
+                      onChange={(e) => setContentForm(prev => ({ ...prev, title: e.target.value }))}
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px',
+                        fontSize: '0.875rem',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                      Description
+                    </label>
+                    <textarea
+                      value={contentForm.caption}
+                      onChange={(e) => setContentForm(prev => ({ ...prev, caption: e.target.value }))}
+                      rows={3}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px',
+                        fontSize: '0.875rem',
+                        boxSizing: 'border-box',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+
+                  {/* Enhanced Time Settings */}
+                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
+                    <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
+                    
                     <div style={{ marginBottom: '1rem' }}>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                        Question *
+                        Durée estimée (minutes)
                       </label>
-                      <textarea
-                        value={contentForm.question}
-                        onChange={(e) => setContentForm(prev => ({ ...prev, question: e.target.value }))}
-                        required
-                        rows={3}
-                        placeholder="Entrez la question du quiz..."
+                      <input
+                        type="number"
+                        value={contentForm.estimated_duration || ''}
+                        onChange={(e) => setContentForm(prev => ({ 
+                          ...prev, 
+                          estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                        }))}
+                        min="1"
                         style={{
                           width: '100%',
-                          padding: '0.75rem',
+                          padding: '0.5rem',
                           border: '1px solid #D1D5DB',
-                          borderRadius: '6px',
+                          borderRadius: '4px',
                           fontSize: '0.875rem',
-                          boxSizing: 'border-box',
-                          resize: 'vertical'
+                          boxSizing: 'border-box'
                         }}
                       />
                     </div>
                     
                     <div style={{ marginBottom: '1rem' }}>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                        Type de question
-                      </label>
-                      <select
-                        value={contentForm.question_type}
-                        onChange={(e) => setContentForm(prev => ({ ...prev, question_type: e.target.value }))}
-                        style={{
-                          width: '100%',
-                          padding: '0.75rem',
-                          border: '1px solid #D1D5DB',
-                          borderRadius: '6px',
-                          fontSize: '0.875rem',
-                          boxSizing: 'border-box'
-                        }}
-                      >
-                        <option value="single">Choix unique</option>
-                        <option value="multiple">Choix multiples</option>
-                      </select>
-                    </div>
-
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                        Points
+                        Temps minimum requis (minutes) *
                       </label>
                       <input
                         type="number"
-                        value={contentForm.points}
-                        onChange={(e) => setContentForm(prev => ({ ...prev, points: parseInt(e.target.value) || 1 }))}
+                        value={contentForm.min_required_time || ''}
+                        onChange={(e) => setContentForm(prev => ({ 
+                          ...prev, 
+                          min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                        }))}
                         min="1"
-                        placeholder="1"
+                        required
                         style={{
                           width: '100%',
-                          padding: '0.75rem',
+                          padding: '0.5rem',
                           border: '1px solid #D1D5DB',
-                          borderRadius: '6px',
+                          borderRadius: '4px',
                           fontSize: '0.875rem',
                           boxSizing: 'border-box'
                         }}
                       />
                     </div>
                   </div>
-                )}
 
-                {/* Footer Buttons */}
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '1rem', 
-                  justifyContent: 'flex-end', 
-                  marginTop: '2rem',
-                  paddingTop: '1.5rem',
-                  borderTop: '1px solid #E5E7EB'
-                }}>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setSelectedContentType(null);
-                      setContentForm({ 
-                        title: '', 
-                        caption: '', 
-                        file: null,
-                        question: '',
-                        question_type: 'single',
-                        options: [],
-                        points: 1,
-                        passing_score: 80,
-                        max_attempts: 3,
-                        time_limit: 0
-                      });
-                    }}
-                    style={{
-                      padding: '0.75rem 1.5rem',
-                      border: 'none',
-                      borderRadius: '6px',
-                      background: '#6B7280',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem',
-                      fontWeight: '500'
-                    }}
-                  >
-                    Fermer
-                  </button>
-                  <button 
-                    type="submit"
-                    style={{
-                      padding: '0.75rem 1.5rem',
-                      backgroundColor: '#2D2B6B',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem',
-                      fontWeight: '500'
-                    }}
-                  >
-                    Enregistrer
-                  </button>
+                  {/* File Upload for PDF and Video */}
+                  {(selectedContentType === 'pdf' || selectedContentType === 'video') && (
+                    <div style={{ marginBottom: '1.5rem' }}>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                        Fichier {selectedContentType === 'pdf' ? 'PDF' : 'Vidéo'} *
+                      </label>
+                      <input
+                        type="file"
+                        accept={selectedContentType === 'pdf' ? '.pdf' : 'video/*'}
+                        onChange={handleFileChange}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          border: '1px solid #D1D5DB',
+                          borderRadius: '4px',
+                          fontSize: '0.875rem',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Enhanced QCM Form */}
+                  {selectedContentType === 'qcm' && (
+                    <div style={{ marginBottom: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: '600' }}>Configuration du QCM</h4>
+                        <button
+                          type="button"
+                          onClick={addQuestion}
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            backgroundColor: '#2D2B6B',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          + Ajouter une question
+                        </button>
+                      </div>
+
+                      {contentForm.questions.map((question, qIndex) => (
+                        <div key={qIndex} style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h5 style={{ fontSize: '0.875rem', fontWeight: '600', margin: 0 }}>Question {qIndex + 1}</h5>
+                            {contentForm.questions.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeQuestion(qIndex)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#EF4444',
+                                  cursor: 'pointer',
+                                  fontSize: '0.875rem'
+                                }}
+                              >
+                                ✕ Supprimer
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                              Question *
+                            </label>
+                            <input
+                              type="text"
+                              value={question.question}
+                              onChange={(e) => handleQuestionChange(qIndex, 'question', e.target.value)}
+                              required
+                              style={{
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '0.875rem',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </div>
+
+                          <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                              Type de question
+                            </label>
+                            <select
+                              value={question.question_type}
+                              onChange={(e) => handleQuestionChange(qIndex, 'question_type', e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '0.875rem',
+                                boxSizing: 'border-box'
+                              }}
+                            >
+                              <option value="single">Choix unique</option>
+                              <option value="multiple">Choix multiple</option>
+                            </select>
+                          </div>
+
+                          <div style={{ marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                              <label style={{ fontSize: '0.875rem', fontWeight: '500' }}>Options *</label>
+                              <button
+                                type="button"
+                                onClick={() => addOption(qIndex)}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  backgroundColor: '#10B981',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                + Ajouter une option
+                              </button>
+                            </div>
+                            
+                            {question.options.map((option, oIndex) => (
+                              <div key={oIndex} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                                <input
+                                  type={question.question_type === 'single' ? 'radio' : 'checkbox'}
+                                  name={`correct-${qIndex}`}
+                                  checked={option.is_correct}
+                                  onChange={(e) => {
+                                    if (question.question_type === 'single') {
+                                      // For single choice, set all others to false
+                                      const newOptions = question.options.map((opt, idx) => ({
+                                        ...opt,
+                                        is_correct: idx === oIndex
+                                      }));
+                                      handleQuestionChange(qIndex, 'options', newOptions);
+                                    } else {
+                                      // For multiple choice, toggle this one
+                                      handleOptionChange(qIndex, oIndex, 'is_correct', e.target.checked);
+                                    }
+                                  }}
+                                  style={{ cursor: 'pointer' }}
+                                />
+                                <input
+                                  type="text"
+                                  value={option.text}
+                                  onChange={(e) => handleOptionChange(qIndex, oIndex, 'text', e.target.value)}
+                                  placeholder="Texte de l'option"
+                                  required
+                                  style={{
+                                    flex: 1,
+                                    padding: '0.5rem',
+                                    border: '1px solid #D1D5DB',
+                                    borderRadius: '4px',
+                                    fontSize: '0.875rem',
+                                    boxSizing: 'border-box'
+                                  }}
+                                />
+                                {question.options.length > 2 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeOption(qIndex, oIndex)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#EF4444',
+                                      cursor: 'pointer',
+                                      padding: '0.25rem'
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* QCM Settings */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                                Points
+                              </label>
+                              <input
+                                type="number"
+                                value={contentForm.points}
+                                onChange={(e) => setContentForm(prev => ({ ...prev, points: parseInt(e.target.value) }))}
+                                min="1"
+                                style={{
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #D1D5DB',
+                                  borderRadius: '4px',
+                                  fontSize: '0.875rem',
+                                  boxSizing: 'border-box'
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                                Score de passage (%)
+                              </label>
+                              <input
+                                type="number"
+                                value={contentForm.passing_score}
+                                onChange={(e) => setContentForm(prev => ({ ...prev, passing_score: parseInt(e.target.value) }))}
+                                min="0"
+                                max="100"
+                                style={{
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #D1D5DB',
+                                  borderRadius: '4px',
+                                  fontSize: '0.875rem',
+                                  boxSizing: 'border-box'
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                                Tentatives max
+                              </label>
+                              <input
+                                type="number"
+                                value={contentForm.max_attempts}
+                                onChange={(e) => setContentForm(prev => ({ ...prev, max_attempts: parseInt(e.target.value) }))}
+                                min="1"
+                                style={{
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #D1D5DB',
+                                  borderRadius: '4px',
+                                  fontSize: '0.875rem',
+                                  boxSizing: 'border-box'
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                                Limite de temps (min)
+                              </label>
+                              <input
+                                type="number"
+                                value={contentForm.time_limit}
+                                onChange={(e) => setContentForm(prev => ({ ...prev, time_limit: parseInt(e.target.value) }))}
+                                min="0"
+                                style={{
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #D1D5DB',
+                                  borderRadius: '4px',
+                                  fontSize: '0.875rem',
+                                  boxSizing: 'border-box'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowNewContentModal(false);
+                        setSelectedContentType(null);
+                        setSelectedModule(null);
+                        resetContentForm();
+                      }}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px',
+                        background: '#6D6F71',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      Annuler
+                    </button>
+                    <button 
+                      type="submit"
+                      style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: '#2D2B6B',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Créer
+                    </button>
+                  </div>
                 </div>
-              </form>
-            )}
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Edit Content Modal */}
+      {showEditContentModal && editingContent && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div 
+            ref={editContentModalRef}
+            style={{
+              backgroundColor: 'white',
+              padding: '2rem',
+              borderRadius: '8px',
+              width: '90%',
+              maxWidth: '500px'
+            }}
+          >
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Modifier le contenu</h3>
+            <form onSubmit={handleUpdateContent}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                  Titre du contenu *
+                </label>
+                <input
+                  type="text"
+                  value={contentForm.title}
+                  onChange={(e) => setContentForm(prev => ({ ...prev, title: e.target.value }))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: '0.875rem',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                  Description
+                </label>
+                <textarea
+                  value={contentForm.caption}
+                  onChange={(e) => setContentForm(prev => ({ ...prev, caption: e.target.value }))}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: '0.875rem',
+                    boxSizing: 'border-box',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Enhanced Time Settings */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    Durée estimée (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={contentForm.estimated_duration || ''}
+                    onChange={(e) => setContentForm(prev => ({ 
+                      ...prev, 
+                      estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="1"
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: '0.875rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    Temps minimum requis (minutes) *
+                  </label>
+                  <input
+                    type="number"
+                    value={contentForm.min_required_time || ''}
+                    onChange={(e) => setContentForm(prev => ({ 
+                      ...prev, 
+                      min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="1"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: '0.875rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowEditContentModal(false);
+                    setEditingContent(null);
+                    resetContentForm();
+                  }}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    background: '#6D6F71',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit"
+                  style={{
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#F97316',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2138,4 +2715,4 @@ const FormationDetailsPage = () => {
   );
 };
 
-export default FormationDetailsPage;
+export default CourseDetail;

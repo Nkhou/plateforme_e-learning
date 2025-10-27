@@ -264,6 +264,167 @@ class CourseStatusManagementView(APIView):
             print(f"Unexpected error: {e}")
             return {'labels': [], 'data': []}
 
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+# from .models import Course, CourseSubscription
+from .serializers import CourseSerializer
+
+class CourseManagementView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Récupérer les cours selon le rôle de l'utilisateur"""
+        user = request.user
+        
+        # Admin: Get all courses in the platform
+        if user.privilege == 'A':
+            courses = Course.objects.all()
+        
+        # Formateur: Get all courses created by the user
+        elif user.privilege == 'F':
+            courses = Course.objects.filter(creator=user)
+        
+        # Étudiant/Utilisateur normal: Get subscribed courses that are active
+        else:
+            # Get course IDs that the user is subscribed to
+            subscribed_course_ids = CourseSubscription.objects.filter(
+                user=user
+            ).values_list('course_id', flat=True)
+            
+            # Get active courses that the user is subscribed to
+            courses = Course.objects.filter(
+                Q(id__in=subscribed_course_ids) & 
+                Q(status=1)  # Active courses only
+            )
+        
+        serializer = CourseSerializer(courses, many=True, context={'request': request})
+        enrollment_stats = self.get_enrollment_stats(user)
+        
+        return Response({
+            'courses': serializer.data,
+            'enrollment_stats': enrollment_stats,
+            'user_role': self.get_user_role_display(user.privilege),
+            'total_courses': courses.count()
+        })
+    
+    def get_user_role_display(self, privilege):
+        """Get display name for user role"""
+        role_mapping = {
+            'A': 'Administrateur',
+            'F': 'Formateur', 
+            'S': 'Étudiant',
+            'U': 'Utilisateur'
+        }
+        return role_mapping.get(privilege, 'Utilisateur')
+    
+    def post(self, request, pk):
+        """Changer le statut d'un cours"""
+        course = get_object_or_404(Course, pk=pk)
+        user = request.user
+        
+        # Vérifier les permissions
+        if not self.has_permission_to_modify(course, user):
+            return Response(
+                {'error': 'Vous n\'êtes pas autorisé à modifier ce cours'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        action = request.data.get('action')  # 'activate', 'archive', 'draft'
+        
+        if action == 'activate':
+            course.status = 1
+            course.save()
+            return Response({
+                'message': f'Cours "{course.title_of_course}" activé avec succès',
+                'status': 'active',
+                'status_display': 'Actif'
+            })
+        elif action == 'archive':
+            course.status = 2
+            course.save()
+            return Response({
+                'message': f'Cours "{course.title_of_course}" archivé avec succès',
+                'status': 'archived',
+                'status_display': 'Archivé'
+            })
+        elif action == 'draft':
+            course.status = 0
+            course.save()
+            return Response({
+                'message': f'Cours "{course.title_of_course}" mis en brouillon avec succès',
+                'status': 'draft',
+                'status_display': 'Brouillon'
+            })
+        else:
+            return Response(
+                {'error': 'Action non valide. Utilisez "activate", "archive" ou "draft".'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    def has_permission_to_modify(self, course, user):
+        """Check if user has permission to modify the course"""
+        # Admin can modify any course
+        if user.privilege == 'A':
+            return True
+        
+        # Formateur can only modify their own courses
+        if user.privilege == 'F' and course.creator == user:
+            return True
+        
+        # Students and other users cannot modify courses
+        return False
+    
+    def get_enrollment_stats(self, user):
+        """Get enrollment statistics based on user role"""
+        try:
+            if user.privilege == 'A':
+                # Admin: Get top 10 most enrolled courses across platform
+                courses_with_subs = (
+                    Course.objects
+                    .annotate(enrollment_count=Count('course_subscriptions'))
+                    .order_by('-enrollment_count')[:10]
+                    .values('title_of_course', 'enrollment_count')
+                )
+            
+            elif user.privilege == 'F':
+                # Formateur: Get enrollment stats for their own courses
+                courses_with_subs = (
+                    Course.objects
+                    .filter(creator=user)
+                    .annotate(enrollment_count=Count('course_subscriptions'))
+                    .order_by('-enrollment_count')[:10]
+                    .values('title_of_course', 'enrollment_count')
+                )
+            
+            else:
+                # Student: Get stats for courses they're enrolled in
+                subscribed_course_ids = CourseSubscription.objects.filter(
+                    user=user
+                ).values_list('course_id', flat=True)
+                
+                courses_with_subs = (
+                    Course.objects
+                    .filter(id__in=subscribed_course_ids, status=1)
+                    .annotate(enrollment_count=Count('course_subscriptions'))
+                    .order_by('-enrollment_count')[:10]
+                    .values('title_of_course', 'enrollment_count')
+                )
+            
+            labels = [course['title_of_course'] for course in courses_with_subs]
+            data = [course['enrollment_count'] for course in courses_with_subs]
+            
+            return {
+                'labels': labels,
+                'data': data
+            }
+            
+        except Exception as e:
+            print(f"Error getting enrollment stats: {e}")
+            return {'labels': [], 'data': []}
 class CheckAuthentificationView(APIView):
     def get(self, request):
         try:
@@ -672,7 +833,7 @@ class ModuleList(APIView):
         """Create a new module for a course"""
         course = get_object_or_404(Course, pk=pk)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A' :
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1360,7 +1521,7 @@ class ModuleStatusUpdateView(APIView):
         course = module.course
         
         # Check if user is the course creator
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1391,7 +1552,7 @@ class ContentStatusUpdateView(APIView):
         course = content.module.course
         
         # Check if user is the course creator
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1424,7 +1585,7 @@ class ModuleDetail(APIView):
         module = self.get_object(course_pk, module_pk)
         
         # Check if module is accessible based on status
-        if module.status == 0 and module.course.creator != request.user:
+        if module.status == 0 and module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'This module is in draft mode and not accessible'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1436,7 +1597,7 @@ class ModuleDetail(APIView):
     def put(self, request, course_pk, module_pk):
         module = self.get_object(course_pk, module_pk)
         
-        if module.course.creator != request.user:
+        if module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1451,7 +1612,7 @@ class ModuleDetail(APIView):
     def patch(self, request, course_pk, module_pk):
         module = self.get_object(course_pk, module_pk)
         
-        if module.course.creator != request.user:
+        if module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1485,7 +1646,7 @@ class ModuleDetail(APIView):
     def delete(self, request, course_pk, module_pk):
         module = self.get_object(course_pk, module_pk)
         
-        if module.course.creator != request.user:
+        if module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1597,7 +1758,7 @@ class CourseSubscribersListView(APIView):
         """Get detailed list of subscribers with their progress"""
         course = get_object_or_404(Course, pk=pk)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1667,7 +1828,7 @@ class CourseContentDetailView(APIView):
             content = self.get_object(course_pk, content_pk)
             
             # Check if content is accessible based on status
-            if content.status == 0 and content.module.course.creator != request.user:
+            if content.status == 0 and content.module.course.creator != request.user and request.user.privilege != 'A':
                 return Response(
                     {'error': 'This content is in draft mode and not accessible'},
                     status=status.HTTP_403_FORBIDDEN
@@ -1681,7 +1842,7 @@ class CourseContentDetailView(APIView):
     def put(self, request, course_pk, content_pk):
         content = self.get_object(course_pk, content_pk)
         
-        if content.module.course.creator != request.user:
+        if content.module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1699,7 +1860,7 @@ class CourseContentDetailView(APIView):
         content = self.get_object(course_pk, content_pk)
         
         # Check if user is the course creator
-        if content.module.course.creator != request.user:
+        if content.module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1735,7 +1896,7 @@ class CourseContentDetailView(APIView):
     def delete(self, request, course_pk, content_pk):
         content = self.get_object(course_pk, content_pk)
         
-        if content.module.course.creator != request.user:
+        if content.module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1762,7 +1923,7 @@ class CreatePDFContentView(APIView):
     def post(self, request, course_id, module_id):
         print('---------------------------------------------Create PDF content in a module')
         module = get_object_or_404(Module, pk=module_id)
-        if module.course.creator != request.user:
+        if module.course.creator != request.user and request.user.privilege != 'A' :
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1795,7 +1956,7 @@ class CreateVideoContentView(APIView):
         """Create Video content in a module"""
         module = get_object_or_404(Module, pk=module_id)
         
-        if module.course.creator != request.user:
+        if module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1829,7 +1990,7 @@ class CreateQCMContentView(APIView):
         """Create QCM quiz content in a module"""
         module = get_object_or_404(Module, pk=module_id)
         
-        if module.course.creator != request.user:
+        if module.course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -2421,7 +2582,7 @@ class CourseSubscribersListViewSet(viewsets.ViewSet):
         """Get detailed list of subscribers with their progress"""
         course = get_object_or_404(Course, pk=pk)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -2484,7 +2645,7 @@ class CourseStatisticsView(APIView):
         course = get_object_or_404(Course, pk=pk)
         
         # Check if user is the course creator
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -2601,7 +2762,7 @@ class CourseProgressOverviewView(APIView):
         """Get overview of course progress for all subscribers"""
         course = get_object_or_404(Course, pk=pk)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -2663,7 +2824,7 @@ class QCMPerformanceView(APIView):
         """Get QCM performance statistics for the course"""
         course = get_object_or_404(Course, pk=pk)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -2713,7 +2874,7 @@ class EnrollmentTrendView(APIView):
         """Get enrollment trends over time"""
         course = get_object_or_404(Course, pk=pk)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You are not the creator of this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -3396,7 +3557,7 @@ class ModuleDetailAPIView(APIView):
         module = self.get_object(course_id, module_id)
         course = get_object_or_404(Course, id=course_id)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A' :
             return Response(
                 {'error': 'You do not have permission to edit this module'},
                 status=status.HTTP_403_FORBIDDEN
@@ -3412,7 +3573,7 @@ class ModuleDetailAPIView(APIView):
         module = self.get_object(course_id, module_id)
         course = get_object_or_404(Course, id=course_id)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You do not have permission to delete this module'},
                 status=status.HTTP_403_FORBIDDEN
@@ -3440,7 +3601,7 @@ class ModuleListCreateAPIView(APIView):
         base_query = Q(course=course)
         
         # If user is not the creator, only show active modules
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             base_query &= Q(status=1)  # Only active modules
         
         # Optimize query with prefetch_related
@@ -3462,7 +3623,7 @@ class ModuleListCreateAPIView(APIView):
     def post(self, request, course_id):
         course = get_object_or_404(Course, id=course_id)
         
-        if course.creator != request.user:
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You do not have permission to add modules to this course'},
                 status=status.HTTP_403_FORBIDDEN
@@ -3489,7 +3650,7 @@ class UpdatePDFContentView(APIView):
             course = get_object_or_404(Course, id=course_id)
             
             # Check if user is course creator
-            if course.creator != request.user:
+            if course.creator != request.user and request.user.privilege != 'A':
                 return Response(
                     {'error': 'You are not authorized to update this content'},
                     status=status.HTTP_403_FORBIDDEN
@@ -3581,7 +3742,7 @@ class UpdateQCMContentView(APIView):
             course = get_object_or_404(Course, id=course_id)
             
             # Check if user is course creator
-            if course.creator != request.user:
+            if course.creator != request.user and request.user.privilege != 'A':
                 return Response(
                     {'error': 'You are not authorized to update this content'},
                     status=status.HTTP_403_FORBIDDEN

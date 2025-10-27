@@ -1,69 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../api/api';
-import { useNavigate } from 'react-router-dom';
 
-interface CourseDetailProps {
-  courseId?: number | null;
-  onClose?: () => void;
+interface VideoContent {
+  video_file: string;
+  duration?: number;
 }
 
-
-interface CourseDetailData {
-  id: number;
-  title: string;
-  description: string;
-  image: string;
-  creator_username: string;
-  creator_first_name: string;
-  creator_last_name: string;
-  created_at: string;
-  updated_at: string;
-  is_subscribed: boolean;
-  progress_percentage: number;
-  estimated_duration: number; // in minutes
-  min_required_time: number; // in minutes
-}
-
-interface Module {
-  id: number;
-  title: string;
-  description: string;
-  order: number;
-  is_completed: boolean;
-  is_locked: boolean;
-  status: number; // 0: Draft, 1: Active, 2: Archived
-  status_display: string;
-  contents: CourseContent[];
-}
-
-export interface CourseContent {
-  id: number;
-  title: string;
-  caption: string;
-  order: number;
-  content_type_name: string;
-  is_completed: boolean;
-  is_locked: boolean;
-  status: number; // 0: Draft, 1: Active, 2: Archived
-  status_display: string;
-  estimated_time?: number; // in minutes
-  pdf_content?: {
-    pdf_file: string;
-    is_completed: boolean;
-  };
-  video_content?: {
-    video_file: string;
-    is_completed: boolean;
-    duration?: number; // in seconds
-  };
-  qcm?: {
-    question: string;
-    options: QCMOption[];
-    is_multiple_choice: boolean;
-    passing_score?: number;
-    estimated_time?: number; // in minutes
-  };
-  created_at: string;
+interface PDFContent {
+  pdf_file: string;
+  page_count?: number;
 }
 
 interface QCMOption {
@@ -72,1618 +18,754 @@ interface QCMOption {
   is_correct: boolean;
 }
 
-interface SubscriptionData {
+interface QCMQuestion {
   id: number;
-  is_active: boolean;
-  progress_percentage: number;
-  total_time_spent: number; // in seconds
+  question: string;
+  options: QCMOption[];
 }
 
-// Timer state interface
-interface TimerState {
-  isRunning: boolean;
-  timeElapsed: number; // in seconds
-  targetTime: number; // in seconds
-  isCompleted: boolean;
+interface QCM {
+  id: number;
+  title: string;
+  questions: QCMQuestion[];
 }
 
-// Helper function to format time
-const formatTime = (minutes: number): string => {
-  if (minutes < 60) {
-    return `${minutes} min`;
-  } else {
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return `${hours}h ${remainingMinutes > 0 ? `${remainingMinutes}min` : ''}`.trim();
-  }
-};
+interface Content {
+  id: number;
+  title: string;
+  content_type: string;
+  caption?: string;
+  order: number;
+  status: number;
+  estimated_duration?: number;
+  min_required_time?: number;
+  video_content?: VideoContent;
+  pdf_content?: PDFContent;
+  qcm?: QCM;
+  video_url?: string;
+  is_completed?: boolean;
+  progress?: number;
+}
 
-// Helper function to format seconds to readable time (MM:SS)
-const formatSeconds = (seconds: number): string => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-};
+interface Module {
+  id: number;
+  title: string;
+  description?: string;
+  order: number;
+  status: number;
+  contents: Content[];
+}
 
-// Helper function to format seconds to detailed time
-const formatSecondsDetailed = (seconds: number): string => {
-  if (seconds < 60) {
-    return `${seconds} sec`;
-  } else if (seconds < 3600) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes} min${remainingSeconds > 0 ? ` ${remainingSeconds} sec` : ''}`;
-  } else {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h${minutes > 0 ? ` ${minutes}min` : ''}`;
-  }
-};
+interface Course {
+  id: number;
+  title_of_course: string;
+  description: string;
+  image?: string;
+  status: number;
+  department?: string;
+  category?: string;
+  creator?: {
+    id: number;
+    username: string;
+    first_name: string;
+    last_name: string;
+  };
+  creator_username?: string;
+  created_at: string;
+  updated_at: string;
+  estimated_duration?: number;
+  min_required_time?: number;
+  modules: Module[];
+}
 
-// Helper function to get correct image URL
-const getImageUrl = (imageUrl: string) => {
-  if (!imageUrl) return '/group.avif';
-
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl;
-  }
-
-  if (imageUrl.startsWith('/media/')) {
-    return imageUrl;
-  }
-
-  return `/media/${imageUrl}`;
-};
-
-// FIXED Helper function to get file URL
-const getFileUrl = (fileUrl: string) => {
-  console.log('Processing fileUrl:', fileUrl);
-
-  if (!fileUrl) {
-    console.warn('Empty fileUrl provided');
-    return '';
-  }
-
-  // Handle full URLs that contain backend:8000
-  if (fileUrl.includes('backend:8000')) {
-    const correctedUrl = fileUrl.replace('backend:8000', 'localhost:8000');
-    console.log('Replaced backend:8000 with localhost:8000:', correctedUrl);
-    return correctedUrl;
-  }
-
-  // Handle full URLs that contain localhost:8000 (already correct)
-  if (fileUrl.includes('localhost:8000')) {
-    console.log('URL already contains localhost:8000:', fileUrl);
-    return fileUrl;
-  }
-
-  // If it's already a complete URL with http/https, return as-is
-  if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-    console.log('Full URL detected:', fileUrl);
-    return fileUrl;
-  }
-
-  // If it starts with /media/, prepend localhost:8000
-  if (fileUrl.startsWith('/media/')) {
-    const fullUrl = `http://localhost:8000${fileUrl}`;
-    console.log('Added localhost:8000 to media path:', fullUrl);
-    return fullUrl;
-  }
-
-  // Otherwise, assume it's a media file path and construct full URL
-  const fullUrl = `http://localhost:8000/media/${fileUrl}`;
-  console.log('Constructed full media URL:', fullUrl);
-  return fullUrl;
-};
-
-// Filter only active modules and active contents
-const filterActiveModulesAndContents = (modules: Module[]) => {
-  return modules
-    .filter(module => module.status === 1) // Only active modules (status 1)
-    .map(module => ({
-      ...module,
-      contents: module.contents
-        ? module.contents.filter(content => content.status === 1) // Only active contents
-        : []
-    }))
-    .filter(module => module.contents.length > 0); // Only modules that have active contents
-};
-
-// Calculate total estimated time for the course based on ACTIVE content only
-const calculateTotalEstimatedTime = (modules: Module[]): number => {
-  const activeModules = filterActiveModulesAndContents(modules);
-  let totalMinutes = 0;
-
-  activeModules.forEach(module => {
-    module.contents.forEach(content => {
-      // Use content's estimated_time if available, otherwise use defaults based on content type
-      if (content.estimated_time) {
-        totalMinutes += content.estimated_time;
-      } else {
-        // Default estimates based on content type
-        switch (content.content_type_name?.toLowerCase()) {
-          case 'video':
-            totalMinutes += content.video_content?.duration 
-              ? Math.ceil(content.video_content.duration / 60) 
-              : 0;
-            break;
-          case 'pdf':
-            totalMinutes += 0;
-            break;
-          case 'qcm':
-            totalMinutes += 0;
-            break;
-          default:
-            totalMinutes += 0;
-        }
-      }
-    });
-  });
-
-  return totalMinutes;
-};
-
-// Calculate total minimum required time for the course based on ACTIVE content only
-const calculateTotalMinRequiredTime = (modules: Module[]): number => {
-  const activeModules = filterActiveModulesAndContents(modules);
-  let totalMinutes = 0;
-
-  activeModules.forEach(module => {
-    module.contents.forEach(content => {
-      // For min required time, we might want to use different logic
-      // You can adjust this based on your requirements
-      if (content.estimated_time) {
-        totalMinutes += content.estimated_time; // Or use a different calculation
-      } else {
-        // Conservative estimates for minimum required time
-        switch (content.content_type_name?.toLowerCase()) {
-          case 'video':
-            totalMinutes += content.video_content?.duration 
-              ? Math.ceil(content.video_content.duration / 60) * 0.8 // 80% of estimated time
-              : 8;
-            break;
-          case 'pdf':
-            totalMinutes += 12; // Slightly less than estimated
-            break;
-          case 'qcm':
-            totalMinutes += 4; // Slightly less than estimated
-            break;
-          default:
-            totalMinutes += 8;
-        }
-      }
-    });
-  });
-
-  return totalMinutes;
-};
-
-// Statistics component to show active vs inactive content
-const CourseTimeStatistics: React.FC<{ modules: Module[] }> = ({ modules }) => {
-  const activeModules = filterActiveModulesAndContents(modules);
-  const allModules = modules;
-  
-  const totalActiveContents = activeModules.reduce((total, module) => total + module.contents.length, 0);
-  const totalAllContents = allModules.reduce((total, module) => total + (module.contents?.length || 0), 0);
-  
-  const activeEstimatedTime = calculateTotalEstimatedTime(modules);
-  const activeMinRequiredTime = calculateTotalMinRequiredTime(modules);
-
-  return (
-    <></>
-    // <div className="card bg-light mb-4">
-    //   <div className="card-header">
-    //     <h6 className="mb-0">
-    //       <i className="fas fa-chart-bar me-2"></i>
-    //       Course Time Statistics
-    //     </h6>
-    //   </div>
-    //   <div className="card-body">
-    //     <div className="row text-center">
-    //       <div className="col-md-3">
-    //         <div className="border rounded p-2 bg-white">
-    //           <small className="text-muted d-block">Active Modules</small>
-    //           <strong className="text-primary">{activeModules.length}</strong>
-    //           <small className="text-muted d-block">of {allModules.length} total</small>
-    //         </div>
-    //       </div>
-    //       <div className="col-md-3">
-    //         <div className="border rounded p-2 bg-white">
-    //           <small className="text-muted d-block">Active Contents</small>
-    //           <strong className="text-primary">{totalActiveContents}</strong>
-    //           <small className="text-muted d-block">of {totalAllContents} total</small>
-    //         </div>
-    //       </div>
-    //       <div className="col-md-3">
-    //         <div className="border rounded p-2 bg-white">
-    //           <small className="text-muted d-block">Estimated Time</small>
-    //           <strong className="text-success">{formatTime(activeEstimatedTime)}</strong>
-    //           <small className="text-muted d-block">(Active content only)</small>
-    //         </div>
-    //       </div>
-    //       <div className="col-md-3">
-    //         <div className="border rounded p-2 bg-white">
-    //           <small className="text-muted d-block">Min Required</small>
-    //           <strong className="text-warning">{formatTime(activeMinRequiredTime)}</strong>
-    //           <small className="text-muted d-block">(Active content only)</small>
-    //         </div>
-    //       </div>
-    //     </div>
-        
-    //     {/* Progress bars showing active vs total */}
-    //     <div className="mt-3">
-    //       <div className="d-flex justify-content-between mb-1">
-    //         <small>Module Completion</small>
-    //         <small>{activeModules.length}/{allModules.length}</small>
-    //       </div>
-    //       <div className="progress" style={{ height: '8px' }}>
-    //         <div 
-    //           className="progress-bar bg-primary" 
-    //           style={{ width: `${(activeModules.length / allModules.length) * 100}%` }}
-    //         ></div>
-    //       </div>
-          
-    //       <div className="d-flex justify-content-between mb-1 mt-2">
-    //         <small>Content Completion</small>
-    //         <small>{totalActiveContents}/{totalAllContents}</small>
-    //       </div>
-    //       <div className="progress" style={{ height: '8px' }}>
-    //         <div 
-    //           className="progress-bar bg-success" 
-    //           style={{ width: `${(totalActiveContents / totalAllContents) * 100}%` }}
-    //         ></div>
-    //       </div>
-    //     </div>
-    //   </div>
-    // </div>
-  );
-};
-import { useParams } from 'react-router-dom';
-const CourseDetailShow: React.FC<CourseDetailProps> = ({ courseId, onClose }) => {
-  const [course, setCourse] = useState<CourseDetailData | null>(null);
-  const [modules, setModules] = useState<Module[]>([]);
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [contentLoading, setContentLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [activeContent, setActiveContent] = useState<CourseContent | null>(null);
-  const [showContentModal, setShowContentModal] = useState(false);
-  const [selectedQCMOptions, setSelectedQCMOptions] = useState<number[]>([]);
-  const [expandedModules, setExpandedModules] = useState<number[]>([]);
-  const [videoError, setVideoError] = useState(false);
-  const params = useParams<{ id: string }>();
-  const id = courseId ?? (params.id ? parseInt(params.id, 10) : null);
+const CourseDetail = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
-  if (id === null) {
-    return <div>Aucun cours sélectionné</div>;
-  }
-  // Timer state
-  const [timer, setTimer] = useState<TimerState>({
-    isRunning: false,
-    timeElapsed: 0,
-    targetTime: 0,
-    isCompleted: false
-  });
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Calculate times based on active content only
-  const activeEstimatedTime = calculateTotalEstimatedTime(modules);
-  const activeMinRequiredTime = calculateTotalMinRequiredTime(modules);
-
-  // Use active times for display, fallback to course times if not available
-  const displayEstimatedTime = activeEstimatedTime > 0 ? activeEstimatedTime : (course?.estimated_duration || 0);
-  const displayMinRequiredTime = activeMinRequiredTime > 0 ? activeMinRequiredTime : (course?.min_required_time || 0);
-
-  // Simplified content locking logic - only checks if user is active
-  const calculateContentLockStatus = (modules: Module[], isActive: boolean) => {
-    const activeModules = filterActiveModulesAndContents(modules);
-
-    return activeModules.map((module: Module) => {
-      const moduleContents = module.contents || [];
-
-      // Sort contents by order
-      const sortedContents = moduleContents.sort((a: CourseContent, b: CourseContent) => a.order - b.order);
-
-      // Process contents within the module - only check if content is active
-      const processedContents = sortedContents.map((content: CourseContent) => {
-        // Content is locked ONLY if user is not subscribed/active
-        const contentLocked = !isActive;
-
-        return {
-          ...content,
-          is_locked: contentLocked
-        };
-      });
-
-      // Calculate module completion status (all active contents must be completed)
-      const moduleCompleted = processedContents.length > 0 &&
-        processedContents.every((content: CourseContent) => content.is_completed);
-
-      // Module locking logic simplified:
-      // Module is locked ONLY if user is not subscribed/active
-      const moduleLocked = !isActive;
-
-      return {
-        ...module,
-        contents: processedContents,
-        is_completed: moduleCompleted,
-        is_locked: moduleLocked
-      };
-    });
-  };
-
-  // Calculate time progress
-  const calculateTimeProgress = (): {
-    timeProgress: number;
-    timeRemaining: number;
-    hasMetTimeRequirement: boolean;
-  } => {
-    if (!subscription || !course) {
-      return { timeProgress: 0, timeRemaining: 0, hasMetTimeRequirement: false };
-    }
-
-    const requiredTimeSeconds = displayMinRequiredTime * 60; // Use active min required time
-    const timeSpentSeconds = subscription.total_time_spent || 0;
-
-    const timeProgress = requiredTimeSeconds > 0
-      ? Math.min(100, (timeSpentSeconds / requiredTimeSeconds) * 100)
-      : 0;
-
-    const timeRemaining = Math.max(0, requiredTimeSeconds - timeSpentSeconds);
-    const hasMetTimeRequirement = timeSpentSeconds >= requiredTimeSeconds;
-
-    return { timeProgress, timeRemaining, hasMetTimeRequirement };
-  };
-
-  // Check if user can mark content as completed (time requirement met)
-  const canMarkContentCompleted = (): boolean => {
-    if (!course || !subscription) return false;
-
-    // If no minimum time requirement, allow completion
-    if (displayMinRequiredTime === 0) return true;
-
-    const requiredTimeSeconds = displayMinRequiredTime * 60;
-    const timeSpentSeconds = subscription.total_time_spent || 0;
-
-    return timeSpentSeconds >= requiredTimeSeconds;
-  };
-
-  // Timer functions
-  const startTimer = (targetMinutes: number) => {
-    const targetSeconds = targetMinutes * 60;
-
-    setTimer({
-      isRunning: true,
-      timeElapsed: 0,
-      targetTime: targetSeconds,
-      isCompleted: false
-    });
-
-    // Clear any existing timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    // Start new timer
-    timerRef.current = setInterval(() => {
-      setTimer(prev => {
-        const newTimeElapsed = prev.timeElapsed + 1;
-
-        if (newTimeElapsed >= prev.targetTime) {
-          // Timer completed
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-          }
-          return {
-            ...prev,
-            timeElapsed: prev.targetTime,
-            isRunning: false,
-            isCompleted: true
-          };
-        }
-
-        return {
-          ...prev,
-          timeElapsed: newTimeElapsed
-        };
-      });
-    }, 1000);
-  };
-
-  const pauseTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    setTimer(prev => ({
-      ...prev,
-      isRunning: false
-    }));
-  };
-
-  const resumeTimer = () => {
-    if (timer.isCompleted) return;
-
-    timerRef.current = setInterval(() => {
-      setTimer(prev => {
-        const newTimeElapsed = prev.timeElapsed + 1;
-
-        if (newTimeElapsed >= prev.targetTime) {
-          // Timer completed
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-          }
-          return {
-            ...prev,
-            timeElapsed: prev.targetTime,
-            isRunning: false,
-            isCompleted: true
-          };
-        }
-
-        return {
-          ...prev,
-          timeElapsed: newTimeElapsed
-        };
-      });
-    }, 1000);
-
-    setTimer(prev => ({
-      ...prev,
-      isRunning: true
-    }));
-  };
-
-  const resetTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    setTimer({
-      isRunning: false,
-      timeElapsed: 0,
-      targetTime: 0,
-      isCompleted: false
-    });
-  };
-
-  // Calculate timer progress percentage
-  const getTimerProgress = (): number => {
-    if (timer.targetTime === 0) return 0;
-    return Math.min(100, (timer.timeElapsed / timer.targetTime) * 100);
-  };
-
-  // Record time to backend when timer completes
-  const recordCompletedTime = async () => {
-    if (!id || !activeContent) return;
-
-    try {
-      // Record time tracking to backend
-      await api.post(`courses/${id}/time-calculation/`, {
-        content_id: activeContent.id,
-        duration: timer.targetTime, // Total time spent in seconds
-        session_type: 'content'
-      });
-
-      // Refresh subscription data to update total_time_spent
-      const subscriptionResponse = await api.get(`courses/${id}/my-progress/`);
-      console.log("**************************1111my progress", subscriptionResponse);
-      if (Array.isArray(subscriptionResponse.data)) {
-        setSubscription(subscriptionResponse.data.length > 0 ? subscriptionResponse.data[0] : null);
-      } else {
-        setSubscription(subscriptionResponse.data);
-      }
-
-      console.log('Time recorded successfully:', timer.targetTime, 'seconds');
-    } catch (error) {
-      console.error('Failed to record time:', error);
-    }
-  };
-
-  // Effect to handle timer completion
-  useEffect(() => {
-    if (timer.isCompleted && activeContent) {
-      recordCompletedTime();
-    }
-  }, [timer.isCompleted, activeContent]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
+  const [course, setCourse] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [timeSpent, setTimeSpent] = useState(0);
+  const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const fetchCourseData = async () => {
-      if (!id) return;
-
+    const fetchCourse = async () => {
       try {
         setLoading(true);
-        const [courseResponse, modulesResponse] = await Promise.all([
-          api.get(`courses/${id}/is-subscribed/`),
-          api.get(`courses/${id}/modules/`)
-        ]);
-
-        setCourse(courseResponse.data);
-        const rawModules = modulesResponse.data;
-        console.log('Fetched modules (raw):', rawModules);
-
-        let subscriptionData: SubscriptionData | null = null;
-        let isActive = false;
-
-        try {
-          // Use the my-progress endpoint for students
-          const subscriptionResponse = await api.get(`courses/${id}/my-progress/`);
-          console.log('subscriptionResponse.data', subscriptionResponse.data);
-
-          // Handle both array and object responses
-          if (Array.isArray(subscriptionResponse.data)) {
-            subscriptionData = subscriptionResponse.data.length > 0 ? subscriptionResponse.data[0] : null;
-          } else {
-            subscriptionData = subscriptionResponse.data;
-          }
-
-          console.log('Subscription data:', subscriptionData);
-          setSubscription(subscriptionData);
-          isActive = subscriptionData?.is_active || false;
-
-        } catch (subErr: any) {
-          console.warn('Subscription fetch failed:', subErr);
-          // If we get a 403, user is not the creator - this is expected for students 
-          if (subErr.response?.status === 403) {
-            console.log('User is not course creator, using basic subscription data');
-            // For students, use the subscription status from course data
-            isActive = courseResponse.data.is_subscribed;
-            subscriptionData = {
-              id: 0,
-              is_active: courseResponse.data.is_subscribed,
-              progress_percentage: courseResponse.data.progress_percentage || 0,
-              total_time_spent: 0
-            };
-            setSubscription(subscriptionData);
-          } else {
-            // For other errors, fall back to course subscription status
-            isActive = courseResponse.data.is_subscribed;
-          }
-        }
-
-        // Process modules and contents with proper locking logic - only active content
-        const processedModules = calculateContentLockStatus(rawModules, isActive);
-
-        console.log('Processed modules (active only):', processedModules);
-        setModules(processedModules);
-      } catch (err: any) { 
-        console.error('Failed to fetch course data:', err);
-        setError('Failed to load course details');
+        const response = await api.get(`courses/${id}/`);
+        console.log('course needed', response.data);
+        setCourse(response.data);
+      } catch (error) {
+        console.error('Error fetching course:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCourseData();
+    fetchCourse();
   }, [id]);
 
-  const toggleModuleExpansion = (moduleId: number) => {
-    setExpandedModules(prev =>
-      prev.includes(moduleId)
-        ? prev.filter(id => id !== moduleId)
-        : [...prev, moduleId]
-    );
-  };
+  useEffect(() => {
+    if (showModal && selectedContent) {
+      const interval = setInterval(() => {
+        setTimeSpent(prev => prev + 1);
+      }, 1000);
+      setTimerInterval(interval);
 
-  const handleSubscribe = async () => {
-    try {
-      const response = await api.post(`courses/${id}/subscribe/`);
-      setSubscription(response.data);
-
-      // Update course to reflect subscription
-      if (course) {
-        setCourse({
-          ...course,
-          is_subscribed: true
-        });
+      return () => {
+        if (interval) clearInterval(interval);
+      };
+    } else {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        setTimerInterval(null);
       }
-
-      // Refresh modules after subscription with proper locking logic
-      const modulesResponse = await api.get(`courses/${id}/modules/`);
-      const rawModules = modulesResponse.data;
-
-      const processedModules = calculateContentLockStatus(rawModules, true);
-      setModules(processedModules);
-
-      alert('Successfully subscribed to the course!');
-    } catch (error: any) {
-      console.error('Failed to subscribe:', error);
-      alert('Failed to subscribe to the course');
+      setTimeSpent(0);
     }
+  }, [showModal, selectedContent]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    console.error('Failed to load image:', e.currentTarget.src);
-    e.currentTarget.src = '/group.avif';
-  };
-
-  const handleVideoError = () => {
-    console.error('Video loading error for:', activeContent?.video_content?.video_file);
-    setVideoError(true);
-  };
-
-  const handleContentComplete = async (contentId: number, moduleId: number) => {
-    // For QCM, we don't require the timer - only for PDF and Video content
-    const contentType = activeContent?.content_type_name?.toLowerCase();
-    const isTimedContent = contentType === 'pdf' || contentType === 'video';
-
-    // Check if user has met the minimum time requirement for timed content
-    if (isTimedContent && !canMarkContentCompleted() && !timer.isCompleted) {
-      const { timeRemaining } = calculateTimeProgress();
-      alert(`You need to spend ${formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.`);
-      return;
+  const formatDuration = (minutes?: number) => {
+    if (!minutes) return '';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}min`;
     }
-
-    // For timed content, require timer completion
-    if (isTimedContent && !timer.isCompleted) {
-      alert('Please complete the required study time before marking this content as completed.');
-      return;
-    }
-
-    try {
-      let response;
-
-      if (contentType === 'qcm') {
-        if (selectedQCMOptions.length === 0) {
-          alert('Please select at least one answer before submitting.');
-          return;
-        }
-
-        response = await api.post(`courses/${id}/submit-qcm/`, {
-          content_id: contentId,
-          selected_option_ids: selectedQCMOptions,
-          time_taken: 0,
-        });
-
-        // Check if QCM was passed
-        if (!response.data.is_passed) {
-          alert(`Your score: ${response.data.score}%. You need ${activeContent?.qcm?.passing_score || 80}% to pass.`);
-          return; // Don't mark as completed if not passed
-        }
-      } else if (contentType === 'pdf') {
-        response = await api.post(`courses/${id}/completePdf/`, {
-          content_id: contentId,
-        });
-      } else if (contentType === 'video') {
-        response = await api.post(`courses/${id}/completeVideo/`, {
-          content_id: contentId
-        });
-      } else {
-        console.error('Unknown content type:', activeContent?.content_type_name);
-        alert('Unknown content type. Please contact support.');
-        return;
-      }
-
-      // Update subscription progress
-      if (response.data) {
-        setSubscription(response.data);
-      }
-
-      // Update course progress
-      if (course && response.data) {
-        setCourse({
-          ...course,
-          progress_percentage: response.data.progress_percentage || course.progress_percentage
-        });
-      }
-
-      // Update modules and contents completion status
-      const updatedModules = modules.map(module => {
-        if (module.id === moduleId) {
-          const updatedContents = module.contents.map(content => {
-            if (content.id === contentId) {
-              // Mark this content as completed
-              return {
-                ...content,
-                is_completed: true,
-                is_locked: false
-              };
-            }
-            return content;
-          });
-
-          // Check if module is now completed (all contents must be done)
-          const moduleCompleted = updatedContents.every(content => content.is_completed);
-
-          return {
-            ...module,
-            contents: updatedContents,
-            is_completed: moduleCompleted
-          };
-        }
-        return module;
-      });
-
-      setModules(updatedModules);
-      setShowContentModal(false);
-      setActiveContent(null);
-      setSelectedQCMOptions([]);
-      setVideoError(false);
-      resetTimer(); // Reset timer when content is completed
-
-      alert('Content marked as completed successfully!');
-
-    } catch (error: any) {
-      console.error('Failed to mark content as completed:', error);
-      alert('Failed to update progress');
-    }
-  };
-
-  const handleContentClick = (content: CourseContent, module: Module) => {
-    if (module.is_locked) {
-      alert('This module is locked. Please subscribe to the course first!');
-      return;
-    }
-    if (content.is_locked) {
-      alert('This content is locked. Please subscribe to the course first!');
-      return;
-    }
-
-    setActiveContent(content);
-    setSelectedQCMOptions([]);
-    setVideoError(false);
-    resetTimer();
-    setShowContentModal(true);
-
-    // Define which content types should auto-start timer
-    const autoStartContentTypes = ['pdf', 'video']; // Add/remove types as needed
-
-    const contentType = content.content_type_name?.toLowerCase();
-    const shouldAutoStart = autoStartContentTypes.includes(contentType) && !content.is_completed;
-
-    if (shouldAutoStart) {
-      // Small delay to ensure modal is fully rendered
-      setTimeout(() => {
-        const targetTime = getContentTargetTime(content);
-        startTimer(targetTime);
-      }, 100);
-    }
-  };
-
-  const openPdfInNewWindow = (pdfUrl: string) => {
-    window.open(pdfUrl, '_blank', 'width=800,height=600');
-  };
-
-  const downloadFile = (fileUrl: string, filename: string) => {
-    const link = document.createElement('a');
-    link.href = fileUrl;
-    link.download = filename;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    return `${mins}min`;
   };
 
   const getContentIcon = (contentType: string) => {
-    const type = contentType?.toLowerCase();
-    switch (type) {
-      case 'pdf': return 'fas fa-file-pdf text-danger';
-      case 'video': return 'fas fa-video text-success';
-      case 'qcm': return 'fas fa-question-circle text-warning';
-      default: return 'fas fa-file text-secondary';
-    }
-  };
-
-  // Get estimated time for individual content
-  const getContentEstimatedTime = (content: CourseContent): string => {
-    if (content.estimated_time) {
-      return formatTime(content.estimated_time);
-    }
-
-    const contentType = content.content_type_name?.toLowerCase();
-    switch (contentType) {
+    if (!contentType) return '📌';
+    switch (contentType.toLowerCase()) {
       case 'video':
-        return content.video_content?.duration ? formatTime(Math.ceil(content.video_content.duration / 60)) : '0 min';
+        return '🎥';
       case 'pdf':
-        return '0 min';
+        return '📄';
       case 'qcm':
-        return content.qcm?.estimated_time ? formatTime(content.qcm.estimated_time) : '5 min';
+        return '📝';
       default:
-        return '0 min';
+        return '📌';
     }
   };
 
-  // Get content target time for timer (in minutes)
-  const getContentTargetTime = (content: CourseContent): number => {
-    if (content.estimated_time) {
-      return content.estimated_time;
+  const getStatusBadge = (status: number) => {
+    if (status === 1) {
+      return { text: 'Actif', color: '#10B981' };
     }
+    return { text: 'Inactif', color: '#6B7280' };
+  };
 
-    const contentType = content.content_type_name?.toLowerCase();
-    switch (contentType) {
-      case 'video':
-        return content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 0;
-      case 'pdf':
-        return 0;
-      case 'qcm':
-        return content.qcm?.estimated_time || 5;
-      default:
-        return 0;
+  const handleContentClick = (content: Content) => {
+    setSelectedContent(content);
+    setShowModal(true);
+    setTimeSpent(0);
+  };
+
+  const handleMarkAsCompleted = async () => {
+    if (selectedContent) {
+      try {
+        await api.patch(`contents/${selectedContent.id}/complete/`);
+        alert('Contenu marqué comme terminé');
+        setShowModal(false);
+        setSelectedContent(null);
+        const response = await api.get(`courses/${id}/`);
+        setCourse(response.data);
+      } catch (error) {
+        console.error('Error marking content as completed:', error);
+        alert('Erreur lors de la mise à jour');
+      }
     }
   };
 
-  // Get module estimated time based on active content only
-  const getModuleEstimatedTime = (module: Module): number => {
-    const activeContents = module.contents.filter(content => content.status === 1);
-    
-    return activeContents.reduce((total, content) => {
-      if (content.estimated_time) {
-        return total + content.estimated_time;
-      }
-      
-      // Default estimates for active content
-      switch (content.content_type_name?.toLowerCase()) {
-        case 'video':
-          return total + (content.video_content?.duration ? Math.ceil(content.video_content.duration / 60) : 0);
-        case 'pdf':
-          return total + 0;
-        case 'qcm':
-          return total + 0;
-        default:
-          return total + 0;
-      }
-    }, 0);
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setSelectedContent(null);
   };
-  const handleBack = () => {
-    navigate('/dashboard');
-  }
 
-  const renderContentModal = () => {
-    if (!activeContent) return null;
-
-    const canComplete = canMarkContentCompleted();
-    const { timeRemaining } = calculateTimeProgress();
-    const contentType = activeContent.content_type_name?.toLowerCase();
-    const isTimedContent = contentType === 'pdf' || contentType === 'video';
-    const targetTime = getContentTargetTime(activeContent);
-    const timerProgress = getTimerProgress();
-
-    const renderContent = () => {
-      switch (contentType) {
-        case 'pdf':
-          const pdfUrl = activeContent.pdf_content?.pdf_file ? getFileUrl(activeContent.pdf_content.pdf_file) : null;
-          return (
-            <div className="text-center">
-              <i className="fas fa-file-pdf fa-5x text-danger mb-3"></i>
-              <h5>{activeContent.title}</h5>
-              {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
-
-              {/* Time estimate */}
-              <div className="alert alert-info">
-                <i className="fas fa-clock me-2"></i>
-                Estimated study time: {getContentEstimatedTime(activeContent)}
-              </div>
-
-              {pdfUrl ? (
-                <div className="mt-4">
-                  <div className="d-grid gap-2">
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => openPdfInNewWindow(pdfUrl)}
-                    >
-                      <i className="fas fa-external-link-alt me-2"></i>
-                      Open PDF in New Window
-                    </button>
-
-                    <button
-                      className="btn btn-outline-primary"
-                      onClick={() => downloadFile(pdfUrl, `${activeContent.title}.pdf`)}
-                    >
-                      <i className="fas fa-download me-2"></i>
-                      Download PDF
-                    </button>
-
-                    <a
-                      href={pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-outline-secondary"
-                    >
-                      <i className="fas fa-link me-2"></i>
-                      Direct Link to PDF
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                <div className="alert alert-warning mt-3">
-                  <i className="fas fa-exclamation-triangle me-2"></i>
-                  PDF file path not available.
-                </div>
-              )}
-            </div>
-          );
-
-        case 'video':
-          const videoUrl = activeContent.video_content?.video_file ? getFileUrl(activeContent.video_content.video_file) : null;
-          return (
-            <div>
-              <h5>{activeContent.title}</h5>
-              {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
-
-              {/* Time estimate */}
-              <div className="alert alert-info">
-                <i className="fas fa-clock me-2"></i>
-                Estimated study time: {getContentEstimatedTime(activeContent)}
-              </div>
-
-              {videoUrl && !videoError ? (
-                <div className="mt-3">
-                  <video
-                    controls
-                    className="w-100"
-                    style={{ maxHeight: '400px' }}
-                    onError={handleVideoError}
-                    crossOrigin="anonymous"
-                  >
-                    <source src={videoUrl} type="video/mp4" />
-                    <source src={videoUrl} type="video/webm" />
-                    <source src={videoUrl} type="video/ogg" />
-                    Your browser does not support the video tag.
-                  </video>
-
-                  <div className="mt-2">
-                    <a
-                      href={videoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-sm btn-outline-primary"
-                    >
-                      <i className="fas fa-external-link-alt me-1"></i>
-                      Open in New Tab
-                    </a>
-                    <button
-                      className="btn btn-sm btn-outline-secondary ms-2"
-                      onClick={() => downloadFile(videoUrl, `${activeContent.title}.mp4`)}
-                    >
-                      <i className="fas fa-download me-1"></i>
-                      Download
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="alert alert-warning mt-3">
-                  <i className="fas fa-exclamation-triangle me-2"></i>
-                  {!videoUrl ? 'Video file path not available.' : 'Unable to load video. File may be missing or in an unsupported format.'}
-                  {videoUrl && (
-                    <div className="mt-2">
-                      <a
-                        href={videoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-sm btn-primary"
-                      >
-                        Try Direct Link
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-
-        case 'qcm':
-          return (
-            <div>
-              <h5>{activeContent.title}</h5>
-              {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
-
-              {/* Time estimate */}
-              <div className="alert alert-info">
-                <i className="fas fa-clock me-2"></i>
-                Estimated time: {getContentEstimatedTime(activeContent)}
-              </div>
-
-              {activeContent.qcm ? (
-                <div className="mt-3">
-                  <div className="alert alert-info">
-                    <h6>Quiz Details</h6>
-                    <ul className="list-unstyled mb-0">
-                      <li><strong>Question:</strong> {activeContent.qcm.question}</li>
-                      <li><strong>Type:</strong> {activeContent.qcm.is_multiple_choice ? 'Multiple Choice' : 'Single Choice'}</li>
-                      {activeContent.qcm.passing_score && (
-                        <li><strong>Passing Score:</strong> {activeContent.qcm.passing_score}%</li>
-                      )}
-                    </ul>
-                  </div>
-
-                  <h6 className="mt-3">Select your answer{activeContent.qcm.is_multiple_choice ? 's' : ''}:</h6>
-                  <div className="list-group">
-                    {activeContent.qcm.options.map((option, index) => {
-                      const isChecked = selectedQCMOptions.includes(option.id);
-
-                      return (
-                        <div key={option.id} className="list-group-item">
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type={activeContent.qcm?.is_multiple_choice ? 'checkbox' : 'radio'}
-                              name="qcmOption"
-                              id={`option-${index}`}
-                              checked={isChecked}
-                              onChange={() => {
-                                if (activeContent.qcm?.is_multiple_choice) {
-                                  setSelectedQCMOptions((prev) =>
-                                    isChecked ? prev.filter(id => id !== option.id) : [...prev, option.id]
-                                  );
-                                } else {
-                                  setSelectedQCMOptions([option.id]);
-                                }
-                              }}
-                            />
-                            <label className="form-check-label w-100" htmlFor={`option-${index}`}>
-                              {option.text}
-                            </label>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="alert alert-warning">
-                  <i className="fas fa-exclamation-triangle me-2"></i>
-                  Quiz content not available.
-                </div>
-              )}
-            </div>
-          );
-
-        default:
-          return (
-            <div className="text-center">
-              <i className="fas fa-file fa-5x text-secondary mb-3"></i>
-              <h5>{activeContent.title}</h5>
-              {activeContent.caption && <p className="text-muted">{activeContent.caption}</p>}
-              <div className="alert alert-info">
-                <i className="fas fa-info-circle me-2"></i>
-                This content type ({activeContent.content_type_name}) is not directly viewable here.
-              </div>
-            </div>
-          );
+  const getVideoUrl = (content: Content) => {
+    if (content.video_url) {
+      if (content.video_url.startsWith('http')) {
+        return content.video_url;
       }
-    };
+      return `${window.location.protocol}//${window.location.hostname}:8000${content.video_url}`;
+    }
+    return null;
+  };
 
-    return (
-      <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <div className="modal-dialog modal-lg">
-          <div className="modal-content">
-            <div className="modal-header bg-primary text-white">
-              <h5 className="modal-title">
-                <i className={`${getContentIcon(activeContent.content_type_name)} me-2`}></i>
-                {activeContent.title}
-                {activeContent.is_completed && (
-                  <span className="badge bg-success ms-2">Completed</span>
-                )}
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white"
-                onClick={() => {
-                  setShowContentModal(false);
-                  setActiveContent(null);
-                  setSelectedQCMOptions([]);
-                  setVideoError(false);
-                  resetTimer();
-                }}
-              ></button>
-            </div>
-            <div className="modal-body">
-              {/* Time requirement warning */}
-              {!canComplete && isTimedContent && course && displayMinRequiredTime > 0 && (
-                <div className="alert alert-warning">
-                  <i className="fas fa-exclamation-triangle me-2"></i>
-                  <strong>Course time requirement not met:</strong> You need to spend {formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.
-                </div>
-              )}
+  const getPdfUrl = (content: Content) => {
+    if (content.pdf_content?.pdf_file) {
+      const pdfPath = content.pdf_content.pdf_file;
+      if (pdfPath.startsWith('http')) {
+        return pdfPath;
+      }
+      return `${window.location.protocol}//${window.location.hostname}:8000${pdfPath}`;
+    }
+    return null;
+  };
 
-              {/* Timer Section for timed content */}
-              {isTimedContent && (
-                <div className="card mb-4">
-                  <div className="card-header bg-light">
-                    <h6 className="mb-0">
-                      <i className="fas fa-stopwatch me-2"></i>
-                      Study Timer
-                    </h6>
-                  </div>
-                  <div className="card-body">
-                    <div className="text-center">
-                      {/* Timer Display */}
-                      <div className="mb-3">
-                        <div className="display-4 font-monospace text-primary">
-                          {formatSeconds(timer.targetTime - timer.timeElapsed)}
-                        </div>
-                        <small className="text-muted">
-                          {formatSeconds(timer.timeElapsed)} / {formatSeconds(timer.targetTime)}
-                        </small>
-                      </div>
+  const getFileName = (content: Content): string => {
+    if (content.pdf_content?.pdf_file) {
+      const parts = content.pdf_content.pdf_file.split('/');
+      return parts[parts.length - 1] || 'nom_du_fichier.pdf';
+    } else if (content.video_content?.video_file) {
+      const parts = content.video_content.video_file.split('/');
+      return parts[parts.length - 1] || 'nom_du_fichier.mp4';
+    }
+    return 'nom_du_fichier';
+  };
 
-                      {/* Progress Bar */}
-                      <div className="progress mb-3" style={{ height: '10px' }}>
-                        <div
-                          className={`progress-bar ${timer.isCompleted ? 'bg-success' : 'bg-primary'}`}
-                          role="progressbar"
-                          style={{ width: `${timerProgress}%` }}
-                          aria-valuenow={timerProgress}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                        ></div>
-                      </div>
+  const getFileSize = (content: Content): string => {
+    if (content.content_type?.toLowerCase() === 'pdf') {
+      return '15MB';
+    } else if (content.content_type?.toLowerCase() === 'video') {
+      return '26.8MB';
+    }
+    return '';
+  };
 
-                      {/* Timer Status */}
-                      {timer.isCompleted && (
-                        <div className="alert alert-success mt-3">
-                          <i className="fas fa-check-circle me-2"></i>
-                          <strong>Study time completed!</strong> You can now mark this content as completed.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {renderContent()}
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setShowContentModal(false);
-                  setActiveContent(null);
-                  setSelectedQCMOptions([]);
-                  setVideoError(false);
-                  resetTimer();
-                }}
-              >
-                Close
-              </button>
-              {!activeContent.is_completed && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => {
-                    const currentModule = modules.find(module =>
-                      module.contents.some(content => content.id === activeContent.id)
-                    );
-                    if (currentModule) {
-                      handleContentComplete(activeContent.id, currentModule.id);
-                    }
-                  }}
-                  disabled={
-                    (activeContent.content_type_name?.toLowerCase() === 'qcm' && selectedQCMOptions.length === 0) ||
-                    (isTimedContent && !timer.isCompleted)
-                  }
-                  title={
-                    isTimedContent && !timer.isCompleted
-                      ? 'Complete the study timer first'
-                      : activeContent.content_type_name?.toLowerCase() === 'qcm' && selectedQCMOptions.length === 0
-                        ? 'Select at least one answer'
-                        : ''
-                  }
-                >
-                  {activeContent.content_type_name?.toLowerCase() === 'qcm' ? 'Submit Answers' : 'Mark as Completed'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  const formatDate = (dateString: string): string => {
+    if (!dateString) return 'Date inconnue';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('fr-FR', { 
+        day: 'numeric', 
+        month: 'short', 
+        year: 'numeric' 
+      });
+    } catch (error) {
+      return 'Date invalide';
+    }
   };
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mt-4">
-        <div className="alert alert-danger" role="alert">
-          {error}
-        </div>
-        <button className="btn btn-primary" onClick={onClose}>
-          Go Back
-        </button>
+      <div style={{ 
+        backgroundColor: '#F3F4F6',
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        <div style={{ color: '#374151', fontSize: '1.5rem' }}>⏳ Chargement...</div>
       </div>
     );
   }
 
   if (!course) {
     return (
-      <div className="container mt-4">
-        <div className="alert alert-warning" role="alert">
-          Course not found
-        </div>
-        <button className="btn btn-primary" onClick={onClose}>
-          Go Back
-        </button>
+      <div style={{ 
+        backgroundColor: '#F3F4F6',
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        <div style={{ color: '#374151', fontSize: '1.5rem' }}>Formation non trouvée</div>
       </div>
     );
   }
 
-  // Calculate time statistics
-  const { timeProgress, timeRemaining, hasMetTimeRequirement } = calculateTimeProgress();
-  const timeSpentSeconds = subscription?.total_time_spent || 0;
-  const canCompleteContent = canMarkContentCompleted();
+  const statusBadge = getStatusBadge(course.status);
 
   return (
-    <div className="container mt-4">
-      <div className="row">
-        {/* Course Image and Details */}
-        <div className="col-md-4 mb-4">
-          <div className="card">
-            <div className="mx-auto" style={{ maxWidth: '250px' }}>
-              <img
-                src={getImageUrl(course.image)}
-                alt={course.title}
-                onError={handleImageError}
-                style={{
-                  width: '100%',
-                  height: 'auto',
-                  objectFit: 'cover',
-                  borderRadius: '8px',
-                  marginBottom: '1rem',
-                  marginTop: '1rem'
-                }}
-              />
+    <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh' }}>
+      {/* Header */}
+      <div style={{ backgroundColor: '#2D2B6B', color: 'white', padding: '1.5rem 2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>{course.title_of_course}</h1>
+          <span style={{ 
+            backgroundColor: statusBadge.color, 
+            color: 'white', 
+            padding: '0.25rem 0.75rem', 
+            borderRadius: '12px', 
+            fontSize: '0.75rem'
+          }}>
+            {statusBadge.text}
+          </span>
+        </div>
+        <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.9 }}>{course.description}</p>
+      </div>
 
-              <div className="card-body text-start">
-                <h5 className="card-title">Course Details</h5>
-                <p><strong>Created by:</strong> {course.creator_first_name} {course.creator_last_name}</p>
-                <p><strong>Created on:</strong> {new Date(course.created_at).toLocaleDateString()}</p>
-                <p><strong>Last updated:</strong> {new Date(course.updated_at).toLocaleDateString()}</p>
+      {/* Stats Bar */}
+      <div style={{ backgroundColor: '#2D2B6B', padding: '0 2rem 2rem 2rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2rem', color: 'white' }}>
+          <div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Contenu total</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              {course.modules?.reduce((total, module) => total + (module.contents?.length || 0), 0).toString().padStart(2, '0') || '00'}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° de modules</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0{course.modules?.length || 0}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° d'apprenants</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Avg. du progrès</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps estimé</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{formatDuration(course.estimated_duration) || '0min'}</div>
+          </div>
+        </div>
+      </div>
 
-                {/* Enhanced Time Information */}
-                <div className="mt-3">
-                  <div className="border-start border-3 border-primary ps-3">
-                    <h6 className="text-primary">Time Information (Active Content)</h6>
-                    <p className="mb-1">
-                      <strong>Estimated Duration:</strong> 
-                      <span className="text-success"> {formatTime(displayEstimatedTime)}</span>
-                    </p>
-                    {displayMinRequiredTime > 0 && (
-                      <p className="mb-1">
-                        <strong>Minimum Required:</strong> 
-                        <span className="text-warning"> {formatTime(displayMinRequiredTime)}</span>
-                      </p>
-                    )}
-                    
-                    {/* Show original times if different */}
-                    {/* {(course.estimated_duration !== displayEstimatedTime || course.min_required_time !== displayMinRequiredTime) && (
-                      <div className="mt-2 p-2 bg-light rounded">
-                        {/* <small className="text-muted">
-                          <strong>Original times (all content):</strong><br />
-                          Estimated: {formatTime(course.estimated_duration || 0)}<br />
-                          {course.min_required_time > 0 && `Min Required: ${formatTime(course.min_required_time)}`}
-                        </small> */}
-                      {/* </div> */}
-                  
+      {/* Main Content */}
+      <div style={{ padding: '2rem', display: 'flex', gap: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        {/* Left Sidebar */}
+        <div style={{ width: '300px', flexShrink: 0 }}>
+          <div style={{ 
+            backgroundColor: '#E5E7EB', 
+            borderRadius: '8px', 
+            height: '200px', 
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {course.image ? (
+              <img src={course.image} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+            ) : (
+              <div style={{ textAlign: 'center', color: '#9CA3AF' }}>
+                <div style={{ fontSize: '3rem' }}>📚</div>
+                <div style={{ fontSize: '0.875rem' }}>Course Image</div>
+              </div>
+            )}
+          </div>
+
+          {(course.department || course.category) && (
+            <div style={{ 
+              backgroundColor: '#FED7AA', 
+              color: '#9A3412', 
+              padding: '0.5rem 1rem', 
+              borderRadius: '20px', 
+              fontSize: '0.875rem',
+              display: 'inline-block',
+              marginBottom: '1rem'
+            }}>
+              {course.department || course.category}
+            </div>
+          )}
+
+          <p style={{ fontSize: '0.875rem', color: '#4B5563', lineHeight: '1.6', marginBottom: '1rem' }}>
+            {course.description}
+          </p>
+
+          <div style={{ marginBottom: '0.5rem' }}>
+            <span>👤 </span>
+            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée par</span>
+          </div>
+          <div style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '1rem' }}>
+            {course.creator?.username || course.creator_username || 'Inconnu'}
+          </div>
+
+          <div style={{ marginBottom: '0.5rem' }}>
+            <span>📅 </span>
+            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée le</span>
+          </div>
+          <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>
+            {formatDate(course.created_at)}
+          </div>
+        </div>
+
+        {/* Right Content - Modules */}
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
+            <button 
+              style={{
+                backgroundColor: '#2D2B6B',
+                color: 'white',
+                border: 'none',
+                padding: '0.625rem 1.25rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '500'
+              }}
+            >
+              ➕ Nouveau module
+            </button>
+          </div>
+
+          {course.modules && course.modules.length > 0 ? (
+            course.modules.map((module) => (
+              <div key={module.id} style={{ marginBottom: '1.5rem' }}>
+                <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1rem 1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: '600', margin: 0 }}>
+                      Module {module.order} • {module.title}
+                    </h3>
+                    <button 
+                      style={{ color: '#2D2B6B', cursor: 'pointer', background: 'none', border: 'none', fontSize: '0.875rem', fontWeight: '500', padding: 0 }}
+                    >
+                      + nouveau contenu
+                    </button>
                   </div>
 
-                  {!canCompleteContent && displayMinRequiredTime > 0 && (
-                    <div className="alert alert-warning py-2 mt-2">
-                      <small>
-                        <i className="fas fa-clock me-1"></i>
-                        Spend {formatSecondsDetailed(timeRemaining)} more to unlock content completion
-                      </small>
+                  {module.contents && module.contents.length > 0 ? (
+                    module.contents.map((content) => (
+                      <div 
+                        key={content.id}
+                        onClick={() => handleContentClick(content)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.75rem',
+                          backgroundColor: '#F9FAFB',
+                          borderRadius: '6px',
+                          marginBottom: '0.5rem',
+                          border: '1px solid #E5E7EB',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#EEF2FF';
+                          e.currentTarget.style.borderColor = '#2D2B6B';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#F9FAFB';
+                          e.currentTarget.style.borderColor = '#E5E7EB';
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                          <span>{getContentIcon(content.content_type)}</span>
+                          <span style={{ fontSize: '0.875rem', color: '#1F2937' }}>{content.title}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          {content.estimated_duration && (
+                            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                              {formatDuration(content.estimated_duration)}
+                            </span>
+                          )}
+                          {content.is_completed && (
+                            <span style={{ fontSize: '0.875rem', color: '#10B981', fontWeight: '500' }}>
+                              ✓ Complété
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: '#6B7280', fontSize: '0.875rem' }}>
+                      Aucun contenu dans ce module
                     </div>
                   )}
                 </div>
-
-                {course.is_subscribed && subscription && (
-                  <>
-                    {/* <p className="mt-2"><strong>Time Spent:</strong> {formatSecondsDetailed(timeSpentSeconds)}</p>
-                    {displayMinRequiredTime > 0 && (
-                      <p>
-                        <strong>Time Requirement:</strong>
-                        <span className={hasMetTimeRequirement ? 'text-success' : 'text-warning'}>
-                          {hasMetTimeRequirement ? ' Met' : ' Not Met'}
-                        </span>
-                      </p>
-                    )} */}
-                  </>
-                )}
               </div>
-
-              {/* Progress Bar */}
-              {course.is_subscribed && (
-                <div className="mb-3 px-3">
-                  <strong>Content Progress: </strong>
-                  <div className="progress mt-1">
-                    <div
-                      className="progress-bar"
-                      role="progressbar"
-                      style={{ width: `${course.progress_percentage}%` }}
-                      aria-valuenow={course.progress_percentage}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      {course.progress_percentage}%
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Time Progress Bar (if minimum time is required) */}
-              {course.is_subscribed && displayMinRequiredTime > 0 && (
-                <div className="mb-3 px-3">
-                  {/* <strong>Time Progress: </strong> */}
-                  {/* <div className="progress mt-1">
-                    <div
-                      className={`progress-bar ${hasMetTimeRequirement ? 'bg-success' : 'bg-info'}`}
-                      role="progressbar"
-                      style={{ width: `${timeProgress}%` }}
-                      aria-valuenow={timeProgress}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      {Math.round(timeProgress)}%
-                    </div>
-                  </div> */}
-                  <small className="text-muted">
-                    {hasMetTimeRequirement
-                      ? 'Time requirement met'
-                      : `${formatSecondsDetailed(timeRemaining)} remaining`
-                    }
-                  </small>
-                </div>
-              )}
-
-              {/* Subscribe/Unsubscribe Button */}
-              <div className="text-center mb-3">
-                {!course.is_subscribed && (
-                  <button
-                    className="btn btn-primary"
-                    style={{ background: 'rgba(5, 44, 101, 0.9)' }}
-                    onClick={handleSubscribe}
-                  >
-                    Subscribe to Course
-                  </button>
-                )}
-              </div>
+            ))
+          ) : (
+            <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📚</div>
+              <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.5rem' }}>Aucun module trouvé</div>
+              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>Cette formation ne contient pas encore de modules.</div>
             </div>
-          </div>
+          )}
         </div>
+      </div>
 
-        {/* Course Modules and Contents Section */}
-        <div className="col-md-8">
-          <div className="text-center mb-4">
-            <h1 className="mb-3">{course.title}</h1>
-            <p className="lead">{course.description}</p>
-
-            {/* Add the time statistics component */}
-            <CourseTimeStatistics modules={modules} />
-
-            {/* Course Time Summary */}
-            <div className="row text-center mb-4">
-              {/* <div className="col-md-4">
-                <div className="card bg-light">
-                  <div className="card-body">
-                    <h6 className="card-title">Estimated Duration</h6>
-                    <p className="card-text h5 text-success">{formatTime(displayEstimatedTime)}</p>
-                    <small className="text-muted">Active content only</small>
-                  </div>
-                </div>
-              </div> */}
-              {/* {displayMinRequiredTime > 0 && (
-                <div className="col-md-4">
-                  <div className="card bg-light">
-                    <div className="card-body">
-                      <h6 className="card-title">Minimum Required</h6>
-                      <p className="card-text h5 text-warning">{formatTime(displayMinRequiredTime)}</p>
-                      <small className="text-muted">Active content only</small>
-                    </div>
-                  </div>
-                </div>
-              )} */}
-              {/* {course.is_subscribed && subscription && (
-                <div className="col-md-4">
-                  <div className="card bg-light">
-                    <div className="card-body">
-                      <h6 className="card-title">Time Spent</h6>
-                      <p className="card-text h5 text-primary">{formatSecondsDetailed(timeSpentSeconds)}</p>
-                      <small className="text-muted">
-                        {hasMetTimeRequirement ? 'Requirement met' : 'In progress'}
-                      </small>
-                    </div>
-                  </div>
-                </div>
-              )} */}
-            </div>
-
-            {/* Time Requirement Warning Banner */}
-            {/* {course.is_subscribed && displayMinRequiredTime > 0 && !canCompleteContent && (
-              <div className="alert alert-warning">
-                <i className="fas fa-clock me-2"></i>
-                <strong>Time requirement:</strong> You need to spend {formatSecondsDetailed(timeRemaining)} more in this course before you can mark content as completed.
+      {/* Content Viewer Modal */}
+      {showModal && selectedContent && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '2rem'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            width: '100%',
+            maxWidth: '900px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{ padding: '1.5rem', borderBottom: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type)}</span>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>{selectedContent.title}</h3>
               </div>
-            )} */}
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <h5 className="mb-0">Course Modules</h5>
-              <small className="text-muted">Showing only active modules and content</small>
+              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                Module {course.modules.find(m => m.contents.some(c => c.id === selectedContent.id))?.order} • {course.modules.find(m => m.contents.some(c => c.id === selectedContent.id))?.title}
+              </div>
             </div>
-            <div className="card-body">
-              {contentLoading ? (
-                <div className="text-center">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
+
+            {/* Time Required Banner */}
+            {selectedContent.min_required_time && (
+              <div style={{ 
+                backgroundColor: '#FEF3C7', 
+                padding: '1rem 1.5rem',
+                borderBottom: '1px solid #E5E7EB'
+              }}>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#92400E' }}>
+                  <strong>Temps requis :</strong> Vous devez passer {selectedContent.min_required_time} minutes ou plus dans ce cours avant de pouvoir marquer le contenu comme terminé.
+                </p>
+              </div>
+            )}
+
+            {/* Content Description */}
+            {selectedContent.caption && (
+              <div style={{ padding: '1rem 1.5rem', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>À propos du contenu</h4>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#6B7280', lineHeight: '1.5' }}>{selectedContent.caption}</p>
+              </div>
+            )}
+
+            {/* Timer Display */}
+            <div style={{ 
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#EEF2FF',
+              borderBottom: '1px solid #E5E7EB',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>⏱️</span>
+                <span style={{ fontSize: '0.875rem', color: '#4338CA', fontWeight: '500' }}>
+                  Temps estimé de lecture : {selectedContent.estimated_duration || 15}min
+                </span>
+              </div>
+              <div style={{ fontSize: '1rem', fontWeight: '600', color: '#4338CA' }}>
+                {formatTime(timeSpent)} / {formatTime((selectedContent.estimated_duration || 15) * 60)}
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
+              <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Contenu à lire</h4>
+
+              {/* PDF Content */}
+              {selectedContent.content_type?.toLowerCase() === 'pdf' && (
+                <div>
+                  {getPdfUrl(selectedContent) ? (
+                    <iframe 
+                      src={getPdfUrl(selectedContent)!}
+                      style={{
+                        width: '100%',
+                        height: '500px',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '6px',
+                        backgroundColor: '#000'
+                      }}
+                      title={selectedContent.title}
+                    />
+                  ) : (
+                    <div style={{
+                      backgroundColor: '#F3F4F6',
+                      borderRadius: '8px',
+                      padding: '3rem',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
+                      <div style={{ color: '#6B7280' }}>Document PDF non disponible</div>
+                    </div>
+                  )}
                 </div>
-              ) : modules.length === 0 ? (
-                <div className="text-center py-4">
-                  <i className="fas fa-folder-open fa-3x text-muted mb-3"></i>
-                  <h5 className="text-muted">No active modules available</h5>
-                  <p className="text-muted">
-                    {course.is_subscribed
-                      ? 'There are currently no active modules in this course.'
-                      : 'Subscribe to the course to access available modules.'
-                    }
-                  </p>
+              )}
+
+              {/* Video Content */}
+              {selectedContent.content_type?.toLowerCase() === 'video' && (
+                <div>
+                  {getVideoUrl(selectedContent) ? (
+                    <video 
+                      controls
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        maxHeight: '500px',
+                        backgroundColor: '#000',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      <source src={getVideoUrl(selectedContent)!} type="video/mp4" />
+                      Votre navigateur ne supporte pas la lecture de vidéos.
+                    </video>
+                  ) : (
+                    <div style={{
+                      backgroundColor: '#1F2937',
+                      borderRadius: '8px',
+                      padding: '3rem',
+                      textAlign: 'center',
+                      color: 'white'
+                    }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎥</div>
+                      <div>Vidéo non disponible</div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="accordion" id="modulesAccordion">
-                  {modules.sort((a, b) => a.order - b.order).map((module, moduleIndex) => {
-                    const isExpanded = expandedModules.includes(module.id);
-                    const completedContents = module.contents.filter(content => content.is_completed).length;
-                    const totalContents = module.contents.length;
+              )}
 
-                    // Calculate module estimated time based on active content
-                    const moduleEstimatedTime = getModuleEstimatedTime(module);
-
-                    return (
-                      <div key={module.id} className="accordion-item">
-                        <div className="accordion-header">
-                          <button
-                            className={`accordion-button ${isExpanded ? '' : 'collapsed'} ${module.is_locked ? 'bg-light' : ''}`}
-                            type="button"
-                            onClick={() => toggleModuleExpansion(module.id)}
-                            disabled={module.is_locked}
-                          >
-                            <div className="d-flex justify-content-between align-items-center w-100 me-3">
-                              <div>
-                                <h6 className="mb-1">
-                                  Module {moduleIndex + 1}: {module.title}
-                                  {module.is_completed && (
-                                    <span className="badge bg-success ms-2">Completed</span>
-                                  )}
-                                  {module.is_locked && (
-                                    <span className="badge bg-warning ms-2">Locked</span>
-                                  )}
-                                </h6>
-                                {module.description && (
-                                  <p className="text-muted mb-0 small">{module.description}</p>
-                                )}
-                                <div className="d-flex gap-3">
-                                  <small className="text-muted">
-                                    Progress: {completedContents}/{totalContents} contents
-                                  </small>
-                                  <small className="text-muted">
-                                    <i className="fas fa-clock me-1"></i>
-                                    {formatTime(moduleEstimatedTime)}
-                                  </small>
-                                </div>
-                              </div>
-                              <div>
-                                {module.is_completed ? (
-                                  <i className="bi bi-check-circle-fill text-success fs-5"></i>
-                                ) : module.is_locked ? (
-                                  <i className="bi bi-lock-fill text-warning fs-5"></i>
-                                ) : (
-                                  <i className={`bi bi-chevron-${isExpanded ? 'up' : 'down'} fs-5`}></i>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        </div>
-
-                        {isExpanded && !module.is_locked && (
-                          <div className="accordion-collapse collapse show">
-                            <div className="accordion-body">
-                              {module.contents.length === 0 ? (
-                                <p className="text-muted">No active content available in this module.</p>
-                              ) : (
-                                <div className="list-group">
-                                  {module.contents.sort((a, b) => a.order - b.order).map((content, contentIndex) => (
-                                    <div
-                                      key={content.id}
-                                      className={`list-group-item ${content.is_locked ? 'list-group-item-secondary' : 'list-group-item-action'} ${!canCompleteContent && !content.is_completed ? 'opacity-75' : ''
-                                        }`}
-                                      style={{
-                                        cursor: content.is_locked ? 'not-allowed' : 'pointer',
-                                      }}
-                                      onClick={() => handleContentClick(content, module)}
-                                      title={!canCompleteContent && !content.is_completed ? `Spend ${formatSecondsDetailed(timeRemaining)} more in the course to complete this content` : ''}
-                                    >
-                                      <div className="d-flex justify-content-between align-items-center">
-                                        <div className="flex-grow-1">
-                                          <h6 className="mb-1">
-                                            {contentIndex + 1}. {content.title}
-                                            <span className="badge bg-secondary ms-2">
-                                              {content.content_type_name}
-                                            </span>
-                                            {content.is_completed && (
-                                              <span className="badge bg-success ms-2">Completed</span>
-                                            )}
-                                            {content.is_locked && (
-                                              <span className="badge bg-warning ms-2">Locked</span>
-                                            )}
-                                            {!canCompleteContent && !content.is_completed && displayMinRequiredTime > 0 && (
-                                              <span className="badge bg-info ms-2" title={`Time requirement not met - ${formatSecondsDetailed(timeRemaining)} remaining`}>
-                                                <i className="fas fa-clock me-1"></i>
-                                                Time Locked
-                                              </span>
-                                            )}
-                                          </h6>
-                                          {content.caption && (
-                                            <p className="text-muted mb-2 small">{content.caption}</p>
-                                          )}
-                                          <small className="text-muted">
-                                            <i className="fas fa-clock me-1"></i>
-                                            {getContentEstimatedTime(content)}
-                                          </small>
-                                        </div>
-                                        <div>
-                                          {content.is_completed ? (
-                                            <i className="bi bi-check-circle-fill text-success fs-5"></i>
-                                          ) : content.is_locked ? (
-                                            <i className="bi bi-lock-fill text-warning fs-5"></i>
-                                          ) : !canCompleteContent && displayMinRequiredTime > 0 ? (
-                                            <i className="bi bi-clock-history text-info fs-5" title={`Time requirement not met - ${formatSecondsDetailed(timeRemaining)} remaining`}></i>
-                                          ) : (
-                                            <i className="bi bi-play-circle-fill text-primary fs-5"></i>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
+              {/* QCM Content */}
+              {selectedContent.content_type?.toLowerCase() === 'qcm' && selectedContent.qcm && (
+                <div style={{
+                  padding: '1.5rem',
+                  backgroundColor: '#F9FAFB',
+                  borderRadius: '6px',
+                  border: '1px solid #E5E7EB'
+                }}>
+                  <h5 style={{ marginBottom: '1rem', fontSize: '1rem' }}>{selectedContent.qcm.title}</h5>
+                  {selectedContent.qcm.questions?.map((question, qIndex) => (
+                    <div key={question.id} style={{ marginBottom: '2rem' }}>
+                      <div style={{ 
+                        fontWeight: '500', 
+                        marginBottom: '1rem',
+                        fontSize: '1rem'
+                      }}>
+                        {qIndex + 1}. {question.question}
                       </div>
-                    );
-                  })}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {question.options.map((option) => (
+                          <label 
+                            key={option.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              padding: '0.75rem',
+                              backgroundColor: 'white',
+                              border: '1px solid #E5E7EB',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <input type="radio" name={`question-${question.id}`} style={{ cursor: 'pointer' }} />
+                            <span style={{ fontSize: '0.875rem' }}>{option.text}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
+
+              {/* File Download Section */}
+              <div style={{ 
+                marginTop: '1rem',
+                padding: '1rem',
+                backgroundColor: '#F3F4F6',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type)}</span>
+                  <div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>{getFileName(selectedContent)}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>{getFileSize(selectedContent)}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  {(selectedContent.pdf_content || selectedContent.video_content) && (
+                    <>
+                      <a
+                        href={getPdfUrl(selectedContent) || getVideoUrl(selectedContent) || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: '0.5rem 1rem',
+                          fontSize: '0.875rem',
+                          color: '#F97316',
+                          textDecoration: 'none',
+                          fontWeight: '500'
+                        }}
+                      >
+                        Ouvrir dans un nouvel onglet
+                      </a>
+                      <span style={{ color: '#E5E7EB' }}>•</span>
+                      <a
+                        href={getPdfUrl(selectedContent) || getVideoUrl(selectedContent) || '#'}
+                        download
+                        style={{
+                          padding: '0.5rem 1rem',
+                          fontSize: '0.875rem',
+                          color: '#F97316',
+                          textDecoration: 'none',
+                          fontWeight: '500'
+                        }}
+                      >
+                        Télécharger
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div style={{ 
+              padding: '1.5rem',
+              borderTop: '1px solid #E5E7EB',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '1rem'
+            }}>
+              <button
+                onClick={handleCloseModal}
+                style={{
+                  padding: '0.625rem 1.5rem',
+                  backgroundColor: '#6B7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+              >
+                Fermer
+              </button>
+              <button
+                onClick={handleMarkAsCompleted}
+                disabled={selectedContent.min_required_time ? timeSpent < (selectedContent.min_required_time * 60) : false}
+                style={{
+                  padding: '0.625rem 1.5rem',
+                  backgroundColor: (selectedContent.min_required_time && timeSpent < (selectedContent.min_required_time * 60)) ? '#9CA3AF' : '#4338CA',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: (selectedContent.min_required_time && timeSpent < (selectedContent.min_required_time * 60)) ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <span>✓</span>
+                Mark as completed
+              </button>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Content Modal */}
-      {showContentModal && (
-        <>
-          {renderContentModal()}
-          <div className="modal-backdrop fade show"></div>
-        </>
       )}
-
-      {/* Back Button */}
-      <div className="text-center mt-4">
-        <button className="btn btn-secondary" onClick={handleBack}>
-          <i className="bi bi-arrow-left me-2"></i>
-          Back to Courses
-        </button>
-      </div>
     </div>
   );
 };
 
-export default CourseDetailShow;
+export default CourseDetail;
