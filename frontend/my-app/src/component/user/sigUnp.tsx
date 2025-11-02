@@ -109,8 +109,8 @@ function SignUp() {
                         email: email,
                         firstName: firstName,
                         lastName: lastName,
-                        privilege: selectedRole, // Changed from Privilege to privilege
-                        department: selectedDepartment, // Added department field
+                        privilege: selectedRole,
+                        department: selectedDepartment,
                     },
                     {
                         withCredentials: true,
@@ -162,8 +162,8 @@ function SignUp() {
                 // Add department to each user in CSV data if not present
                 const processedData = jsonData.map(user => ({
                     ...user,
-                    department: user.department || 'F', // Default to Finance if not specified
-                    privilege: user.privilege || user.Privilege || 'AP', // Handle both field names
+                    department: user.department || 'F',
+                    privilege: user.privilege || user.Privilege || 'AP',
                 }));
 
                 const response = await axios.post(
@@ -211,12 +211,12 @@ function SignUp() {
     };
 
     const cardStyle: React.CSSProperties = {
-        backgroundColor: 'white',
+        backgroundColor: '#e8edf2',
         padding: '2rem',
-        borderRadius: '8px',
+        borderRadius: '12px',
         boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
         width: '100%',
-        maxWidth: '600px'
+        maxWidth: '800px'
     };
 
     const formGroupStyle: React.CSSProperties = {
@@ -240,23 +240,6 @@ function SignUp() {
         boxSizing: 'border-box'
     };
 
-    const selectStyle: React.CSSProperties = {
-        ...inputStyle,
-        backgroundColor: 'white'
-    };
-
-    const radioContainerStyle: React.CSSProperties = {
-        display: 'flex',
-        gap: '1rem',
-        flexWrap: 'wrap'
-    };
-
-    const radioItemStyle: React.CSSProperties = {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem'
-    };
-
     const rowStyle: React.CSSProperties = {
         display: 'flex',
         gap: '1rem',
@@ -265,17 +248,6 @@ function SignUp() {
 
     const colStyle: React.CSSProperties = {
         flex: 1
-    };
-
-    const buttonStyle: React.CSSProperties = {
-        backgroundColor: '#052c65',
-        color: 'white',
-        padding: '12px 30px',
-        border: 'none',
-        borderRadius: '4px',
-        fontSize: '16px',
-        cursor: 'pointer',
-        width: '100%'
     };
 
     const errorStyle: React.CSSProperties = {
@@ -288,192 +260,225 @@ function SignUp() {
     };
 
     const titleStyle: React.CSSProperties = {
-        // textAlign: 'center',
         marginBottom: '2rem',
-        fontSize: '24px',
-        color: '#333'
+        fontSize: '16px',
+        color: '#666',
+        fontWeight: 'normal'
     };
+
+    const sectionStyle: React.CSSProperties = {
+        backgroundColor: 'white',
+        padding: '1.5rem',
+        borderRadius: '8px',
+        marginBottom: '1.5rem'
+    };
+
+    const sectionTitleStyle: React.CSSProperties = {
+        fontSize: '14px',
+        color: '#666',
+        marginBottom: '1rem',
+        fontWeight: '500'
+    };
+
+    const buttonGroupStyle: React.CSSProperties = {
+        display: 'flex',
+        gap: '0.5rem',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        border: '1px solid #ddd'
+    };
+
+    const optionButtonStyle = (isSelected: boolean): React.CSSProperties => ({
+        flex: 1,
+        padding: '12px 20px',
+        border: 'none',
+        backgroundColor: isSelected ? 'white' : '#f5f5f5',
+        color: '#333',
+        fontSize: '14px',
+        cursor: 'pointer',
+        position: 'relative',
+        fontWeight: isSelected ? '500' : 'normal',
+        transition: 'all 0.2s ease'
+    });
+
+    const checkmarkStyle: React.CSSProperties = {
+        marginRight: '8px',
+        fontSize: '16px'
+    };
+
+    const actionButtonStyle = (isPrimary: boolean): React.CSSProperties => ({
+        padding: '12px 30px',
+        border: 'none',
+        borderRadius: '6px',
+        fontSize: '14px',
+        cursor: 'pointer',
+        fontWeight: '500',
+        backgroundColor: isPrimary ? '#2d3e82' : '#6b7280',
+        color: 'white',
+        transition: 'all 0.2s ease'
+    });
 
     return (
         <div style={containerStyle}>
             <div style={cardStyle}>
-                <h2 style={titleStyle}>Nouveau</h2>
+                <h2 style={titleStyle}>Editer info utilisateur • nouveau</h2>
 
                 <form onSubmit={handleSubmit}>
-                    <div style={formGroupStyle}>
-                        <label style={labelStyle}>Nomber d'utilisateurs</label>
-                        <div style={radioContainerStyle}>
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="registrationType"
-                                    id="singleUser"
-                                    value="single_user"
-                                    checked={!toggle}
-                                    onChange={(e) => setToggle(e.target.value === "more_than_one")}
-                                />
-                                <label htmlFor="singleUser">Ajouter un utilisateur</label>
-                            </div>
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="registrationType"
-                                    id="multipleUsers"
-                                    value="more_than_one"
-                                    checked={toggle}
-                                    onChange={(e) => setToggle(e.target.value === "more_than_one")}
-                                />
-                                <label htmlFor="multipleUsers">Ajouter des utilisateur multiples</label>
+                    {/* Section 1: Configuration */}
+                    <div style={sectionStyle}>
+                        <h3 style={sectionTitleStyle}>1. Configuration</h3>
+                        
+                        <div style={formGroupStyle}>
+                            <label style={labelStyle}>Nombre d'utilisateurs</label>
+                            <div style={buttonGroupStyle}>
+                                <button
+                                    type="button"
+                                    style={optionButtonStyle(!toggle)}
+                                    onClick={() => setToggle(false)}
+                                >
+                                    {!toggle && <span style={checkmarkStyle}>✓</span>}
+                                    Ajouter un utilisateur
+                                </button>
+                                <button
+                                    type="button"
+                                    style={optionButtonStyle(toggle)}
+                                    onClick={() => setToggle(true)}
+                                >
+                                    {toggle && <span style={checkmarkStyle}>✓</span>}
+                                    Ajouter des utilisateurs multiples
+                                </button>
                             </div>
                         </div>
 
-
-                        
-                        
-                    </div>
-                    <div style={formGroupStyle}>
-                        <label style={labelStyle}>Rôle de(s) utilisateur(s)</label>
-                        <div style={radioContainerStyle}>
-                            
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="userRole"
-                                    id="roleLearner"
-                                    value="AP"
-                                    checked={selectedRole === 'AP'}
-                                    onChange={(e) => setSelectedRole(e.target.value)}
-                                />
-                                <label htmlFor="roleLearner">Apprenant</label>
-                            </div>
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="userRole"
-                                    id="roleTrainer"
-                                    value="F"
-                                    checked={selectedRole === 'F'}
-                                    onChange={(e) => setSelectedRole(e.target.value)}
-                                />
-                                <label htmlFor="roleTrainer">Formateur</label>
-                            </div>
-                            <div style={radioItemStyle}>
-                                <input
-                                    type="radio"
-                                    name="userRole"
-                                    id="roleAdmin"
-                                    value="A"
-                                    checked={selectedRole === 'A'}
-                                    onChange={(e) => setSelectedRole(e.target.value)}
-                                />
-                                <label htmlFor="roleAdmin">Admin</label>
+                        <div style={formGroupStyle}>
+                            <label style={labelStyle}>Rôle de(s) utilisateur(s)</label>
+                            <div style={buttonGroupStyle}>
+                                <button
+                                    type="button"
+                                    style={optionButtonStyle(selectedRole === 'AP')}
+                                    onClick={() => setSelectedRole('AP')}
+                                >
+                                    {selectedRole === 'AP' && <span style={checkmarkStyle}>✓</span>}
+                                    Apprenant
+                                </button>
+                                <button
+                                    type="button"
+                                    style={optionButtonStyle(selectedRole === 'F')}
+                                    onClick={() => setSelectedRole('F')}
+                                >
+                                    {selectedRole === 'F' && <span style={checkmarkStyle}>✓</span>}
+                                    Formateur
+                                </button>
+                                <button
+                                    type="button"
+                                    style={optionButtonStyle(selectedRole === 'A')}
+                                    onClick={() => setSelectedRole('A')}
+                                >
+                                    {selectedRole === 'A' && <span style={checkmarkStyle}>✓</span>}
+                                    Admin
+                                </button>
                             </div>
                         </div>
+
+                        <div style={formGroupStyle}>
+                            <label style={labelStyle} htmlFor="department">Department</label>
+                            <select
+                                id="department"
+                                style={inputStyle}
+                                value={selectedDepartment}
+                                onChange={(e) => setSelectedDepartment(e.target.value)}
+                                required
+                            >
+                                <option value="F">FINANCE</option>
+                                <option value="H">HUMAN RESOURCES</option>
+                                <option value="M">MARKETING</option>
+                                <option value="O">OPERATIONS/PRODUCTION</option>
+                                <option value="S">SALES</option>
+                            </select>
+                        </div>
                     </div>
-                    <div style={formGroupStyle}>
-                        <label style={labelStyle} htmlFor="department">Department:</label>
-                        <select
-                            id="department"
-                            style={{
-                                width: '100%',
-                                padding: '12px 16px',
-                                border: '2px solid #e1e5e9',
-                                borderRadius: '8px',
-                                fontSize: '16px',
-                                backgroundColor: 'white',
-                                color: '#2d3748',
-                                transition: 'all 0.2s ease',
-                                outline: 'none',
-                                cursor: 'pointer',
-                                appearance: 'none',
-                                // backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                                // backgroundRepeat: 'no-repeat',
-                                // backgroundPosition: 'right 16px center',
-                                // backgroundSize: '16px'
-                            }}
-                            value={selectedDepartment}
-                            onChange={(e) => setSelectedDepartment(e.target.value)}
-                            required
-                            onFocus={(e) => {
-                                e.target.style.borderColor = '#3b82f6';
-                                e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                            }}
-                            onBlur={(e) => {
-                                e.target.style.borderColor = '#e1e5e9';
-                                e.target.style.boxShadow = 'none';
+
+                    {/* Section 2: Load Data */}
+                    <div style={sectionStyle}>
+                        <h3 style={sectionTitleStyle}>2. Charger les données</h3>
+                        
+                        {toggle ? (
+                            <div style={formGroupStyle}>
+                                <label style={labelStyle} htmlFor="csvFile">User CSV File</label>
+                                <input
+                                    type="file"
+                                    id="csvFile"
+                                    style={inputStyle}
+                                    onChange={handleFileChange}
+                                    accept=".csv"
+                                    required={toggle}
+                                />
+                                {error && <div style={errorStyle}>{error}</div>}
+                                <div style={{ fontSize: '12px', marginTop: '0.5rem', color: '#666' }}>
+                                    CSV should include columns: firstName, lastName, email, privilege, department
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div style={rowStyle}>
+                                    <div style={colStyle}>
+                                        <label style={labelStyle}>Nom</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Nom"
+                                            style={inputStyle}
+                                            value={lastName}
+                                            onChange={(e) => setLastName(e.target.value)}
+                                            required={!toggle}
+                                        />
+                                    </div>
+                                    <div style={colStyle}>
+                                        <label style={labelStyle}>Prénom</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Prénom"
+                                            style={inputStyle}
+                                            value={firstName}
+                                            onChange={(e) => setFirstName(e.target.value)}
+                                            required={!toggle}
+                                        />
+                                    </div>
+                                </div>
+                                <div style={formGroupStyle}>
+                                    <label style={labelStyle}>Email</label>
+                                    <input
+                                        type="email"
+                                        placeholder="Email"
+                                        style={inputStyle}
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required={!toggle}
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                        <button
+                            type="button"
+                            style={actionButtonStyle(false)}
+                            onClick={() => {
+                                setFirstName('');
+                                setLastName('');
+                                setEmail('');
+                                setFile(null);
+                                setError('');
                             }}
                         >
-                            <option value="F">FINANCE</option>
-                            <option value="H">Human RESOURCES</option>
-                            <option value="M">MARKETING</option>
-                            <option value="O">OPERATIONS/PRODUCTION</option>
-                            <option value="S">Sales</option>
-                        </select>
-                    </div>
-
-                    {toggle ? (
-                        <div style={formGroupStyle}>
-                            <label style={labelStyle} htmlFor="csvFile">User CSV File</label>
-                            <input
-                                type="file"
-                                id="csvFile"
-                                style={inputStyle}
-                                onChange={handleFileChange}
-                                accept=".csv"
-                                required={toggle}
-                            />
-                            {error && <div style={errorStyle}>{error}</div>}
-                            <div style={{ fontSize: '12px', marginTop: '0.5rem', color: '#666' }}>
-                                CSV should include columns: firstName, lastName, email, privilege, department
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            <div style={rowStyle}>
-                                <div style={colStyle}>
-                                    <input
-                                        type="text"
-                                        placeholder="First name"
-                                        style={inputStyle}
-                                        value={firstName}
-                                        onChange={(e) => setFirstName(e.target.value)}
-                                        required={!toggle}
-                                    />
-                                </div>
-                                <div style={colStyle}>
-                                    <input
-                                        type="text"
-                                        placeholder="Last name"
-                                        style={inputStyle}
-                                        value={lastName}
-                                        onChange={(e) => setLastName(e.target.value)}
-                                        required={!toggle}
-                                    />
-                                </div>
-                            </div>
-                            <div style={formGroupStyle}>
-                                <input
-                                    type="email"
-                                    placeholder="Email"
-                                    style={inputStyle}
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required={!toggle}
-                                />
-                            </div>
-                        </>
-                    )}
-
-                    
-
-                    
-
-                    <div style={{ textAlign: 'center' }}>
+                            Fermer
+                        </button>
                         <button
                             type="submit"
-                            style={buttonStyle}
+                            style={actionButtonStyle(true)}
                         >
-                            Register
+                            Enregistrer
                         </button>
                     </div>
                 </form>

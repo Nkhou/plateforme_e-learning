@@ -21,23 +21,20 @@ interface QCMOption {
 interface QCMQuestion {
   id: number;
   question: string;
-  question_type?: 'single' | 'multiple';
+  question_type: 'single' | 'multiple';
   options: QCMOption[];
+  points?: number;
+  order?: number;
 }
 
 interface QCM {
   id: number;
   title: string;
-  question?: string;
-  questions?: QCMQuestion[];
-  question_type?: 'single' | 'multiple';
-  options?: QCMOption[];
-  points?: number;
+  questions: QCMQuestion[];
   passing_score?: number;
   max_attempts?: number;
   time_limit?: number;
 }
-
 
 interface Content {
   id: number;
@@ -109,7 +106,8 @@ const CourseDetail = () => {
   const [selectedContentType, setSelectedContentType] = useState<string | null>(null);
   const [showContentMenu, setShowContentMenu] = useState<number | null>(null);
   
-  // Enhanced form states with time tracking
+  
+  // Enhanced form states with QCM support
   const [moduleForm, setModuleForm] = useState({
     title: '',
     description: '',
@@ -164,6 +162,58 @@ const CourseDetail = () => {
   const newContentModalRef = useRef<HTMLDivElement>(null);
   const editContentModalRef = useRef<HTMLDivElement>(null);
   const contentViewerModalRef = useRef<HTMLDivElement>(null);
+
+  // Fonction de normalisation améliorée pour QCM
+  const normalizeQCMContent = (content: Content): Content => {
+    const normalizedContent = { ...content };
+
+    if (content.content_type_name?.toLowerCase() === 'qcm' && content.qcm) {
+      const qcm = content.qcm;
+
+      // Normalisation des questions
+      let questions: QCMQuestion[] = [];
+      console.log('just +++++++++++', qcm);
+      if (Array.isArray(qcm.questions) && qcm.questions.length > 0) {
+        // Format multi-questions
+        questions = qcm.questions.map((q: any, index: number) => ({
+          id: q.id || index + 1,
+          question: q.question || '',
+          question_type: q.question_type || 'single',
+          options: (q.options || []).map((opt: any, optIndex: number) => ({
+            id: opt.id || optIndex + 1,
+            text: opt.text || '',
+            is_correct: Boolean(opt.is_correct)
+          })),
+          points: q.points || 1,
+          order: q.order || index + 1
+        }));
+      } else {
+        // Si pas de questions ou format invalide, créer une question par défaut
+        questions = [{
+          id: 1,
+          question: content.title || 'Question',
+          question_type: 'single',
+          options: [
+            { id: 1, text: 'Option 1', is_correct: false },
+            { id: 2, text: 'Option 2', is_correct: false }
+          ],
+          points: 1,
+          order: 1
+        }];
+      }
+
+      normalizedContent.qcm = {
+        id: qcm.id,
+        title: qcm.title || content.title,
+        questions,
+        passing_score: qcm.passing_score || 80,
+        max_attempts: qcm.max_attempts || 3,
+        time_limit: qcm.time_limit || 0
+      };
+    }
+
+    return normalizedContent;
+  };
 
   // Enhanced click outside handler
   useEffect(() => {
@@ -222,7 +272,17 @@ const CourseDetail = () => {
         setLoading(true);
         const response = await api.get(`courses/${id}/`);
         setCourse(response.data);
-        console.log('i need it', response.data);
+        console.log('---------------------i need it', response.data);
+
+        // Normaliser les contenus QCM
+        if (response.data.modules) {
+          const normalizedModules = response.data.modules.map((module: Module) => ({
+            ...module,
+            contents: module.contents.map((content: Content) => normalizeQCMContent(content))
+          }));
+          setCourse(prev => prev ? { ...prev, modules: normalizedModules } : null);
+        }
+
         // Load user progress from localStorage
         const savedProgress = localStorage.getItem(`course_progress_${id}`);
         if (savedProgress) {
@@ -317,7 +377,7 @@ const CourseDetail = () => {
       case 'pdf':
         return '📄';
       case 'qcm':
-        return <img src="/cerveau.png" alt="QCM" width={20} height={20} />;;
+        return <img src="/cerveau.png" alt="QCM" width={20} height={20} />;
       default:
         return '📌';
     }
@@ -353,49 +413,11 @@ const CourseDetail = () => {
 
   // Enhanced content click handler with time tracking
   const handleContentClick = (content: Content) => {
-  const normalizedContent = { ...content };
-
-  if (content.content_type_name?.toLowerCase() === 'qcm' && content.qcm) {
-    const qcm = content.qcm;
-
-    // 🔧 Normalize questions
-    const questions: QCMQuestion[] = Array.isArray(qcm.questions)
-      ? qcm.questions.map((q: any) => ({
-          id: q.id,
-          question: q.question,
-          question_type: q.question_type ?? 'single',
-          options: q.options ?? [],
-        }))
-      : qcm.question // if there’s just one
-      ? [
-          {
-            id: qcm.id,
-            question: qcm.question,
-            question_type: qcm.question_type ?? 'single',
-            options: qcm.options ?? [],
-          },
-        ]
-      : [];
-
-    // 🔧 Build normalized QCM object
-    normalizedContent.qcm = {
-      id: qcm.id,
-      title: qcm.title ?? content.title,
-      questions,
-      points: qcm.points,
-      passing_score: qcm.passing_score,
-      max_attempts: qcm.max_attempts,
-      time_limit: qcm.time_limit,
-    };
-
-    console.log('✅ Normalized QCM:', normalizedContent.qcm);
-  }
-
-  setSelectedContent(normalizedContent);
-  setShowModal(true);
-  setTimeSpent(userProgress.timeSpent[content.id] || 0);
-};
-
+    const normalizedContent = normalizeQCMContent(content);
+    setSelectedContent(normalizedContent);
+    setShowModal(true);
+    setTimeSpent(userProgress.timeSpent[content.id] || 0);
+  };
 
   // Enhanced mark as completed with time validation
   const handleMarkAsCompleted = async () => {
@@ -511,35 +533,89 @@ const CourseDetail = () => {
     }
   };
 
-  // Enhanced content editing
+  // Enhanced content editing with QCM support - CORRECTED VERSION
   const handleEditContent = (content: Content) => {
-    setEditingContent(content);
-    const contentType = content.content_type_name?.toLowerCase();
+    console.log('=== EDITING CONTENT ===');
+    console.log('Raw content:', content);
     
-    setContentForm({
-      title: content.title,
-      caption: content.caption || '',
-      file: null,
-      questions: content.qcm ? [{
-        question: content.qcm.questions?.[0]?.question || '',
-        question_type: (content.qcm.questions?.[0] as any)?.question_type || 'single',
-        options: content.qcm.questions?.[0]?.options || []
-      }] : [{
-        question: '',
-        question_type: 'single',
-        options: [
-          { text: '', is_correct: false },
-          { text: '', is_correct: false }
-        ]
-      }],
-      points: content.qcm?.points || 1,
-      passing_score: 80,
-      max_attempts: content.qcm?.max_attempts || 3,
-      time_limit: content.qcm?.time_limit || 0,
-      estimated_duration: content.estimated_duration,
-      min_required_time: content.min_required_time
-    });
+    const normalizedContent = normalizeQCMContent(content);
+    console.log('Normalized content:', normalizedContent);
     
+    setEditingContent(normalizedContent);
+
+    const contentType = normalizedContent.content_type_name?.toLowerCase();
+    console.log('Content Type:', contentType);
+
+    if (contentType === 'qcm' && normalizedContent.qcm) {
+      const qcm = normalizedContent.qcm;
+      console.log('QCM Data:', qcm);
+      console.log('QCM Questions:', qcm.questions);
+
+      // Ensure questions array exists and has valid data
+      const questions = qcm.questions && qcm.questions.length > 0
+        ? qcm.questions.map(question => ({
+            question: question.question || '',
+            question_type: question.question_type || 'single',
+            options: question.options && question.options.length > 0
+              ? question.options.map(option => ({
+                  text: option.text || '',
+                  is_correct: Boolean(option.is_correct)
+                }))
+              : [
+                  { text: '', is_correct: false },
+                  { text: '', is_correct: false }
+                ]
+          }))
+        : [{
+            question: '',
+            question_type: 'single' as 'single' | 'multiple',
+            options: [
+              { text: '', is_correct: false },
+              { text: '', is_correct: false }
+            ]
+          }];
+
+      console.log('Mapped Questions:', questions);
+
+      // Préparer le formulaire QCM avec toutes les données
+      const formData = {
+        title: normalizedContent.title,
+        caption: normalizedContent.caption || '',
+        file: null,
+        questions: questions,
+        points: qcm.questions && qcm.questions[0]?.points ? qcm.questions[0].points : 1,
+        passing_score: qcm.passing_score || 80,
+        max_attempts: qcm.max_attempts || 3,
+        time_limit: qcm.time_limit || 0,
+        estimated_duration: normalizedContent.estimated_duration,
+        min_required_time: normalizedContent.min_required_time
+      };
+
+      console.log('Setting Content Form:', formData);
+      setContentForm(formData);
+    } else {
+      // Pour PDF et vidéo
+      setContentForm({
+        title: normalizedContent.title,
+        caption: normalizedContent.caption || '',
+        file: null,
+        questions: [{
+          question: '',
+          question_type: 'single',
+          options: [
+            { text: '', is_correct: false },
+            { text: '', is_correct: false }
+          ]
+        }],
+        points: 1,
+        passing_score: 80,
+        max_attempts: 3,
+        time_limit: 0,
+        estimated_duration: normalizedContent.estimated_duration,
+        min_required_time: normalizedContent.min_required_time
+      });
+    }
+
     setSelectedContentType(contentType || null);
     setShowEditContentModal(true);
     setShowContentMenu(null);
@@ -586,16 +662,21 @@ const CourseDetail = () => {
         requestData = formData;
       } else if (contentType === 'qcm') {
         endpoint = `courses/${id}/contents/qcm/${editingContent.id}/`;
+
+        // Format des données QCM amélioré
         requestData = {
           title: contentForm.title,
           caption: contentForm.caption || '',
-          qcm_question: contentForm.questions[0].question,
-          question_type: contentForm.questions[0].question_type,
-          qcm_options: contentForm.questions[0].options.map((option: any) => ({
-            text: option.text,
-            is_correct: option.is_correct
+          questions: contentForm.questions.map((question, index) => ({
+            question: question.question,
+            question_type: question.question_type,
+            options: question.options.map(option => ({
+              text: option.text,
+              is_correct: option.is_correct
+            })),
+            points: contentForm.points,
+            order: index + 1
           })),
-          points: contentForm.points,
           passing_score: contentForm.passing_score,
           max_attempts: contentForm.max_attempts,
           time_limit: contentForm.time_limit,
@@ -676,13 +757,16 @@ const CourseDetail = () => {
           caption: contentForm.caption || '',
           order: 1,
           status: 1,
-          qcm_question: contentForm.questions[0].question,
-          question_type: contentForm.questions[0].question_type,
-          qcm_options: contentForm.questions[0].options.map((option: any) => ({
-            text: option.text,
-            is_correct: option.is_correct
+          questions: contentForm.questions.map((question, index) => ({
+            question: question.question,
+            question_type: question.question_type,
+            options: question.options.map(option => ({
+              text: option.text,
+              is_correct: option.is_correct
+            })),
+            points: contentForm.points,
+            order: index + 1
           })),
-          points: contentForm.points,
           passing_score: contentForm.passing_score,
           max_attempts: contentForm.max_attempts,
           time_limit: contentForm.time_limit,
@@ -777,11 +861,17 @@ const CourseDetail = () => {
       questions: prev.questions.map((q, idx) =>
         idx === questionIndex
           ? {
-              ...q,
-              options: q.options.map((opt, oIdx) =>
-                oIdx === optionIndex ? { ...opt, [field]: value } : opt
-              )
-            }
+            ...q,
+            options: q.options.map((opt, oIdx) =>
+              oIdx === optionIndex
+                ? field === 'is_correct'
+                  ? { ...opt, is_correct: value }
+                  : { ...opt, [field]: value }
+                : field === 'is_correct' && value && q.question_type === 'single'
+                  ? { ...opt, is_correct: false } // Désélectionner les autres pour single choice
+                  : opt
+            )
+          }
           : q
       )
     }));
@@ -809,68 +899,67 @@ const CourseDetail = () => {
   // Enhanced URL getters
   const BASE_URL = 'http://localhost:8000';
 
-const getVideoUrl = (content: Content) => {
-  console.log(content)
-  const videoFile = content.video_content?.video_file;
-  if (videoFile) {
-    let url = videoFile;
+  const getVideoUrl = (content: Content) => {
+    console.log(content)
+    const videoFile = content.video_content?.video_file;
+    if (videoFile) {
+      let url = videoFile;
 
-    // Replace backend domain with localhost if necessary
-    url = url.replace('http://backend:8000', BASE_URL);
-    console.log('url', url);
+      // Replace backend domain with localhost if necessary
+      url = url.replace('http://backend:8000', BASE_URL);
+      console.log('url', url);
+
+      if (!url.startsWith('http')) {
+        url = `${BASE_URL}${url}`;
+      }
+
+      return url;
+    }
+    return null;
+  };
+
+  const getimageUrl = (contentOrPath: Content | string | undefined): string | undefined => {
+    // Accept either a Content object or a direct string path (e.g. course.image_url)
+    if (!contentOrPath) return undefined;
+
+    let imagePath: string | undefined;
+
+    if (typeof contentOrPath === 'string') {
+      imagePath = contentOrPath;
+    } else {
+      // Try common fields that might contain an image/video path on a Content object
+      imagePath = contentOrPath.video_content?.video_file
+        || (contentOrPath as any).video_file
+        || contentOrPath.pdf_content?.pdf_file
+        || (contentOrPath as any).image_url;
+    }
+
+    if (!imagePath) return undefined;
+
+    let url = imagePath.replace('http://backend:8000', BASE_URL);
 
     if (!url.startsWith('http')) {
       url = `${BASE_URL}${url}`;
     }
 
     return url;
-  }
-  return null;
-};
+  };
 
-const getimageUrl = (contentOrPath: Content | string | undefined): string | undefined => {
-  // Accept either a Content object or a direct string path (e.g. course.image_url)
-  if (!contentOrPath) return undefined;
+  const getPdfUrl = (content: Content) => {
+    if (content.pdf_content?.pdf_file) {
+      let pdfPath = content.pdf_content.pdf_file;
 
-  let imagePath: string | undefined;
+      // Replace backend domain with localhost if necessary
+      pdfPath = pdfPath.replace('http://backend:8000', BASE_URL);
 
-  if (typeof contentOrPath === 'string') {
-    imagePath = contentOrPath;
-  } else {
-    // Try common fields that might contain an image/video path on a Content object
-    imagePath = contentOrPath.video_content?.video_file
-      || (contentOrPath as any).video_file
-      || contentOrPath.pdf_content?.pdf_file
-      || (contentOrPath as any).image_url;
-  }
+      if (!pdfPath.startsWith('http')) {
+        pdfPath = `${BASE_URL}${pdfPath}`;
+      }
 
-  if (!imagePath) return undefined;
-
-  let url = imagePath.replace('http://backend:8000', BASE_URL);
-
-  if (!url.startsWith('http')) {
-    url = `${BASE_URL}${url}`;
-  }
-
-  return url;
-};
-
-const getPdfUrl = (content: Content) => {
-  if (content.pdf_content?.pdf_file) {
-    let pdfPath = content.pdf_content.pdf_file;
-
-    // Replace backend domain with localhost if necessary
-    pdfPath = pdfPath.replace('http://backend:8000', BASE_URL);
-
-    if (!pdfPath.startsWith('http')) {
-      pdfPath = `${BASE_URL}${pdfPath}`;
+      return pdfPath;
     }
-
-    return pdfPath;
-  }
-  return null;
-};
-
+    return null;
+  };
 
   const getFileName = (content: Content): string => {
     if (content.pdf_content?.pdf_file) {
@@ -983,14 +1072,14 @@ const getPdfUrl = (content: Content) => {
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
             <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
           </div>
-          {/* <div>
+          <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
             <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{progressPercentage}%</div>
-          </div> */}
-          {/* <div>
+          </div>
+          <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps passé</div>
             <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{formatTime(totalTimeSpent)}</div>
-          </div> */}
+          </div>
         </div>
       </div>
 
@@ -1034,25 +1123,6 @@ const getPdfUrl = (content: Content) => {
           <p style={{ fontSize: '0.875rem', color: '#4B5563', lineHeight: '1.6', marginBottom: '1rem' }}>
             {course.description}
           </p>
-
-          {/* Enhanced course info with time tracking */}
-          {/* <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '8px' }}>
-            <div style={{ marginBottom: '0.5rem' }}>
-              <span>⏱️ </span>
-              <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Durée estimée:</span>
-            </div>
-            <div style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '1rem' }}>
-              {formatDuration(course.estimated_duration) || 'Non spécifiée'}
-            </div>
-
-            <div style={{ marginBottom: '0.5rem' }}>
-              <span>🎯 </span>
-              <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Temps requis min:</span>
-            </div>
-            <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>
-              {formatDuration(course.min_required_time) || 'Non spécifié'}
-            </div>
-          </div> */}
 
           <div style={{ marginBottom: '0.5rem' }}>
             <span>👤 </span>
@@ -1178,11 +1248,6 @@ const getPdfUrl = (content: Content) => {
                             </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            {/* {!hasMetTimeRequirement && content.min_required_time && (
-                              <span style={{ fontSize: '0.75rem', color: '#F59E0B', fontWeight: '500' }}>
-                                {content.min_required_time}min requis
-                              </span>
-                            )} */}
                             <div style={{ position: 'relative' }}>
                               <button 
                                 onClick={(e) => {
@@ -1413,9 +1478,6 @@ const getPdfUrl = (content: Content) => {
               </div>
             </div>
 
-            {/* Enhanced Time Required Banner */}
-            {/*  */}
-
             {/* Content Description */}
             {selectedContent.caption && (
               <div style={{ padding: '1rem 1.5rem', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
@@ -1449,7 +1511,7 @@ const getPdfUrl = (content: Content) => {
               <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Contenu à lire</h4>
 
               {/* PDF Content */}
-              {/* {selectedContent.content_type_name?.toLowerCase() === 'pdf' && (
+              {selectedContent.content_type_name?.toLowerCase() === 'pdf' && (
                 <div>
                   {getPdfUrl(selectedContent) ? (
                     <iframe 
@@ -1475,11 +1537,10 @@ const getPdfUrl = (content: Content) => {
                     </div>
                   )}
                 </div>
-              )} */}
+              )}
 
               {/* Video Content */}
               {selectedContent.content_type_name?.toLowerCase() === 'video' && (
-
                 <div>
                   {getVideoUrl(selectedContent) ? (
                     <video 
@@ -1518,39 +1579,89 @@ const getPdfUrl = (content: Content) => {
                   borderRadius: '6px',
                   border: '1px solid #E5E7EB'
                 }}>
-                  <h5 style={{ marginBottom: '1rem', fontSize: '1rem' }}>{selectedContent.qcm.title}</h5>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '1.5rem',
+                    paddingBottom: '1rem',
+                    borderBottom: '1px solid #E5E7EB'
+                  }}>
+                    <h5 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>
+                      {selectedContent.qcm.title}
+                    </h5>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem', color: '#6B7280' }}>
+                      <span>Score de passage: {selectedContent.qcm.passing_score}%</span>
+                      <span>Tentatives: {selectedContent.qcm.max_attempts}</span>
+                      {selectedContent.qcm.time_limit && selectedContent.qcm.time_limit > 0 && (
+                        <span>Temps: {selectedContent.qcm.time_limit}min</span>
+                      )}
+                    </div>
+                  </div>
+
                   {selectedContent.qcm.questions?.map((question, qIndex) => (
-                    <div key={question.id} style={{ marginBottom: '2rem' }}>
-                      <div style={{ 
-                        fontWeight: '500', 
+                    <div key={question.id || qIndex} style={{
+                      marginBottom: '2rem',
+                      padding: '1rem',
+                      backgroundColor: 'white',
+                      borderRadius: '6px',
+                      border: '1px solid #E5E7EB'
+                    }}>
+                      <div style={{
+                        fontWeight: '500',
                         marginBottom: '1rem',
-                        fontSize: '1rem'
+                        fontSize: '1rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start'
                       }}>
-                        {qIndex + 1}. {question.question}
+                        <span>{qIndex + 1}. {question.question}</span>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          backgroundColor: '#EEF2FF',
+                          color: '#4338CA',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {question.question_type === 'single' ? 'Choix unique' : 'Choix multiple'}
+                          {question.points && ` • ${question.points} pt${question.points > 1 ? 's' : ''}`}
+                        </span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {question.options.map((option) => (
-                          <label 
-                            key={option.id}
+                        {question.options.map((option, oIndex) => (
+                          <label
+                            key={option.id || oIndex}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: '0.75rem',
                               padding: '0.75rem',
-                              backgroundColor: 'white',
-                              border: '1px solid #E5E7EB',
+                              backgroundColor: option.is_correct ? '#F0F9FF' : 'white',
+                              border: `1px solid ${option.is_correct ? '#0EA5E9' : '#E5E7EB'}`,
                               borderRadius: '4px',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
                             }}
                           >
-                            <input 
-                              type="radio" 
-                              name={`question-${question.id}`} 
-                              style={{ cursor: 'pointer' }} 
+                            <input
+                              type={question.question_type === 'single' ? 'radio' : 'checkbox'}
+                              name={`question-${question.id || qIndex}`}
+                              style={{ cursor: 'pointer' }}
                             />
-                            <span style={{ fontSize: '0.875rem' }}>{option.text}</span>
+                            <span style={{
+                              fontSize: '0.875rem',
+                              color: option.is_correct ? '#0C4A6E' : '#374151'
+                            }}>
+                              {option.text}
+                            </span>
                             {option.is_correct && (
-                              <span style={{ fontSize: '0.75rem', color: '#10B981', marginLeft: 'auto' }}>
+                              <span style={{
+                                fontSize: '0.75rem',
+                                color: '#10B981',
+                                marginLeft: 'auto',
+                                fontWeight: '500'
+                              }}>
                                 ✓ Correct
                               </span>
                             )}
@@ -1751,58 +1862,6 @@ const getPdfUrl = (content: Content) => {
                   }}
                 />
               </div>
-              
-              {/* Enhanced Module Time Settings */}
-              {/* <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Durée estimée (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={moduleForm.estimated_duration || ''}
-                    onChange={(e) => setModuleForm(prev => ({ 
-                      ...prev, 
-                      estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
-                    }))}
-                    min="1"
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Temps minimum requis (minutes) *
-                  </label>
-                  <input
-                    type="number"
-                    value={moduleForm.min_required_time || ''}
-                    onChange={(e) => setModuleForm(prev => ({ 
-                      ...prev, 
-                      min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
-                    }))}
-                    min="1"
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div> */}
 
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                 <button 
@@ -1906,58 +1965,6 @@ const getPdfUrl = (content: Content) => {
                     resize: 'vertical'
                   }}
                 />
-              </div>
-
-              {/* Enhanced Module Time Settings */}
-              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Durée estimée (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={moduleForm.estimated_duration || ''}
-                    onChange={(e) => setModuleForm(prev => ({ 
-                      ...prev, 
-                      estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
-                    }))}
-                    min="1"
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Temps minimum requis (minutes) *
-                  </label>
-                  <input
-                    type="number"
-                    value={moduleForm.min_required_time || ''}
-                    onChange={(e) => setModuleForm(prev => ({ 
-                      ...prev, 
-                      min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
-                    }))}
-                    min="1"
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
@@ -2191,58 +2198,6 @@ const getPdfUrl = (content: Content) => {
                         resize: 'vertical'
                       }}
                     />
-                  </div>
-
-                  {/* Enhanced Time Settings */}
-                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
-                    <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
-                    
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                        Durée estimée (minutes)
-                      </label>
-                      <input
-                        type="number"
-                        value={contentForm.estimated_duration || ''}
-                        onChange={(e) => setContentForm(prev => ({ 
-                          ...prev, 
-                          estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
-                        }))}
-                        min="1"
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          border: '1px solid #D1D5DB',
-                          borderRadius: '4px',
-                          fontSize: '0.875rem',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                    </div>
-                    
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                        Temps minimum requis (minutes) *
-                      </label>
-                      <input
-                        type="number"
-                        value={contentForm.min_required_time || ''}
-                        onChange={(e) => setContentForm(prev => ({ 
-                          ...prev, 
-                          min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
-                        }))}
-                        min="1"
-                        required
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          border: '1px solid #D1D5DB',
-                          borderRadius: '4px',
-                          fontSize: '0.875rem',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                    </div>
                   </div>
 
                   {/* File Upload for PDF and Video */}
@@ -2576,7 +2531,9 @@ const getPdfUrl = (content: Content) => {
               padding: '2rem',
               borderRadius: '8px',
               width: '90%',
-              maxWidth: '500px'
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              maxWidth: '600px'
             }}
           >
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Modifier le contenu</h3>
@@ -2620,22 +2577,16 @@ const getPdfUrl = (content: Content) => {
                 />
               </div>
 
-              {/* Enhanced Time Settings */}
-              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#F9FAFB', borderRadius: '6px' }}>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Paramètres de temps</h4>
-                
-                <div style={{ marginBottom: '1rem' }}>
+              {/* File Upload for PDF and Video */}
+              {(selectedContentType === 'pdf' || selectedContentType === 'video') && (
+                <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Durée estimée (minutes)
+                    Fichier {selectedContentType === 'pdf' ? 'PDF' : 'Vidéo'} *
                   </label>
                   <input
-                    type="number"
-                    value={contentForm.estimated_duration || ''}
-                    onChange={(e) => setContentForm(prev => ({ 
-                      ...prev, 
-                      estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
-                    }))}
-                    min="1"
+                    type="file"
+                    accept={selectedContentType === 'pdf' ? '.pdf' : 'video/*'}
+                    onChange={handleFileChange}
                     style={{
                       width: '100%',
                       padding: '0.5rem',
@@ -2645,32 +2596,255 @@ const getPdfUrl = (content: Content) => {
                       boxSizing: 'border-box'
                     }}
                   />
+                  <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '0.25rem' }}>
+                    Laissez vide pour conserver le fichier actuel
+                  </div>
                 </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
-                    Temps minimum requis (minutes) *
-                  </label>
-                  <input
-                    type="number"
-                    value={contentForm.min_required_time || ''}
-                    onChange={(e) => setContentForm(prev => ({ 
-                      ...prev, 
-                      min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
-                    }))}
-                    min="1"
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '4px',
-                      fontSize: '0.875rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
+              )}
+
+              {/* Enhanced QCM Form */}
+              {selectedContentType === 'qcm' && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h4 style={{ fontSize: '0.875rem', fontWeight: '600' }}>Configuration du QCM</h4>
+                    <button
+                      type="button"
+                      onClick={addQuestion}
+                      style={{
+                        padding: '0.25rem 0.5rem',
+                        backgroundColor: '#2D2B6B',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      + Ajouter une question
+                    </button>
+                  </div>
+
+                  {contentForm.questions.map((question, qIndex) => (
+                    <div key={qIndex} style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h5 style={{ fontSize: '0.875rem', fontWeight: '600', margin: 0 }}>Question {qIndex + 1}</h5>
+                        {contentForm.questions.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeQuestion(qIndex)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#EF4444',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            ✕ Supprimer
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                          Question *
+                        </label>
+                        <input
+                          type="text"
+                          value={question.question}
+                          onChange={(e) => handleQuestionChange(qIndex, 'question', e.target.value)}
+                          required
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: '1px solid #D1D5DB',
+                            borderRadius: '4px',
+                            fontSize: '0.875rem',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                          Type de question
+                        </label>
+                        <select
+                          value={question.question_type}
+                          onChange={(e) => handleQuestionChange(qIndex, 'question_type', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: '1px solid #D1D5DB',
+                            borderRadius: '4px',
+                            fontSize: '0.875rem',
+                            boxSizing: 'border-box'
+                          }}
+                        >
+                          <option value="single">Choix unique</option>
+                          <option value="multiple">Choix multiple</option>
+                        </select>
+                      </div>
+
+                      <div style={{ marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <label style={{ fontSize: '0.875rem', fontWeight: '500' }}>Options *</label>
+                          <button
+                            type="button"
+                            onClick={() => addOption(qIndex)}
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              backgroundColor: '#10B981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            + Ajouter une option
+                          </button>
+                        </div>
+
+                        {question.options.map((option, oIndex) => (
+                          <div key={oIndex} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                            <input
+                              type={question.question_type === 'single' ? 'radio' : 'checkbox'}
+                              name={`correct-${qIndex}`}
+                              checked={option.is_correct}
+                              onChange={(e) => {
+                                if (question.question_type === 'single') {
+                                  // For single choice, set all others to false
+                                  const newOptions = question.options.map((opt, idx) => ({
+                                    ...opt,
+                                    is_correct: idx === oIndex
+                                  }));
+                                  handleQuestionChange(qIndex, 'options', newOptions);
+                                } else {
+                                  // For multiple choice, toggle this one
+                                  handleOptionChange(qIndex, oIndex, 'is_correct', e.target.checked);
+                                }
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <input
+                              type="text"
+                              value={option.text}
+                              onChange={(e) => handleOptionChange(qIndex, oIndex, 'text', e.target.value)}
+                              placeholder="Texte de l'option"
+                              required
+                              style={{
+                                flex: 1,
+                                padding: '0.5rem',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '0.875rem',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                            {question.options.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => removeOption(qIndex, oIndex)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#EF4444',
+                                  cursor: 'pointer',
+                                  padding: '0.25rem'
+                                }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* QCM Settings */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                            Points
+                          </label>
+                          <input
+                            type="number"
+                            value={contentForm.points}
+                            onChange={(e) => setContentForm(prev => ({ ...prev, points: parseInt(e.target.value) }))}
+                            min="1"
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '4px',
+                              fontSize: '0.875rem',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                            Score de passage (%)
+                          </label>
+                          <input
+                            type="number"
+                            value={contentForm.passing_score}
+                            onChange={(e) => setContentForm(prev => ({ ...prev, passing_score: parseInt(e.target.value) }))}
+                            min="0"
+                            max="100"
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '4px',
+                              fontSize: '0.875rem',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                            Tentatives max
+                          </label>
+                          <input
+                            type="number"
+                            value={contentForm.max_attempts}
+                            onChange={(e) => setContentForm(prev => ({ ...prev, max_attempts: parseInt(e.target.value) }))}
+                            min="1"
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '4px',
+                              fontSize: '0.875rem',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                            Limite de temps (min)
+                          </label>
+                          <input
+                            type="number"
+                            value={contentForm.time_limit}
+                            onChange={(e) => setContentForm(prev => ({ ...prev, time_limit: parseInt(e.target.value) }))}
+                            min="0"
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '4px',
+                              fontSize: '0.875rem',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
 
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                 <button 

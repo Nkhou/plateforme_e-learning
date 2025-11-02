@@ -1,8 +1,12 @@
+import math
+import os
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.conf import settings
 from django.core.validators import MinValueValidator
+from django.db.models.signals import pre_save, post_save
+from django.dispatch import receiver
 
 PRIVILEGE_CHOICES = [
     ('A', 'Admin'),
@@ -33,6 +37,7 @@ QUESTION_TYPE_CHOICES = [
     ('single', 'Single Choice'),
     ('multiple', 'Multiple Choice'),
 ]
+
 class CustomUser(AbstractUser):
     privilege = models.CharField(max_length=10, choices=PRIVILEGE_CHOICES, default='AP')
     department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
@@ -106,6 +111,80 @@ class Course(models.Model):
         creator_name = self.creator.get_full_name() or self.creator.username
         return f"{self.title_of_course} by {creator_name}"
 
+    def calculate_estimated_duration(self):
+        """Calculate total duration from ACTIVE modules and contents only"""
+        # Safety check: can't calculate for unsaved instances
+        if not self.pk:
+            return 0
+            
+        total_duration = 0
+        
+        # Filter only active modules (status = 1)
+        active_modules = self.modules.filter(status=1)
+        
+        for module in active_modules:
+            # Use the module's calculate_estimated_duration method
+            total_duration += module.calculate_estimated_duration()
+        
+        return total_duration
+
+    def calculate_min_required_time(self):
+        """Calculate minimum required time from ACTIVE modules and contents only"""
+        # Safety check: can't calculate for unsaved instances
+        if not self.pk:
+            return 0
+            
+        total_min_time = 0
+        
+        # Filter only active modules (status = 1)
+        active_modules = self.modules.filter(status=1)
+        
+        for module in active_modules:
+            # Filter only active contents within the module
+            active_contents = module.contents.filter(status=1)
+            
+            for content in active_contents:
+                if content.min_required_time:
+                    total_min_time += content.min_required_time
+                else:
+                    # Fallback to estimated_duration if min_required_time not set
+                    if content.estimated_duration:
+                        total_min_time += content.estimated_duration
+                    else:
+                        # Default fallback based on content type
+                        content_type_name = content.content_type.name.lower()
+                        if content_type_name == 'video':
+                            total_min_time += 10  # Default 10 minutes for video
+                        elif content_type_name == 'pdf':
+                            total_min_time += 15  # Default 15 minutes for PDF
+                        elif content_type_name == 'qcm':
+                            total_min_time += 5   # Default 5 minutes for QCM
+        
+        return total_min_time
+
+    # REMOVE THIS ENTIRE save() METHOD - let Django handle the saving
+    # def save(self, *args, **kwargs):
+    #     # Check if this is a new instance by checking if it exists in the database
+    #     is_new = self._state.adding  # This is more reliable than self.pk is None
+    #     print('**************************************************************************')
+    #     if is_new:
+    #         # For new instances, set durations to 0 and save without calculation
+    #         if not self.estimated_duration:
+    #             self.estimated_duration = 0
+    #         if not self.min_required_time:
+    #             self.min_required_time = 0
+    #         # Save the instance to get a primary key
+    #         super().save(*args, **kwargs)
+    #     else:
+    #         # For existing instances, calculate durations before saving
+    #         self.estimated_duration = self.calculate_estimated_duration()
+    #         self.min_required_time = self.calculate_min_required_time()
+    #         # Save with updated durations
+    #         super().save(*args, **kwargs)
+
+
+
+
     # NEW PROPERTIES - Added for React compatibility
     @property
     def creator_username(self):
@@ -146,6 +225,7 @@ class Course(models.Model):
     def set_draft(self):
         self.status = 0
         self.save()
+    
     def calculate_estimated_duration(self):
         """Calculate total duration from ACTIVE modules and contents only"""
         total_duration = 0
@@ -189,13 +269,14 @@ class Course(models.Model):
         
         return total_min_time
 
-    def save(self, *args, **kwargs):
-        # Auto-calculate durations if not set
-        if not self.estimated_duration:
-            self.estimated_duration = self.calculate_estimated_duration()
-        if not self.min_required_time:
-            self.min_required_time = self.calculate_min_required_time()
-        super().save(*args, **kwargs)
+    # def save(self, *args, **kwargs):
+    #     # Auto-calculate durations if not set
+    #     if not self.estimated_duration:
+    #         self.estimated_duration = self.calculate_estimated_duration()
+    #     if not self.min_required_time:
+    #         self.min_required_time = self.calculate_min_required_time()
+    #     super().save(*args, **kwargs)
+
 class Enrollment(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='enrollments')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')
@@ -255,6 +336,10 @@ class Module(models.Model):
 
     def calculate_estimated_duration(self):
         """Calculate total duration from ACTIVE contents only"""
+        # Safety check: can't calculate for unsaved instances
+        if not self.pk:
+            return 0
+            
         total_duration = 0
         
         # Filter only active contents (status = 1)
@@ -283,6 +368,10 @@ class Module(models.Model):
 
     def calculate_min_required_time(self):
         """Calculate minimum required time from ACTIVE contents only"""
+        # Safety check: can't calculate for unsaved instances
+        if not self.pk:
+            return 0
+            
         total_min_time = 0
         
         # Filter only active contents (status = 1)
@@ -308,11 +397,20 @@ class Module(models.Model):
         return total_min_time
 
     def save(self, *args, **kwargs):
-        # Auto-calculate durations if not set
-        if not self.estimated_duration:
-            self.estimated_duration = self.calculate_estimated_duration()
-        if not self.min_required_time:
-            self.min_required_time = self.calculate_min_required_time()
+        # Only calculate durations if the module already exists (has an ID)
+        if self.pk is not None:
+            # Auto-calculate durations only for existing modules
+            if not self.estimated_duration:
+                self.estimated_duration = self.calculate_estimated_duration()
+            if not self.min_required_time:
+                self.min_required_time = self.calculate_min_required_time()
+        else:
+            # For new modules, set default values
+            if not self.estimated_duration:
+                self.estimated_duration = 0
+            if not self.min_required_time:
+                self.min_required_time = 0
+        
         super().save(*args, **kwargs)
 
 # models.py - Ajouter ces champs au modèle CourseContent
@@ -373,6 +471,7 @@ class CourseContent(models.Model):
             ).count()
             self.completion_rate = (completed_count / total_subscriptions) * 100
             self.save()
+
 class ContentProgress(models.Model):
     enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, related_name='content_progress')
     content = models.ForeignKey(CourseContent, on_delete=models.CASCADE)
@@ -386,19 +485,60 @@ class ContentProgress(models.Model):
     def __str__(self):
         return f"{self.enrollment.user.username} - {self.content.title}"
 
+# Ajoutez ce nouveau modèle pour gérer les questions multiples
+class QCMQuestion(models.Model):
+    """Model for multiple questions in a QCM"""
+    qcm = models.ForeignKey('QCM', on_delete=models.CASCADE, related_name='questions')
+    question = models.TextField()
+    question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES, default='single')
+    points = models.IntegerField(default=1)
+    order = models.PositiveIntegerField(default=0)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return f"{self.qcm.course_content.title} - Q{self.order}: {self.question[:50]}"
+
+# Modifiez le modèle QCM existant
 class QCM(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='qcm')
-    question = models.TextField()
-    # NEW FIELD - Added for question type
-    question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES, default='single')
-    points = models.IntegerField(default=1)  
+    title = models.CharField(max_length=200, blank=True)  # Add this field
     passing_score = models.IntegerField(default=80) 
     max_attempts = models.IntegerField(default=3)  
     time_limit = models.IntegerField(default=0)  # in minutes
 
     def __str__(self):
-        return f"QCM: {self.question} ({self.points} points)"
+        return f"QCM: {self.course_content.title}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-populate title from course_content if not provided
+        if not self.title and self.course_content:
+            self.title = self.course_content.title
+        super().save(*args, **kwargs)
+    
+    @property
+    def total_points(self):
+        """Calculate total points from all questions"""
+        return sum(question.points for question in self.questions.all())
+    
+    @property
+    def questions_count(self):
+        """Get number of questions"""
+        return self.questions.count()
+class QCMOption(models.Model):
+    # Link to question (not directly to QCM)
+    question = models.ForeignKey(QCMQuestion, on_delete=models.CASCADE, related_name='options')
+    
+    text = models.CharField(max_length=200)
+    is_correct = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
 
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.text} ({'Correct' if self.is_correct else 'Incorrect'})"
 class VideoContent(models.Model):
     course_content = models.OneToOneField(CourseContent, on_delete=models.CASCADE, related_name='video_content')
     video_file = models.FileField(upload_to='videos/%y')
@@ -632,6 +772,7 @@ class Subscription(models.Model):
     def get_active_locked_contents(self):
         """Get only active locked contents (status=1)"""
         return self.locked_contents.filter(status=1)
+
 class QCMCompletion(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
     qcm = models.ForeignKey(QCM, on_delete=models.CASCADE)
@@ -643,19 +784,6 @@ class QCMCompletion(models.Model):
 
     class Meta:
         unique_together = ['subscription', 'qcm']
-
-class QCMOption(models.Model):
-    qcm = models.ForeignKey(QCM, on_delete=models.CASCADE, related_name='options')
-    text = models.CharField(max_length=200)
-    is_correct = models.BooleanField(default=False)
-    # NEW FIELD - Added for ordering
-    order = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        ordering = ['order']
-
-    def __str__(self):
-        return f"{self.text} ({'Correct' if self.is_correct else 'Incorrect'})"
 
 class QCMAttempt(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='qcm_attempts')
@@ -729,10 +857,6 @@ class ChatMessage(models.Model):
         return f"{self.sender.username} to {self.receiver.username}: {self.message[:50]}"
 
 # Signals for creating folders
-from django.db.models.signals import pre_save, post_save
-from django.dispatch import receiver
-import os
-
 @receiver(pre_save, sender=Course)
 def create_course_image_folder(sender, instance, **kwargs):
     if instance.id:

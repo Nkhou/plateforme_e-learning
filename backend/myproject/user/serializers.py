@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     CustomUser, QCMAttempt, QCMCompletion, Course, Module, CourseContent, 
     VideoContent, PDFContent, QCM, QCMOption, ContentType, Subscription, 
-    Enrollment, TimeTracking, ChatMessage
+    Enrollment, TimeTracking, ChatMessage, QCMQuestion
 )
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
@@ -138,6 +138,15 @@ class VideoContentSerializer(serializers.ModelSerializer):
         
         return super().update(instance, validated_data)
 
+# Add these new serializers for the multi-question system
+class QCMQuestionSerializer(serializers.ModelSerializer):
+    options = QCMOptionSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = QCMQuestion
+        fields = ['id', 'question', 'question_type', 'points', 'order', 'options']
+
+# FIXED: QCMSerializer with multi-question support
 class QCMSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source='course_content.title', required=False)
     caption = serializers.CharField(source='course_content.caption', required=False)
@@ -147,16 +156,30 @@ class QCMSerializer(serializers.ModelSerializer):
     estimated_duration = serializers.IntegerField(source='course_content.estimated_duration', required=False)
     min_required_time = serializers.IntegerField(source='course_content.min_required_time', required=False)
     
-    options = QCMOptionSerializer(many=True, read_only=True)
+    # Multi-question support - use the actual questions relationship
+    questions = QCMQuestionSerializer(many=True, read_only=True)
+    
+    # Total points calculation
+    total_points = serializers.SerializerMethodField()
+    questions_count = serializers.SerializerMethodField()
     
     class Meta:
         model = QCM
         fields = [
-            'id', 'question', 'question_type', 'points', 'passing_score', 'max_attempts', 'time_limit',
-            'title', 'caption', 'order', 'status', 'status_display', 'options',
-            'estimated_duration', 'min_required_time'
+            'id', 'title', 'caption', 'order', 'status', 'status_display',
+            'estimated_duration', 'min_required_time', 
+            'passing_score', 'max_attempts', 'time_limit',
+            'questions', 'total_points', 'questions_count'
         ]
         read_only_fields = ['id']
+    
+    def get_total_points(self, obj):
+        """Calculate total points from all questions"""
+        return sum(question.points for question in obj.questions.all())
+    
+    def get_questions_count(self, obj):
+        """Get number of questions"""
+        return obj.questions.count()
     
     def update(self, instance, validated_data):
         content_data = validated_data.pop('course_content', {})
@@ -167,7 +190,6 @@ class QCMSerializer(serializers.ModelSerializer):
             content.save()
         
         return super().update(instance, validated_data)
-
 class ModuleSerializer(serializers.ModelSerializer):
     contents = serializers.SerializerMethodField()
     content_stats = serializers.SerializerMethodField()
@@ -340,6 +362,8 @@ class ModuleWithContentsSerializer(serializers.ModelSerializer):
             'average_time_spent': avg_time,
             'total_time_tracked': total_time,
         }
+# FIXED: CourseContentSerializer with proper QCM handling
+# FIXED: CourseContentSerializer with all required methods
 class CourseContentSerializer(serializers.ModelSerializer):
     video_content = VideoContentSerializer(read_only=True)
     pdf_content = PDFContentSerializer(read_only=True)
@@ -361,102 +385,96 @@ class CourseContentSerializer(serializers.ModelSerializer):
         ]
     
     def get_is_completed(self, obj):
+        """Check if the current user has completed this content"""
         request = self.context.get('request')
-        user = getattr(request, 'user', None)
-
-        if not user or not user.is_authenticated:
-            return False
-        
-        # Get or create subscription for this user and course
         subscription = self.context.get('subscription')
-        if not subscription:
-            try:
-                subscription = Subscription.objects.filter(
-                    user=user,
-                    course=obj.module.course,
-                    is_active=True
-                ).first()
-            except Subscription.DoesNotExist:
-                return False
         
-        if not subscription:
+        if not request or not request.user.is_authenticated:
             return False
-
-        # Check if content is marked as completed in subscription
-        if subscription.completed_contents.filter(id=obj.id).exists():
-            return True
         
-        # For QCM content, check if passed attempts exist
-        if obj.content_type.name.lower() == 'qcm':
-            try:
-                qcm = obj.qcm
-                if qcm:
-                    return QCMCompletion.objects.filter(
+        if subscription:
+            # Check if content is in completed_contents
+            if subscription.completed_contents.filter(id=obj.id).exists():
+                return True
+            
+            # For QCM content, check if it's passed
+            if obj.content_type.name == 'qcm' and hasattr(obj, 'qcm'):
+                qcm_completion = QCMCompletion.objects.filter(
+                    subscription=subscription,
+                    qcm=obj.qcm,
+                    is_passed=True
+                ).exists()
+                return qcm_completion
+        
+        return False
+    
+    def get_can_access(self, obj):
+        """Check if user can access this content (based on order)"""
+        request = self.context.get('request')
+        subscription = self.context.get('subscription')
+        
+        if not request or not request.user.is_authenticated or not subscription:
+            return True  # Allow access for non-subscribed users or preview
+            
+        # Get all contents in the module ordered by 'order'
+        module_contents = CourseContent.objects.filter(
+            module=obj.module
+        ).order_by('order')
+        
+        # Find the current content's position
+        content_ids = list(module_contents.values_list('id', flat=True))
+        current_index = content_ids.index(obj.id) if obj.id in content_ids else -1
+        
+        # If this is the first content, allow access
+        if current_index == 0:
+            return True
+            
+        # Check if previous content is completed
+        if current_index > 0:
+            previous_content_id = content_ids[current_index - 1]
+            previous_content = CourseContent.objects.get(id=previous_content_id)
+            
+            # Check if previous content is completed
+            if previous_content.content_type.name == 'qcm':
+                # For QCM, check if it's passed
+                if hasattr(previous_content, 'qcm'):
+                    qcm_completed = QCMCompletion.objects.filter(
                         subscription=subscription,
-                        qcm=qcm,
+                        qcm=previous_content.qcm,
                         is_passed=True
                     ).exists()
-            except QCM.DoesNotExist:
-                pass
+                    return qcm_completed
+            else:
+                # For other content types, check if it's in completed_contents
+                return subscription.completed_contents.filter(id=previous_content_id).exists()
         
         return False
-
-    def get_can_access(self, obj):
-        request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        
-        if not user or not user.is_authenticated:
-            return False
-            
-        subscription = self.context.get('subscription')
-        if not subscription:
-            try:
-                subscription = Subscription.objects.filter(
-                    user=user,
-                    course=obj.module.course,
-                    is_active=True
-                ).first()
-            except Subscription.DoesNotExist:
-                return False
-            
-        if subscription:
-            return subscription.can_access_content(obj)
-            
-        return False
-
+    
     def get_time_spent(self, obj):
+        """Get time spent on this content by the user"""
         request = self.context.get('request')
-        user = getattr(request, 'user', None)
+        if not request or not request.user.is_authenticated:
+            return 0
+            
+        total_time = TimeTracking.objects.filter(
+            user=request.user,
+            content=obj
+        ).aggregate(total=Sum('duration'))['total']
         
-        if not user or not user.is_authenticated:
-            return 0
-            
-        try:
-            total_time = TimeTracking.objects.filter(
-                user=user,
-                content=obj
-            ).aggregate(total_duration=Sum('duration'))['total_duration']
-            
-            return total_time or 0
-        except Exception:
-            return 0
-
+        return total_time or 0
+    
     def get_last_accessed(self, obj):
+        """Get last accessed time for this content"""
         request = self.context.get('request')
-        user = getattr(request, 'user', None)
+        if not request or not request.user.is_authenticated:
+            return None
+            
+        last_tracking = TimeTracking.objects.filter(
+            user=request.user,
+            content=obj
+        ).order_by('-end_time').first()
         
-        if not user or not user.is_authenticated:
-            return None
-            
-        try:
-            last_tracking = TimeTracking.objects.filter(
-                user=user,
-                content=obj
-            ).order_by('-end_time').first()
-            
-            return last_tracking.end_time.isoformat() if last_tracking else None
-        except Exception:
-            return None
+        return last_tracking.end_time if last_tracking else None
 class CourseSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
@@ -624,46 +642,125 @@ class CourseCreateSerializer(serializers.ModelSerializer):
             'creator_first_name',
             'creator_last_name'
         ]
+        read_only_fields = ['creator']  # Add this line
     
     def create(self, validated_data):
         request = self.context.get('request')
         
         if request and request.user.is_authenticated:
+            # Set the creator to the current user
             validated_data['creator'] = request.user
+            
+            # AUTO-SET DEPARTMENT FROM CREATOR'S DEPARTMENT
+            if 'department' not in validated_data or not validated_data['department']:
+                validated_data['department'] = request.user.department
         else:
-            validated_data['creator'] = None
+            raise serializers.ValidationError("User must be authenticated to create a course")
         
         try:
+            print('hello6666666666666666666666666666666666666')
             course = Course.objects.create(**validated_data)
             return course
         except Exception as e:
             raise serializers.ValidationError(f"Failed to create course: {str(e)}")
-
 # QCM Create Serializer
-class QCMCreateSerializer(serializers.ModelSerializer):
+# NEW: Serializer for creating questions with options
+class QCMQuestionCreateSerializer(serializers.ModelSerializer):
     options = QCMOptionCreateSerializer(many=True)
     
     class Meta:
-        model = QCM
-        fields = ['question', 'question_type', 'passing_score', 'points', 'max_attempts', 'time_limit', 'options']
+        model = QCMQuestion
+        fields = ['question', 'question_type', 'points', 'order', 'options']
+
+# # FIXED: QCMContentCreateSerializer with multi-question support
+# class QCMContentCreateSerializer(serializers.ModelSerializer):
+#     # NEW: Accept multiple questions instead of single question
+#     qcm_questions = QCMQuestionCreateSerializer(many=True, required=True)
     
-    def validate(self, data):
-        options = data.get('options', [])
-        correct_options = sum(1 for option in options if option.get('is_correct', False))
-        
-        if correct_options == 0:
-            raise serializers.ValidationError("At least one option must be correct")
-        
-        return data
+#     # Remove old single-question fields
+#     # qcm_question = serializers.CharField(required=False)  # REMOVE THIS
+#     # qcm_options = QCMOptionCreateSerializer(many=True, required=False)  # REMOVE THIS
+#     # points = serializers.IntegerField(required=False, default=1)  # REMOVE THIS
+#     # question_type = serializers.ChoiceField(choices=[('single', 'Single'), ('multiple', 'Multiple')], default='single')  # REMOVE THIS
     
-    def create(self, validated_data):
-        options_data = validated_data.pop('options')
-        qcm = QCM.objects.create(**validated_data)
+#     title = serializers.CharField(required=True)
+#     caption = serializers.CharField(required=False, allow_blank=True)
+#     order = serializers.IntegerField(required=True)
+#     estimated_duration = serializers.IntegerField(required=False)
+#     min_required_time = serializers.IntegerField(required=False)
+
+#     class Meta:
+#         model = CourseContent
+#         fields = [
+#             'title', 'caption', 'order', 'estimated_duration', 'min_required_time',
+#             'qcm_questions', 'passing_score', 'max_attempts', 'time_limit'
+#         ]
+    
+#     def validate(self, data):
+#         qcm_questions = data.get('qcm_questions', [])
         
-        for option_data in options_data:
-            QCMOption.objects.create(qcm=qcm, **option_data)
+#         if not qcm_questions:
+#             raise serializers.ValidationError("At least one question is required for QCM content")
         
-        return qcm
+#         for i, question_data in enumerate(qcm_questions):
+#             options = question_data.get('options', [])
+#             if len(options) < 2:
+#                 raise serializers.ValidationError(f"Question {i+1}: At least 2 options are required")
+            
+#             correct_options = sum(1 for option in options if option.get('is_correct', False))
+#             if correct_options == 0:
+#                 raise serializers.ValidationError(f"Question {i+1}: At least one option must be correct")
+            
+#             # For single choice questions, ensure only one correct option
+#             if question_data.get('question_type') == 'single' and correct_options > 1:
+#                 raise serializers.ValidationError(f"Question {i+1}: Single choice questions can have only one correct option")
+        
+#         return data
+    
+#     def create(self, validated_data):
+#         qcm_questions_data = validated_data.pop('qcm_questions')
+#         passing_score = validated_data.pop('passing_score', 80)
+#         max_attempts = validated_data.pop('max_attempts', 3)
+#         time_limit = validated_data.pop('time_limit', 0)
+        
+#         module = self.context.get('module')
+#         content_type = self.context.get('content_type')
+        
+#         if not module or not content_type:
+#             raise serializers.ValidationError("Module and content type are required")
+        
+#         # Create course content
+#         course_content = CourseContent.objects.create(
+#             module=module,
+#             content_type=content_type,
+#             **validated_data
+#         )
+        
+#         # Create QCM
+#         qcm = QCM.objects.create(
+#             course_content=course_content,
+#             passing_score=passing_score,
+#             max_attempts=max_attempts,
+#             time_limit=time_limit
+#         )
+        
+#         # Create questions and their options
+#         for question_data in qcm_questions_data:
+#             options_data = question_data.pop('options')
+            
+#             question = QCMQuestion.objects.create(
+#                 qcm=qcm,
+#                 **question_data
+#             )
+            
+#             # Create options for this question
+#             for option_data in options_data:
+#                 QCMOption.objects.create(
+#                     question=question,  # Link to question, not QCM
+#                     **option_data
+#                 )
+        
+#         return course_content
 
 # PDF Content Create Serializer
 class PDFContentCreateSerializer(serializers.ModelSerializer):
@@ -727,13 +824,15 @@ class VideoContentCreateSerializer(serializers.ModelSerializer):
 
 # QCM Content Create Serializer
 class QCMContentCreateSerializer(serializers.ModelSerializer):
-    qcm_question = serializers.CharField(required=True)
-    qcm_options = QCMOptionCreateSerializer(many=True, required=True)
-    points = serializers.IntegerField(default=1)
+    # Multi-question fields
+    questions = QCMQuestionCreateSerializer(many=True, required=True)
+    
+    # QCM settings
     passing_score = serializers.IntegerField(default=80)
     max_attempts = serializers.IntegerField(default=3)
     time_limit = serializers.IntegerField(default=0)
-    question_type = serializers.ChoiceField(choices=[('single', 'Single'), ('multiple', 'Multiple')], default='single')
+    
+    # Course content fields
     title = serializers.CharField(required=True)
     caption = serializers.CharField(required=False, allow_blank=True)
     order = serializers.IntegerField(required=True)
@@ -744,24 +843,36 @@ class QCMContentCreateSerializer(serializers.ModelSerializer):
         model = CourseContent
         fields = [
             'title', 'caption', 'order', 'estimated_duration', 'min_required_time',
-            'qcm_question', 'qcm_options', 'points', 'passing_score', 'max_attempts', 
-            'time_limit', 'question_type'
+            'questions', 'passing_score', 'max_attempts', 'time_limit'
         ]
     
     def validate(self, data):
-        qcm_options = data.get('qcm_options', [])
-        if len(qcm_options) < 2:
-            raise serializers.ValidationError("At least 2 options are required for QCM content")
+        questions = data.get('questions', [])
+        
+        if not questions:
+            raise serializers.ValidationError("At least one question is required for QCM content")
+        
+        for i, question_data in enumerate(questions):
+            options = question_data.get('options', [])
+            if len(options) < 2:
+                raise serializers.ValidationError(f"Question {i+1}: At least 2 options are required")
+            
+            correct_options = sum(1 for option in options if option.get('is_correct', False))
+            if correct_options == 0:
+                raise serializers.ValidationError(f"Question {i+1}: At least one option must be correct")
+            
+            # For single choice questions, ensure only one correct option
+            question_type = question_data.get('question_type', 'single')
+            if question_type == 'single' and correct_options > 1:
+                raise serializers.ValidationError(f"Question {i+1}: Single choice questions can have only one correct option")
+        
         return data
     
     def create(self, validated_data):
-        qcm_question = validated_data.pop('qcm_question')
-        qcm_options = validated_data.pop('qcm_options')
-        points = validated_data.pop('points', 1)
+        questions_data = validated_data.pop('questions')
         passing_score = validated_data.pop('passing_score', 80)
         max_attempts = validated_data.pop('max_attempts', 3)
         time_limit = validated_data.pop('time_limit', 0)
-        question_type = validated_data.pop('question_type', 'single')
         
         module = self.context.get('module')
         content_type = self.context.get('content_type')
@@ -769,27 +880,38 @@ class QCMContentCreateSerializer(serializers.ModelSerializer):
         if not module or not content_type:
             raise serializers.ValidationError("Module and content type are required")
         
+        # Create course content
         course_content = CourseContent.objects.create(
             module=module,
             content_type=content_type,
             **validated_data
         )
         
+        # Create QCM
         qcm = QCM.objects.create(
             course_content=course_content,
-            question=qcm_question,
-            question_type=question_type,
-            points=points,
             passing_score=passing_score,
             max_attempts=max_attempts,
             time_limit=time_limit
         )
         
-        for option_data in qcm_options:
-            QCMOption.objects.create(qcm=qcm, **option_data)
+        # Create questions and their options
+        for question_data in questions_data:
+            options_data = question_data.pop('options')
+            
+            question = QCMQuestion.objects.create(
+                qcm=qcm,
+                **question_data
+            )
+            
+            # Create options for this question
+            for option_data in options_data:
+                QCMOption.objects.create(
+                    question=question,  # Link to question
+                    **option_data
+                )
         
         return course_content
-
 # Subscriber Serializer
 class SubscriberSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -1012,25 +1134,25 @@ class QCMCompletionSerializer(serializers.ModelSerializer):
         fields = ['qcm', 'qcm_title', 'best_score', 'points_earned', 'is_passed', 'attempts_count', 'last_attempt']
 
 # Course Content Create Serializer (for handling all content types)
+# FIXED: CourseContentCreateSerializer with proper QCM handling
 class CourseContentCreateSerializer(serializers.ModelSerializer):
     content_type = serializers.CharField(write_only=True)
     pdf_file = serializers.FileField(required=False, allow_null=True)
     video_file = serializers.FileField(required=False, allow_null=True)
-    qcm_question = serializers.CharField(required=False, allow_null=True)
-    qcm_options = QCMOptionCreateSerializer(many=True, required=False, allow_null=True)
-    points = serializers.IntegerField(required=False, default=1)
+    
+    # Multi-question QCM fields
+    questions = QCMQuestionCreateSerializer(many=True, required=False, allow_null=True)
     passing_score = serializers.IntegerField(required=False, default=80)
     max_attempts = serializers.IntegerField(required=False, default=3)
     time_limit = serializers.IntegerField(required=False, default=0)
-    question_type = serializers.ChoiceField(choices=[('single', 'Single'), ('multiple', 'Multiple')], default='single')
 
     class Meta:
         model = CourseContent
         fields = [
             'title', 'caption', 'order', 'status', 'content_type',
             'estimated_duration', 'min_required_time',
-            'pdf_file', 'video_file', 'qcm_question', 'qcm_options',
-            'points', 'passing_score', 'max_attempts', 'time_limit', 'question_type'
+            'pdf_file', 'video_file', 'questions',
+            'passing_score', 'max_attempts', 'time_limit'
         ]
 
     def validate(self, data):
@@ -1043,18 +1165,27 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Video file is required for video content")
         
         if content_type_name == 'qcm':
-            if not data.get('qcm_question'):
-                raise serializers.ValidationError("QCM question is required")
-            if not data.get('qcm_options') or len(data.get('qcm_options', [])) < 2:
-                raise serializers.ValidationError("At least 2 QCM options are required")
+            questions = data.get('questions', [])
+            if not questions:
+                raise serializers.ValidationError("At least one question is required for QCM content")
             
-            qcm_options = data.get('qcm_options', [])
-            correct_options = sum(1 for option in qcm_options if option.get('is_correct', False))
-            
-            if correct_options == 0:
-                raise serializers.ValidationError("At least one QCM option must be correct")
+            # Validate each question
+            for i, question_data in enumerate(questions):
+                options = question_data.get('options', [])
+                if len(options) < 2:
+                    raise serializers.ValidationError(f"Question {i+1}: At least 2 options are required")
+                
+                correct_options = sum(1 for option in options if option.get('is_correct', False))
+                if correct_options == 0:
+                    raise serializers.ValidationError(f"Question {i+1}: At least one option must be correct")
+                
+                # For single choice questions, ensure only one correct option
+                question_type = question_data.get('question_type', 'single')
+                if question_type == 'single' and correct_options > 1:
+                    raise serializers.ValidationError(f"Question {i+1}: Single choice questions can have only one correct option")
         
-        content_specific_fields = ['pdf_file', 'video_file', 'qcm_question']
+        # Ensure only one content type is specified
+        content_specific_fields = ['pdf_file', 'video_file', 'questions']
         provided_fields = [field for field in content_specific_fields if data.get(field)]
         
         if len(provided_fields) > 1:
@@ -1072,13 +1203,10 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
         
         pdf_file = validated_data.pop('pdf_file', None)
         video_file = validated_data.pop('video_file', None)
-        qcm_question = validated_data.pop('qcm_question', None)
-        qcm_options = validated_data.pop('qcm_options', [])
-        points = validated_data.pop('points', 1)
+        questions_data = validated_data.pop('questions', [])
         passing_score = validated_data.pop('passing_score', 80)
         max_attempts = validated_data.pop('max_attempts', 3)
         time_limit = validated_data.pop('time_limit', 0)
-        question_type = validated_data.pop('question_type', 'single')
 
         course_content = CourseContent.objects.create(
             module=module,
@@ -1092,22 +1220,31 @@ class CourseContentCreateSerializer(serializers.ModelSerializer):
         elif content_type_name == 'video' and video_file:
             VideoContent.objects.create(course_content=course_content, video_file=video_file)
         
-        elif content_type_name == 'qcm' and qcm_question:
+        elif content_type_name == 'qcm' and questions_data:
+            # Create QCM
             qcm = QCM.objects.create(
                 course_content=course_content,
-                question=qcm_question,
-                question_type=question_type,
-                points=points,
                 passing_score=passing_score,
                 max_attempts=max_attempts,
                 time_limit=time_limit
             )
             
-            for option_data in qcm_options:
-                QCMOption.objects.create(qcm=qcm, **option_data)
+            # Create questions and options
+            for question_data in questions_data:
+                options_data = question_data.pop('options')
+                
+                question = QCMQuestion.objects.create(
+                    qcm=qcm,
+                    **question_data
+                )
+                
+                for option_data in options_data:
+                    QCMOption.objects.create(
+                        question=question,  # Link to question
+                        **option_data
+                    )
 
         return course_content
-
 class ModuleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module

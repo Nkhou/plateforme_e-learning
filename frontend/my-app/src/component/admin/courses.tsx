@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/api';
+import NewCours from '../courses/new_courses'
 
 interface Course {
   id: number;
@@ -42,6 +43,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [changingStatus, setChangingStatus] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [showNewCours, setShowNewCours] = useState(false);
 
   const DEPARTMENT_CHOICES = [
     { code: 'F', label: 'Finance' },
@@ -294,6 +296,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+      {!showNewCours && (
       <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         {/* Header with filters and button */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -357,7 +360,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({
 
             {/* New Course Button */}
             <button
-              onClick={() => navigate('/cours/new')}
+              onClick={() => setShowNewCours(true)}
               style={{
                 backgroundColor: '#4338CA',
                 color: 'white',
@@ -708,6 +711,10 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({
           </div>
         )}
       </div>
+      )}
+       {showNewCours && (
+        <NewCours onCourseCreated={() => setShowNewCours(false)} />
+      )}
     </div>
   );
 };
