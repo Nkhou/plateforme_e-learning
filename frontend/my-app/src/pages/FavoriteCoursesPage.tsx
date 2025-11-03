@@ -211,7 +211,7 @@ const FavoriteCoursesPage: React.FC = () => {
         {/* Filters */}
         <div style={{ backgroundColor: 'white', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '1.5rem', padding: '1rem' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ flex: '1', minWidth: '200px' }}>
+            {/* <div style={{ flex: '1', minWidth: '200px' }}>
               <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
                 Statut d'inscription
               </label>
@@ -231,9 +231,9 @@ const FavoriteCoursesPage: React.FC = () => {
                 <option value="subscribed">Inscrits</option>
                 <option value="not_subscribed">Non inscrits</option>
               </select>
-            </div>
+            </div> */}
 
-            <div style={{ flex: '1', minWidth: '200px' }}>
+            {/* <div style={{ flex: '1', minWidth: '200px' }}>
               <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
                 Département
               </label>
@@ -256,7 +256,7 @@ const FavoriteCoursesPage: React.FC = () => {
                 <option value="O">OPERATIONS/PRODUCTION</option>
                 <option value="S">Sales</option>
               </select>
-            </div>
+            </div> */}
           </div>
         </div>
 

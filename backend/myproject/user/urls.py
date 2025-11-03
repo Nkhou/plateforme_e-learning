@@ -16,18 +16,25 @@ from .views import (
     # Module & Content Views
     ModuleDetailAPIView, ModuleListCreateAPIView,
     RecommendedCoursesView, UpdatePDFContentView, UpdateVideoContentView, 
-    UpdateQCMContentView, ModuleStatusUpdateView, ContentStatusUpdateView,CourseManagementView,
+    UpdateQCMContentView, ModuleStatusUpdateView, ContentStatusUpdateView, CourseManagementView,
     
     # QCM Views
-    SubmitQCM,CourseList,
+    SubmitQCM, CourseList,
     
-    # Time Tracking Views - ADD THESE
-    CourseTimeStatsView, TimeTrackingRecordView,
+    # Time Tracking Views
+    CourseTimeStatsView, TimeTrackingRecordView, FavoriteCourseViewSet
 )
 
 # Create router for CourseViewSet
 router = DefaultRouter()
 router.register(r'courses/(?P<pk>\d+)/subscribers', CourseSubscribersListViewSet, basename='course-subscribers')
+router.register(r'courses/favorites', views.FavoriteCourseViewSet, basename='favorite-courses')
+
+# Define favorite course view with actions
+# favorite_course_view = FavoriteCourseViewSet.as_view({
+#     'get': 'list',
+#     'post': 'create',
+# })
 
 urlpatterns = [
     # User endpoints
@@ -57,7 +64,7 @@ urlpatterns = [
     path('courses/<int:pk>/subscription-stats/', views.SubscriptionStats.as_view(), name='subscription-stats'),
     path('courses/<int:pk>/leaderboard/', views.CourseLeaderboard.as_view(), name='leaderboard'),
     
-    # Time Tracking endpoints - ADD THESE
+    # Time Tracking endpoints
     path('courses/<int:pk>/time-stats/', CourseTimeStatsView.as_view(), name='course-time-stats'),
     path('api/courses/<int:pk>/record-time/', TimeTrackingRecordView.as_view(), name='time-tracking-record'),
     
@@ -82,6 +89,8 @@ urlpatterns = [
     path('courses/<int:pk>/completeVideo/', views.MarkVideoCompletedView.as_view(), name='mark_video_completed'),
     path('courses/<int:pk>/completePdf/', views.MarkPDFCompletedView.as_view(), name='mark_pdf_completed'),
     path('courses/<int:pk>/update-status/', views.CourseStatusUpdateView.as_view(), name='course-update-status'),
+    path('courses/<int:pk>/complete-content/', views.MarkContentCompletedView.as_view(), name='complete-content'),
+    path('courses/<int:pk>/check-completion/', views.CheckCourseCompletionView.as_view(), name='check-completion'),
     
     # Recommended courses
     path('courses/recommended/', RecommendedCoursesView.as_view(), name='recommended-courses'),    
@@ -95,6 +104,10 @@ urlpatterns = [
     path('courses/<int:pk>/unsubscribe/', views.UnsubscribeFromCourse.as_view(), name='unsubscribe'),
     path('courses/<int:pk>/is-subscribed/', views.CheckSubscription.as_view(), name='is-subscribed'),
     
+    # path('courses/favorites/', favorite_course_view, name='favorite-course'),
+    # path('courses/favorites/toggle/', FavoriteCourseViewSet.as_view({'post': 'toggle_favorite'}), name='toggle-favorite'),
+    # path('courses/favorites/remove-by-course/<int:course_id>/', FavoriteCourseViewSet.as_view({'delete': 'remove_by_course'}), name='remove-favorite-by-course'),
+
     # Progress tracking
     path('courses/<int:pk>/update-progress/', views.UpdateProgress.as_view(), name='update-progress'),
     path('courses/<int:pk>/my-progress/', views.MyProgress.as_view(), name='my-progress'),
@@ -113,6 +126,7 @@ urlpatterns = [
     path('courses/<int:course_id>/contents/video/<int:content_id>/', UpdateVideoContentView.as_view(), name='update-video-content'),
     path('courses/<int:course_id>/contents/qcm/<int:content_id>/', UpdateQCMContentView.as_view(), name='update-qcm-content'),
     path('courses/', CourseManagementView.as_view(), name='courses'),
+    
     # Admin endpoints
     path('admin/dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
     path('admin/users/', UserManagementView.as_view(), name='admin-users'),
@@ -124,15 +138,12 @@ urlpatterns = [
     path('admin/CourseList/', CourseList.as_view(), name='CourseList'),
     path('courses/<int:course_id>/students/', CourseStudentsAPIView.as_view(), name='course-students'),
     path('courses/<int:course_id>/subscribe/', CourseSubscribeAPIView.as_view(), name='course-subscribe'),
-    # path('courses/<int:course_id>/unsubscribe/', CourseUnsubscribeAPIView.as_view(), name='course-unsubscribe'),
-    # path('courses/<int:course_id>/subscriber-stats/', CourseSubscriberStatsAPIView.as_view(), name='course-subscriber-stats'),
+    
 
-    # In your CourseList view
-    # Content completion endpoints
-    path('courses/<int:pk>/complete-content/', views.MarkContentCompletedView.as_view(), name='complete-content'),
-    path('courses/<int:pk>/check-completion/', views.CheckCourseCompletionView.as_view(), name='check-completion'),
-    # Add this to your urlpatterns in urls.py
-    # path('api/courses/<int:pk>/record-time/', views.TimeTrackingRecordView.as_view(), name='record-time'),
-        # Include course routes
+
+
+
+    # Global search - FIXED (was pointing to FavoriteCourseViewSet instead of GlobalSearchView)
     path('api/search/', views.GlobalSearchView.as_view(), name='global-search'),
+    path('', include(router.urls))
 ]

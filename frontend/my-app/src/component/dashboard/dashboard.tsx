@@ -19,6 +19,8 @@ interface Course {
     progress_percentage?: number;
     status?: number;
     status_display?: string;
+    is_favorited?: boolean;
+    favorite_id?: number;
     // New fields from backend
     module_count?: number;
     total_duration_minutes?: number;
@@ -42,6 +44,7 @@ const Dashboard = () => {
     const navigate = useNavigate();
 
     // Filter only active courses (status = 1)
+
     const filterActiveCourses = (courses: Course[]): Course[] => {
         console.log('Filtering courses. Total courses:', courses.length);
         const activeCourses = courses.filter(course => {
@@ -55,10 +58,10 @@ const Dashboard = () => {
     // Format duration from minutes to "Xh Ym" format
     const formatDuration = (minutes: number | undefined): string => {
         if (!minutes) return '1h 55m';
-        
+
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
-        
+
         if (hours === 0) return `${mins}m`;
         if (mins === 0) return `${hours}h`;
         return `${hours}h ${mins}m`;
@@ -88,27 +91,27 @@ const Dashboard = () => {
         try {
             console.log('Subscribing to course:', courseId);
             const response = await api.post(`courses/${courseId}/subscribe/`);
-            
+
             if (response.status === 201 || response.status === 200) {
                 // Fetch the course details that was just subscribed to
                 const courseDetails = await fetchCourseDetails(courseId);
-                
+
                 // Add the course to myCourses with progress
                 const subscribedCourse = {
                     ...courseDetails,
                     is_subscribed: true,
                     progress_percentage: 0
                 };
-                
+
                 setMyCourses(prev => [...prev, subscribedCourse]);
-                
+
                 // Remove from recommended
-                setRecommendedCourses(prev => 
+                setRecommendedCourses(prev =>
                     prev.filter(course => course.id !== courseId)
                 );
-                
+
                 console.log(`Successfully subscribed to course ${courseId}`);
-                
+
                 // Show success message
                 alert(`Vous êtes maintenant inscrit à "${courseDetails.title_of_course}"`);
             }
@@ -125,58 +128,58 @@ const Dashboard = () => {
             const response = await api.get('courses/my-subscriptions/');
             console.log('My subscribed courses API response:', response);
             console.log('My subscribed courses data:', response.data);
-            
+
             if (!response.data) {
                 console.log('No data in my-subscriptions response');
                 return [];
             }
 
-        // Check if response.data is an array
-        if (!Array.isArray(response.data)) {
-            console.log('My subscribed courses response is not an array:', typeof response.data);
-            console.log('Response structure:', response.data);
-            // Try to extract courses from different possible response structures
-            if (response.data.courses && Array.isArray(response.data.courses)) {
-                console.log('Found courses in response.data.courses');
-                response.data = response.data.courses;
-            } else if (response.data.results && Array.isArray(response.data.results)) {
-                console.log('Found courses in response.data.results');
-                response.data = response.data.results;
-            } else {
-                console.log('Cannot find courses array in response');
-                return [];
+            // Check if response.data is an array
+            if (!Array.isArray(response.data)) {
+                console.log('My subscribed courses response is not an array:', typeof response.data);
+                console.log('Response structure:', response.data);
+                // Try to extract courses from different possible response structures
+                if (response.data.courses && Array.isArray(response.data.courses)) {
+                    console.log('Found courses in response.data.courses');
+                    response.data = response.data.courses;
+                } else if (response.data.results && Array.isArray(response.data.results)) {
+                    console.log('Found courses in response.data.results');
+                    response.data = response.data.results;
+                } else {
+                    console.log('Cannot find courses array in response');
+                    return [];
+                }
             }
+
+            console.log('Processing my subscribed courses:', response.data.length);
+
+            // Filter active courses and fetch details for each
+            const activeCourses = filterActiveCourses(response.data);
+            console.log('Active my subscribed courses after filtering:', activeCourses);
+
+            const coursesWithDetails = await Promise.all(
+                activeCourses.map(async (course: Course) => {
+                    console.log('Processing subscribed course:', course.id, course.title_of_course);
+                    const details = await fetchCourseDetails(course.id);
+                    return {
+                        ...course,
+                        ...details,
+                        progress_percentage: course.progress_percentage || 0,
+                        is_subscribed: true // Mark as subscribed
+                    };
+                })
+            );
+
+            console.log('Final my subscribed courses with details:', coursesWithDetails);
+            setMyCourses(coursesWithDetails);
+            return coursesWithDetails;
+        } catch (error: any) {
+            console.error("Error fetching my subscribed courses:", error);
+            console.error("Error details:", error.response);
+            setError(`Failed to load your courses. Error ${error.response?.status}: ${error.response?.statusText}`);
+            return [];
         }
-        
-        console.log('Processing my subscribed courses:', response.data.length);
-        
-        // Filter active courses and fetch details for each
-        const activeCourses = filterActiveCourses(response.data);
-        console.log('Active my subscribed courses after filtering:', activeCourses);
-        
-        const coursesWithDetails = await Promise.all(
-            activeCourses.map(async (course: Course) => {
-                console.log('Processing subscribed course:', course.id, course.title_of_course);
-                const details = await fetchCourseDetails(course.id);
-                return { 
-                    ...course, 
-                    ...details,
-                    progress_percentage: course.progress_percentage || 0,
-                    is_subscribed: true // Mark as subscribed
-                };
-            })
-        );
-        
-        console.log('Final my subscribed courses with details:', coursesWithDetails);
-        setMyCourses(coursesWithDetails);
-        return coursesWithDetails;
-    } catch (error: any) {
-        console.error("Error fetching my subscribed courses:", error);
-        console.error("Error details:", error.response);
-        setError(`Failed to load your courses. Error ${error.response?.status}: ${error.response?.statusText}`);
-        return [];
-    }
-};
+    };
 
     // Fetch recommended courses
     const fetchRecommendedCourses = async (myCourseIds: number[] = []) => {
@@ -185,7 +188,7 @@ const Dashboard = () => {
             const response = await api.get('courses/recommended/');
             console.log('Recommended courses API response:', response);
             console.log('Recommended courses data:', response.data);
-            
+
             if (!response.data) {
                 console.log('No data in recommended courses response');
                 return;
@@ -207,19 +210,19 @@ const Dashboard = () => {
                     return;
                 }
             }
-            
+
             console.log('Processing recommended courses:', response.data.length);
-            
+
             // Filter active courses and exclude already subscribed ones
             const activeCourses = filterActiveCourses(response.data);
             console.log('Active recommended courses after filtering:', activeCourses);
-            
+
             const filteredRecommended = activeCourses.filter(
                 course => !myCourseIds.includes(course.id)
             );
-            
+
             console.log('Recommended courses after filtering subscribed ones:', filteredRecommended);
-            
+
             // Fetch details for recommended courses
             const recommendedWithDetails = await Promise.all(
                 filteredRecommended.map(async (course: Course) => {
@@ -227,7 +230,7 @@ const Dashboard = () => {
                     return { ...course, ...details };
                 })
             );
-            
+
             console.log('Final recommended courses with details:', recommendedWithDetails);
             setRecommendedCourses(recommendedWithDetails);
         } catch (error: any) {
@@ -242,19 +245,19 @@ const Dashboard = () => {
         try {
             setLoading(true);
             console.log('Starting to fetch all courses...');
-            
+
             // First fetch user's courses
             const myCoursesData = await fetchMyCourses();
             const myCourseIds = myCoursesData.map(course => course.id);
             console.log('My course IDs:', myCourseIds);
-            
+
             // Then fetch recommended courses (excluding already subscribed ones)
             await fetchRecommendedCourses(myCourseIds);
-            
+
             console.log('Finished fetching all courses');
             console.log('My courses state:', myCoursesData);
             console.log('Recommended courses state:', recommendedCourses);
-            
+
         } catch (error: any) {
             console.error("Error fetching courses:", error);
             setError(`Failed to load courses. Error ${error.response?.status}: ${error.response?.statusText}`);
@@ -287,7 +290,55 @@ const Dashboard = () => {
         event.stopPropagation(); // Prevent card click navigation
         await subscribeToCourse(courseId);
     };
+    // Toggle favorite status
+    const toggleFavorite = async (courseId: number, event: React.MouseEvent) => {
+        event.stopPropagation(); // Prevent card click navigation
 
+        try {
+            // Check if course is already favorited
+            const course = [...myCourses, ...recommendedCourses].find(c => c.id === courseId);
+            const isCurrentlyFavorited = course?.is_favorited;
+            const favoriteId = course?.favorite_id;
+
+            if (isCurrentlyFavorited && favoriteId) {
+                // Unfavorite - delete the favorite
+                await api.delete(`favorites/${favoriteId}/`);
+            } else {
+                console.log('// Favorite - create new favorite')
+                const response = await api.post(`courses/favorites/toggle/`, { course_id: courseId });
+                // Store the favorite ID for future deletion
+                if (response.data && response.data.id) {
+                    // Update the course with favorite info
+                    updateCourseFavoriteStatus(courseId, true, response.data.id);
+                    return;
+                }
+            }
+
+            // Toggle the favorite status
+            updateCourseFavoriteStatus(courseId, !isCurrentlyFavorited, favoriteId);
+
+        } catch (error: any) {
+            console.error("Error toggling favorite:", error);
+            alert(`Failed to update favorite. Error: ${error.response?.data?.message || 'Unknown error'}`);
+        }
+    };
+
+    // Update course favorite status in state
+    const updateCourseFavoriteStatus = (courseId: number, isFavorited: boolean, favoriteId?: number) => {
+        // Update in myCourses
+        setMyCourses(prev => prev.map(course =>
+            course.id === courseId
+                ? { ...course, is_favorited: isFavorited, favorite_id: favoriteId }
+                : course
+        ));
+
+        // Update in recommendedCourses
+        setRecommendedCourses(prev => prev.map(course =>
+            course.id === courseId
+                ? { ...course, is_favorited: isFavorited, favorite_id: favoriteId }
+                : course
+        ));
+    };
     // Debug component to see what's happening
     // const DebugInfo = () => (
     //     <div style={{ 
@@ -312,7 +363,7 @@ const Dashboard = () => {
             </div>
         </div>
     );
-    
+
     if (error) return (
         <div className="container mt-4">
             <div className="alert alert-danger" role="alert">
@@ -323,7 +374,7 @@ const Dashboard = () => {
     );
 
     return (
-        <div style={{ 
+        <div style={{
             padding: '2rem 3rem',
             backgroundColor: '#f8f9fa',
             minHeight: '100vh'
@@ -365,11 +416,11 @@ const Dashboard = () => {
                 </div>
                 {myCourses.length > 0 && (
                     <div className="d-flex gap-2">
-                        <button 
+                        <button
                             className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
                             onClick={() => scrollLeft(scrollContainer2)}
-                            style={{ 
-                                width: '40px', 
+                            style={{
+                                width: '40px',
                                 height: '40px',
                                 border: '1px solid #e0e0e0',
                                 fontSize: '1.5rem',
@@ -378,11 +429,11 @@ const Dashboard = () => {
                         >
                             ‹
                         </button>
-                        <button 
+                        <button
                             className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
                             onClick={() => scrollRight(scrollContainer2)}
-                            style={{ 
-                                width: '40px', 
+                            style={{
+                                width: '40px',
                                 height: '40px',
                                 border: '1px solid #e0e0e0',
                                 fontSize: '1.5rem',
@@ -396,11 +447,11 @@ const Dashboard = () => {
             </div>
 
             {myCourses.length > 0 ? (
-                <div 
+                <div
                     ref={scrollContainer2}
-                    className="d-flex gap-3 mb-5 scroll-container" 
-                    style={{ 
-                        overflowX: 'auto', 
+                    className="d-flex gap-3 mb-5 scroll-container"
+                    style={{
+                        overflowX: 'auto',
                         scrollBehavior: 'smooth',
                         paddingBottom: '1rem',
                         scrollbarWidth: 'none',
@@ -408,10 +459,10 @@ const Dashboard = () => {
                     }}
                 >
                     {myCourses.map(course => (
-                        <div 
-                            key={course.id} 
-                            onClick={() => handleCardClick(course.id)} 
-                            style={{ 
+                        <div
+                            key={course.id}
+                            onClick={() => handleCardClick(course.id)}
+                            style={{
                                 cursor: 'pointer',
                                 minWidth: '260px',
                                 maxWidth: '260px',
@@ -437,7 +488,7 @@ const Dashboard = () => {
                                         fallback="/group.avif"
                                         alt={course.title_of_course}
                                         className="course-image"
-                                        style={{ 
+                                        style={{
                                             backgroundColor: '#E8E8F5'
                                         }}
                                     />
@@ -455,7 +506,7 @@ const Dashboard = () => {
                             </div>
                             <div style={{ padding: '1rem' }}>
                                 <div className="d-flex justify-content-between align-items-start mb-2">
-                                    <span style={{ 
+                                    <span style={{
                                         backgroundColor: '#FFE4D6',
                                         color: '#C85B3C',
                                         fontSize: '0.75rem',
@@ -465,28 +516,30 @@ const Dashboard = () => {
                                     }}>
                                         {course.department || 'Finance dept.'}
                                     </span>
-                                    <button 
-                                        style={{ 
-                                            border: 'none', 
+                                    {/* button fav */}
+                                    <button
+                                        onClick={(e) => { toggleFavorite(course.id, e) }}
+                                        style={{
+                                            border: 'none',
                                             background: 'transparent',
                                             fontSize: '1.25rem',
                                             cursor: 'pointer',
                                             padding: '0',
-                                            color: course.progress_percentage === 100 ? '#FFD700' : '#ddd'
+                                            color: course.is_favorited ? '#FFD700' : '#ddd'
                                         }}
                                     >
-                                        {course.progress_percentage === 100 ? '★' : '☆'}
+                                        {course.is_favorited ? '★' : '☆'}
                                     </button>
                                 </div>
-                                <h5 style={{ 
-                                    fontSize: '1rem', 
+                                <h5 style={{
+                                    fontSize: '1rem',
                                     fontWeight: '600',
                                     marginBottom: '0.5rem',
                                     color: '#1a1a1a'
                                 }}>
                                     {course.title_of_course}
                                 </h5>
-                                <p style={{ 
+                                <p style={{
                                     fontSize: '0.875rem',
                                     color: '#666',
                                     marginBottom: '1rem',
@@ -498,7 +551,7 @@ const Dashboard = () => {
                                 }}>
                                     {course.description}
                                 </p>
-                                <div className="d-flex justify-content-between align-items-center" style={{ 
+                                <div className="d-flex justify-content-between align-items-center" style={{
                                     fontSize: '0.8rem',
                                     color: '#666',
                                     paddingTop: '0.75rem',
@@ -508,7 +561,7 @@ const Dashboard = () => {
                                     <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
                                     <span>👥 {course.enrolled_learners_count || 32} apprenants</span>
                                 </div>
-                                <button 
+                                <button
                                     style={{
                                         width: '100%',
                                         marginTop: '1rem',
@@ -550,11 +603,11 @@ const Dashboard = () => {
                 </div>
                 {recommendedCourses.length > 0 && (
                     <div className="d-flex gap-2">
-                        <button 
+                        <button
                             className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
                             onClick={() => scrollLeft(scrollContainer1)}
-                            style={{ 
-                                width: '40px', 
+                            style={{
+                                width: '40px',
                                 height: '40px',
                                 border: '1px solid #e0e0e0',
                                 fontSize: '1.5rem',
@@ -563,11 +616,11 @@ const Dashboard = () => {
                         >
                             ‹
                         </button>
-                        <button 
+                        <button
                             className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
                             onClick={() => scrollRight(scrollContainer1)}
-                            style={{ 
-                                width: '40px', 
+                            style={{
+                                width: '40px',
                                 height: '40px',
                                 border: '1px solid #e0e0e0',
                                 fontSize: '1.5rem',
@@ -581,11 +634,11 @@ const Dashboard = () => {
             </div>
 
             {recommendedCourses.length > 0 ? (
-                <div 
+                <div
                     ref={scrollContainer1}
-                    className="d-flex gap-3 scroll-container" 
-                    style={{ 
-                        overflowX: 'auto', 
+                    className="d-flex gap-3 scroll-container"
+                    style={{
+                        overflowX: 'auto',
                         scrollBehavior: 'smooth',
                         paddingBottom: '1rem',
                         scrollbarWidth: 'none',
@@ -593,10 +646,10 @@ const Dashboard = () => {
                     }}
                 >
                     {recommendedCourses.map(course => (
-                        <div 
-                            key={course.id} 
-                            onClick={() => handleCardClick(course.id)} 
-                            style={{ 
+                        <div
+                            key={course.id}
+                            onClick={() => handleCardClick(course.id)}
+                            style={{
                                 cursor: 'pointer',
                                 minWidth: '260px',
                                 maxWidth: '260px',
@@ -622,7 +675,7 @@ const Dashboard = () => {
                                         fallback="/group.avif"
                                         alt={course.title_of_course}
                                         className="course-image"
-                                        style={{ 
+                                        style={{
                                             backgroundColor: '#E8E8F5'
                                         }}
                                     />
@@ -630,7 +683,7 @@ const Dashboard = () => {
                             </div>
                             <div style={{ padding: '1rem' }}>
                                 <div className="d-flex justify-content-between align-items-start mb-2">
-                                    <span style={{ 
+                                    <span style={{
                                         backgroundColor: '#E3F2FD',
                                         color: '#1976D2',
                                         fontSize: '0.75rem',
@@ -640,9 +693,9 @@ const Dashboard = () => {
                                     }}>
                                         {course.department || 'Finance dept.'}
                                     </span>
-                                    <button 
-                                        style={{ 
-                                            border: 'none', 
+                                    <button
+                                        style={{
+                                            border: 'none',
                                             background: 'transparent',
                                             fontSize: '1.25rem',
                                             cursor: 'pointer',
@@ -653,15 +706,15 @@ const Dashboard = () => {
                                         ☆
                                     </button>
                                 </div>
-                                <h5 style={{ 
-                                    fontSize: '1rem', 
+                                <h5 style={{
+                                    fontSize: '1rem',
                                     fontWeight: '600',
                                     marginBottom: '0.5rem',
                                     color: '#1a1a1a'
                                 }}>
                                     {course.title_of_course}
                                 </h5>
-                                <p style={{ 
+                                <p style={{
                                     fontSize: '0.875rem',
                                     color: '#666',
                                     marginBottom: '1rem',
@@ -673,7 +726,7 @@ const Dashboard = () => {
                                 }}>
                                     {course.description}
                                 </p>
-                                <div className="d-flex justify-content-between align-items-center" style={{ 
+                                <div className="d-flex justify-content-between align-items-center" style={{
                                     fontSize: '0.8rem',
                                     color: '#666',
                                     paddingTop: '0.75rem',
@@ -683,7 +736,7 @@ const Dashboard = () => {
                                     <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
                                     <span>👥 {course.enrolled_learners_count || 32} apprenants</span>
                                 </div>
-                                <button 
+                                <button
                                     onClick={(e) => handleSubscribeClick(course.id, e)}
                                     style={{
                                         width: '100%',

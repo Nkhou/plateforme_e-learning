@@ -65,24 +65,24 @@ const FavoriteButton: React.FC<FavoriteButtonProps> = ({
   };
 
   return (
-    <button
-      onClick={handleToggleFavorite}
-      disabled={isLoading}
-      className={`
-        ${buttonSizeClasses[size]}
-        rounded-full transition-all duration-200
-        ${isFavorited 
-          ? 'bg-red-50 hover:bg-red-100 text-red-600' 
-          : 'bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-red-600'
-        }
-        ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        ${className}
-      `}
-      title={isFavorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-      aria-label={isFavorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-    >
-      ❤️
-    </button>
+    <></>
+    // <button
+    //   onClick={handleToggleFavorite}
+    //   disabled={isLoading}
+    //   className={`
+    //     ${buttonSizeClasses[size]}
+    //     rounded-full transition-all duration-200
+    //     ${isFavorited 
+    //       ? 'bg-red-50 hover:bg-red-100 text-red-600' 
+    //       : 'bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-red-600'
+    //     }
+    //     ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+    //     ${className}
+    //   `}
+    //   title={isFavorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+    //   aria-label={isFavorited ? '★' : '☆'}
+    // >
+    // </button>
   );
 };
 
@@ -121,19 +121,19 @@ export const FavoriteIconButton: React.FC<FavoriteButtonProps> = ({
   };
 
   return (
-    <button
-      onClick={handleToggleFavorite}
-      disabled={isLoading}
-      className={`
-        inline-flex items-center justify-center
-        transition-colors duration-200
-        ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        ${className}
-      `}
-      title={isFavorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-    >
-      ❤️
-    </button>
+    <></>
+    // <button
+    //   onClick={handleToggleFavorite}
+    //   disabled={isLoading}
+    //   className={`
+    //     inline-flex items-center justify-center
+    //     transition-colors duration-200
+    //     ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+    //     ${className}
+    //   `}
+    //   title={isFavorited ? '★' : '☆'}
+    // >
+    // </button>
   );
 };
 

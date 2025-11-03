@@ -3,14 +3,14 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import CustomUser, Course, Module, CourseContent, Subscription, QCM, QCMCompletion, QCMAttempt, QCMOption, VideoContent, PDFContent, ContentType, TimeTracking, ChatMessage
+from .models import CustomUser,FavoriteCourse, Course, Module, CourseContent, Subscription, QCM, QCMCompletion, QCMAttempt, QCMOption, VideoContent, PDFContent, ContentType, TimeTracking, ChatMessage
 from .serializers import (
     CustomUserSerializer, CourseSerializer, CourseCreateSerializer, CourseDetailSerializer,
     ModuleSerializer, ModuleCreateSerializer, CourseContentSerializer, CourseContentCreateSerializer,
     SubscriptionSerializer, QCMAttemptSerializer, 
     QCMCompletionSerializer, PDFContentSerializer, VideoContentSerializer, QCMSerializer,
     QCMOptionCreateSerializer, QCMContentCreateSerializer, PDFContentCreateSerializer,
-    VideoContentCreateSerializer, ModuleWithContentsSerializer, FavoriteCourseSerializer
+    VideoContentCreateSerializer, ModuleWithContentsSerializer, FavoriteCourseSerializer, FavoriteCourseCreateSerializer
 )
 
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -5620,6 +5620,7 @@ class FavoriteCourseViewSet(viewsets.ModelViewSet):
     def toggle_favorite(self, request):
         """Toggle favorite status for a course"""
         course_id = request.data.get('course_id')
+        print('+++++++++++++++++++++++++888884777888888888888888')
         
         if not course_id:
             return Response(

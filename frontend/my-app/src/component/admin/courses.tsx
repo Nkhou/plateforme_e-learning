@@ -46,9 +46,7 @@ interface CoursesManagementProps {
   courses?: CourseData;
 }
 
-const CoursesManagement: React.FC<CoursesManagementProps> = ({ 
-  courses: initialCourses 
-}) => {
+const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialCourses }) => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseData>({
     courses: [],

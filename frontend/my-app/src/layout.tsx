@@ -214,7 +214,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         navigate('/messages');
         break;
       case 'favoris':
-        if (privilege != 'A' && privilege === 'F') {
+        if (privilege === 'AP') {
+          console.log('99999999999999999999999999999999444444444444444444444444')
           navigate('/favoris');
         }
         break;
