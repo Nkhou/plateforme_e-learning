@@ -336,7 +336,7 @@ const Dashboard = () => {
                     .course-image-container {
                         position: relative;
                         width: 100%;
-                        padding-bottom: 100%; /* This creates a square aspect ratio */
+                        padding-bottom: 40%; /* Increased from 100% to 120% to make images taller */
                         overflow: hidden;
                     }
                     .course-image {
@@ -359,9 +359,9 @@ const Dashboard = () => {
                     <h3 style={{ fontWeight: '600', marginBottom: '0.5rem', color: '#1a1a1a' }}>
                         Formations en cours
                     </h3>
-                    <p style={{ fontSize: '0.95rem', color: '#666', marginBottom: '0' }}>
+                    {/* <p style={{ fontSize: '0.95rem', color: '#666', marginBottom: '0' }}>
                         Continuez votre apprentissage là où vous vous étiez arrêté
-                    </p>
+                    </p> */}
                 </div>
                 {myCourses.length > 0 && (
                     <div className="d-flex gap-2">

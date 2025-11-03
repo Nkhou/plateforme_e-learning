@@ -15,7 +15,8 @@ import CourseDetailShow from "./component/courses/apprent/CourseDetailShow";
 import CourseDetail from "./component/courses/formateur/CourseDetail";
 // import { Import } from "lucide-react";
 import CoursesManagement from "./component/admin/courses";
-import UsersManagement from "./component/admin/users"
+import UsersManagement from "./component/admin/users";
+import FavoriteCoursesPage from './pages/favoris'
 function App() {
   axios.defaults.withCredentials = true;
 
@@ -31,6 +32,11 @@ function App() {
         <Route path="/admin" element={
           <AuthGuard>
             <AdminDashboard />
+          </AuthGuard>
+        } />
+        <Route path="/favoris" element={
+          <AuthGuard>
+            <FavoriteCoursesPage />
           </AuthGuard>
         } />
         <Route path="/formations" element={
@@ -53,6 +59,15 @@ function App() {
           element={
             <AuthGuard>
               <UsersManagement />
+            </AuthGuard>
+          }
+        />
+         <Route
+          path="/dashboard"
+          element={
+            <AuthGuard>
+              <></>
+              <Dashboard />
             </AuthGuard>
           }
         />

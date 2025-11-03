@@ -10,7 +10,7 @@ from .serializers import (
     SubscriptionSerializer, QCMAttemptSerializer, 
     QCMCompletionSerializer, PDFContentSerializer, VideoContentSerializer, QCMSerializer,
     QCMOptionCreateSerializer, QCMContentCreateSerializer, PDFContentCreateSerializer,
-    VideoContentCreateSerializer, ModuleWithContentsSerializer
+    VideoContentCreateSerializer, ModuleWithContentsSerializer, FavoriteCourseSerializer
 )
 
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -5545,3 +5545,132 @@ class GlobalSearchView(APIView):
                     'error_type': type(e).__name__
                 }
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Add to your views.py
+
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.db.models import Q
+
+class FavoriteCourseViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing favorite courses
+    
+    list: Get all favorite courses for the authenticated user
+    create: Add a course to favorites
+    destroy: Remove a course from favorites
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = FavoriteCourseSerializer
+    
+    def get_queryset(self):
+        """Return only the authenticated user's favorites"""
+        return FavoriteCourse.objects.filter(user=self.request.user).select_related(
+            'course', 'course__creator'
+        )
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return FavoriteCourseCreateSerializer
+        return FavoriteCourseSerializer
+    
+    def list(self, request, *args, **kwargs):
+        """Get all favorite courses for the authenticated user"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        
+        return Response({
+            'count': queryset.count(),
+            'results': serializer.data
+        })
+    
+    def create(self, request, *args, **kwargs):
+        """Add a course to favorites"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            favorite = serializer.save()
+            return Response(
+                FavoriteCourseSerializer(favorite, context={'request': request}).data,
+                status=status.HTTP_201_CREATED
+            )
+        except serializers.ValidationError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    def destroy(self, request, *args, **kwargs):
+        """Remove a course from favorites"""
+        instance = self.get_object()
+        instance.delete()
+        return Response(
+            {'message': 'Course removed from favorites'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+    
+    @action(detail=False, methods=['post'], url_path='toggle')
+    def toggle_favorite(self, request):
+        """Toggle favorite status for a course"""
+        course_id = request.data.get('course_id')
+        
+        if not course_id:
+            return Response(
+                {'error': 'course_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            course = Course.objects.get(id=course_id, status=1)
+        except Course.DoesNotExist:
+            return Response(
+                {'error': 'Active course not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        favorite = FavoriteCourse.objects.filter(
+            user=request.user,
+            course=course
+        ).first()
+        
+        if favorite:
+            # Remove from favorites
+            favorite.delete()
+            return Response({
+                'message': 'Course removed from favorites',
+                'is_favorited': False
+            })
+        else:
+            # Add to favorites
+            favorite = FavoriteCourse.objects.create(
+                user=request.user,
+                course=course
+            )
+            return Response({
+                'message': 'Course added to favorites',
+                'is_favorited': True,
+                'favorite': FavoriteCourseSerializer(favorite, context={'request': request}).data
+            }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['delete'], url_path='remove-by-course/(?P<course_id>[^/.]+)')
+    def remove_by_course(self, request, course_id=None):
+        """Remove a course from favorites by course_id"""
+        try:
+            favorite = FavoriteCourse.objects.get(
+                user=request.user,
+                course_id=course_id
+            )
+            favorite.delete()
+            return Response(
+                {'message': 'Course removed from favorites'},
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except FavoriteCourse.DoesNotExist:
+            return Response(
+                {'error': 'Favorite not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )

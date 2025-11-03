@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     CustomUser, QCMAttempt, QCMCompletion, Course, Module, CourseContent, 
     VideoContent, PDFContent, QCM, QCMOption, ContentType, Subscription, 
-    Enrollment, TimeTracking, ChatMessage, QCMQuestion
+    Enrollment, TimeTracking, ChatMessage, QCMQuestion, FavoriteCourse
 )
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
@@ -501,6 +501,7 @@ class CourseSerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='creator.username', read_only=True)
     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
+    is_favorited = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
     department_display = serializers.CharField(source='get_department_display', read_only=True)
     calculated_estimated_duration = serializers.SerializerMethodField()
@@ -523,6 +524,7 @@ class CourseSerializer(serializers.ModelSerializer):
             'min_required_time',
             'progress_percentage',
             'is_subscribed',
+            'is_favorited',
             'creator_username',
             'creator_first_name',
             'creator_last_name',
@@ -554,7 +556,15 @@ class CourseSerializer(serializers.ModelSerializer):
     def get_calculated_min_required_time(self, obj):
         """Get calculated min required time considering only active content"""
         return obj.calculate_min_required_time()
-    
+    def get_is_favorited(self, obj):
+        """Check if course is favorited by current user"""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return FavoriteCourse.objects.filter(
+                user=request.user,
+                course=obj
+            ).exists()
+        return False
     def get_progress_percentage(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
@@ -1407,3 +1417,99 @@ class CourseStatsSerializer(serializers.Serializer):
     average_progress = serializers.IntegerField()
     recent_enrollments = EnrollmentStatsSerializer(many=True)
     content_engagement = ContentEngagementSerializer(many=True)
+
+# Add to your serializers.py
+
+class FavoriteCourseSerializer(serializers.ModelSerializer):
+    """Serializer for displaying favorite courses"""
+    course_id = serializers.IntegerField(source='course.id', read_only=True)
+    course_title = serializers.CharField(source='course.title_of_course', read_only=True)
+    course_description = serializers.CharField(source='course.description', read_only=True)
+    course_image = serializers.SerializerMethodField()
+    course_department = serializers.CharField(source='course.department', read_only=True)
+    course_department_display = serializers.CharField(source='course.get_department_display', read_only=True)
+    course_status = serializers.IntegerField(source='course.status', read_only=True)
+    course_status_display = serializers.CharField(source='course.get_status_display', read_only=True)
+    
+    # Creator information
+    creator_username = serializers.CharField(source='course.creator.username', read_only=True)
+    creator_full_name = serializers.CharField(source='course.creator.full_name', read_only=True)
+    creator_first_name = serializers.CharField(source='course.creator.first_name', read_only=True)
+    creator_last_name = serializers.CharField(source='course.creator.last_name', read_only=True)
+    
+    # Additional course info
+    estimated_duration = serializers.IntegerField(source='course.estimated_duration', read_only=True)
+    min_required_time = serializers.IntegerField(source='course.min_required_time', read_only=True)
+    
+    # User-specific info
+    is_subscribed = serializers.SerializerMethodField()
+    progress_percentage = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FavoriteCourse
+        fields = [
+            'id', 'course_id', 'course_title', 'course_description', 'course_image',
+            'course_department', 'course_department_display', 'course_status', 
+            'course_status_display', 'creator_username', 'creator_full_name',
+            'creator_first_name', 'creator_last_name', 'estimated_duration',
+            'min_required_time', 'is_subscribed', 'progress_percentage', 'added_at'
+        ]
+    
+    def get_course_image(self, obj):
+        if obj.course.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.course.image.url)
+            return obj.course.image.url
+        return None
+    
+    def get_is_subscribed(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return Subscription.objects.filter(
+                user=request.user,
+                course=obj.course,
+                is_active=True
+            ).exists()
+        return False
+    
+    def get_progress_percentage(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            subscription = Subscription.objects.filter(
+                user=request.user,
+                course=obj.course,
+                is_active=True
+            ).first()
+            if subscription:
+                return subscription.progress_percentage
+        return 0.0
+
+
+class FavoriteCourseCreateSerializer(serializers.ModelSerializer):
+    """Serializer for adding/removing favorites"""
+    class Meta:
+        model = FavoriteCourse
+        fields = ['course']
+    
+    def validate_course(self, value):
+        # Ensure course is active
+        if value.status != 1:
+            raise serializers.ValidationError("Can only favorite active courses")
+        return value
+    
+    def create(self, validated_data):
+        user = self.context['request'].user
+        course = validated_data['course']
+        
+        # Check if already favorited
+        favorite, created = FavoriteCourse.objects.get_or_create(
+            user=user,
+            course=course
+        )
+        
+        if not created:
+            raise serializers.ValidationError("Course is already in favorites")
+        
+        return favorite
+

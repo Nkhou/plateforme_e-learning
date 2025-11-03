@@ -880,3 +880,26 @@ def update_module_duration(sender, instance, **kwargs):
         # Recalculate module duration
         instance.module.estimated_duration = instance.module.calculate_estimated_duration()
         instance.module.save()
+
+# Add this to your existing models.py
+
+class FavoriteCourse(models.Model):
+    """Model for users to mark courses as favorites"""
+    user = models.ForeignKey(
+        CustomUser, 
+        on_delete=models.CASCADE, 
+        related_name='favorite_courses'
+    )
+    course = models.ForeignKey(
+        Course, 
+        on_delete=models.CASCADE, 
+        related_name='favorited_by'
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['user', 'course']
+        ordering = ['-added_at']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.course.title_of_course}"

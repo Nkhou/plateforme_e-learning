@@ -197,16 +197,26 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         }
         break;
       case 'formations':
-        navigate('/formations');
+        if (privilege === 'A' || privilege === 'Admin') {
+          navigate('/formations');
+        } else if (privilege === 'F') {
+          navigate('/formations');
+        } else {
+          navigate('/dashboard');
+        }
         break;
       case 'utilisateurs':
-        navigate('/utilisateurs');
+        if (privilege === 'A' || privilege === 'Admin') {
+          navigate('/utilisateurs');
+        }
         break;
       case 'messages':
         navigate('/messages');
         break;
       case 'favoris':
-        navigate('/favoris');
+        if (privilege != 'A' && privilege === 'F') {
+          navigate('/favoris');
+        }
         break;
       default:
         navigate('/dashboard');
