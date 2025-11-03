@@ -1,64 +1,146 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registration Confirmation</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f8;
-            margin: 0;
-            padding: 0;
-        }
-        .email-container {
-            max-width: 600px;
-            margin: 20px auto;
-            background: linear-gradient(135deg, #161080, #4412ce);
-            border-radius: 10px;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-        h1 {
-            margin: 0;
-            font-size: 24px;
-        }
-        p {
-            font-size: 16px;
-            line-height: 1.5;
-        }
-        .action-button {
-            background-color: #fff;
-            color: #6c63ff;
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-weight: bold;
-            text-decoration: none;
-            display: inline-block;
-            margin: 15px 0;
-        }
-        .footer {
-            font-size: 12px;
-            margin-top: 20px;
-            color: #ddd;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bienvenue à Elevia</title>
+<style>
+body {
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+background: linear-gradient(180deg, #8b9dc3 0%, #dfe3e8 100%);
+margin: 0;
+padding: 40px 20px;
+min-height: 100vh;
+}
+.email-container {
+max-width: 650px;
+margin: 0 auto;
+background: #ffffff;
+border-radius: 16px;
+padding: 50px 45px;
+box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+.logo {
+width: 60px;
+height: 60px;
+background: linear-gradient(135deg, #1a2980 0%, #26d0ce 100%);
+border-radius: 8px;
+margin-bottom: 30px;
+display: flex;
+align-items: center;
+justify-content: center;
+position: relative;
+}
+.logo::before {
+content: '';
+width: 0;
+height: 0;
+border-left: 15px solid transparent;
+border-right: 15px solid transparent;
+border-bottom: 26px solid white;
+position: absolute;
+}
+h1 {
+font-size: 28px;
+font-weight: 700;
+color: #1a1a1a;
+margin: 0 0 30px 0;
+}
+p {
+font-size: 15px;
+line-height: 1.7;
+color: #4a4a4a;
+margin: 0 0 20px 0;
+}
+.credentials {
+background: #f8f9fa;
+padding: 20px;
+border-radius: 8px;
+margin: 25px 0;
+border-left: 4px solid #c87d4e;
+}
+.credentials p {
+margin: 8px 0;
+font-size: 15px;
+}
+.action-button {
+display: inline-block;
+background: #c87d4e;
+color: white;
+padding: 14px 50px;
+border-radius: 6px;
+font-weight: 600;
+text-decoration: none;
+margin: 30px 0;
+font-size: 15px;
+transition: background 0.3s;
+}
+.action-button:hover {
+background: #b36d42;
+}
+.security-note {
+font-size: 14px;
+color: #666;
+margin: 25px 0;
+}
+.support-info {
+font-size: 14px;
+color: #666;
+margin: 25px 0;
+}
+.closing {
+font-size: 15px;
+color: #4a4a4a;
+margin: 25px 0 10px 0;
+}
+.signature {
+font-size: 15px;
+color: #4a4a4a;
+font-weight: 500;
+}
+.footer {
+text-align: center;
+margin-top: 40px;
+padding-top: 30px;
+border-top: 1px solid #e0e0e0;
+}
+.footer p {
+font-size: 12px;
+color: #999;
+margin: 8px 0;
+line-height: 1.6;
+}
+.footer-copyright {
+font-size: 11px;
+color: #aaa;
+margin-top: 20px;
+}
+</style>
 </head>
 <body>
-    <div class="email-container">
-        <h1>Welcome to the Training Platform</h1>
-        <p>Hi {{ user.username }},</p>
-        <p>We are excited to inform you that you have been successfully registered for the training program organized by your company.</p>
-        <p>This is your password to join us:</p>
-        <h4>{{ password }}</h4>
-        <p>To get started, please click the link below to log in to your account:</p>
-        <a href="{{ login_link }}" class="action-button">Login to Platform</a>
-        <p>If you did not register for this training, please contact your HR department immediately.</p>
-        <div class="footer">
-            <p>© 2025 Training Platform. All rights reserved.</p>
-        </div>
-    </div>
+<div class="email-container">
+<div class="logo"></div>
+<h1>Bienvenu à Elevia</h1>
+<p>Bonjour {{ user.username }},</p>
+<p>Nous sommes ravis de vous accueillir sur Elevia !</p>
+<p>Votre compte a été créé par l'administrateur, et vous pouvez dès maintenant vous connecter pour découvrir l'espace.</p>
+<p>Voici vos informations de connexion :</p>
+<div class="credentials">
+<p><strong>E-mail :</strong> {{ user.email }}</p>
+<p><strong>Mot de passe temporaire :</strong> {{ password }}</p>
+</div>
+<center>
+<a href="{{ login_link }}" class="action-button">Accéder à la plateforme</a>
+</center>
+<p class="security-note">Pensez à modifier votre mot de passe dès votre première connexion pour renforcer la sécurité de votre compte.</p>
+<p class="support-info">Si vous avez besoin d'aide, notre équipe reste disponible à [support_email].</p>
+<p class="closing">Bienvenue encore une fois.</p>
+<p class="signature">L'équipe Elevia.</p>
+<div class="footer">
+<p>Cet e-mail vous a été envoyé suite à une demande de création de compte.</p>
+<p>Si vous n'avez pas fait cette demande, veuillez contacter immédiatement votre service RH.</p>
+<p class="footer-copyright">© 2025 Elevia. Tous droits réservés</p>
+</div>
+</div>
 </body>
 </html>

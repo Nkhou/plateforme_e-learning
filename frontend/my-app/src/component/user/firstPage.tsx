@@ -25,12 +25,13 @@ const FirstPage = () => {
       console.log("User state updated:", user);
       console.log("Privilege:", user.privilege);
 
-      if (user.privilege === 'A') {
+      // Fixed navigation logic based on privilege
+      if (user.privilege === 'A' || user.privilege === 'Admin') {
         navigate('/admin');
       } else if (user.privilege === 'F') {
         navigate('/cours');
       } else {
-        navigate('/dashboard');
+        navigate('/Formation'); // Replaced /dashboard with /Formation
       }
     }
   }, [user, navigate]);
@@ -56,6 +57,8 @@ const FirstPage = () => {
 
       console.log("Login successful - Full response:", response);
       console.log("Response data:", response.data);
+      
+      // Set the user data which will trigger the useEffect navigation
       setUser(response.data.user);
 
     } catch (error: any) {
@@ -83,7 +86,6 @@ const FirstPage = () => {
               style={{
                 border: 'none',
                 minHeight: '870px',
-                // minWidth:'800px',
                 background: 'transparent'
               }}
             >
@@ -152,7 +154,6 @@ const FirstPage = () => {
                         autoComplete="email"
                         required
                         style={{
-                          // background: '#f8f9fa',
                           border: '2px solid #e9ecef',
                           borderRadius: '10px',
                           fontSize: '1rem',
@@ -188,7 +189,6 @@ const FirstPage = () => {
                         autoComplete="current-password"
                         required
                         style={{
-                          // background: '#f8f9fa',
                           border: '2px solid #e9ecef',
                           borderRadius: '10px',
                           fontSize: '1rem',

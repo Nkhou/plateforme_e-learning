@@ -1,224 +1,179 @@
-.button {
-    width: 150px;
-    height: 50px;
-    background-color: rgb(45, 66, 133);
-    border-radius: 30px;
-    box-shadow: 8px 8px 15px #bebebe, -8px -8px 15px #ffffff;
-    border: none;
+/* cours.css */
+.carousel-container {
+    position: relative;
+    overflow: hidden;
+    margin: 0 -0.5rem;
+}
+
+.carousel-track {
+    display: flex;
+    gap: 1rem;
+    transition: transform 0.3s ease;
+    padding: 0.5rem 0;
+}
+
+.card-carousel {
+    min-width: 320px;
+    background-color: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
     cursor: pointer;
-    
-    /* Floating to the right */
-    float: right;
-    margin: 20px; /* Adjust margin as needed */
 }
 
-.button:hover {
-    background-color: rgb(15, 120, 218);
-
+.card-carousel:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
+
+.card-hover {
+    transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.carousel-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 10;
+    font-size: 1.125rem;
+    font-weight: bold;
+    color: #374151;
+    transition: all 0.2s;
+}
+
+.carousel-nav:hover {
+    background-color: #4338CA;
+    color: white;
+}
+
+.carousel-nav.left {
+    left: -20px;
+}
+
+.carousel-nav.right {
+    right: -20px;
+}
+
 .fullscreen-container {
     position: fixed;
-    top: 56px; /* Navbar height */
-    left: 250px; /* Sidebar width */
+    top: 0;
+    left: 0;
     right: 0;
     bottom: 0;
     background-color: white;
-    z-index: 999;
-    overflow-y: auto;
-    transition: all 0.3s ease;
-    
-    /* Hide scrollbar but keep functionality */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE and Edge */
-}
-
-/* Hide scrollbar for WebKit browsers (Chrome, Safari) */
-.fullscreen-container::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-}
-
-/* Optional: Add smooth scrolling */
-.fullscreen-container {
-    scroll-behavior: smooth;
-}
-
-/* COSE BUTTON */
-
-.modale {
-  position: fixed;
-  top: 50% ;
-  left: 50% ;
-  transform: translate(-50%, -50%);
-  /* position: relative; */
-  width: 80%;
-  max-width: 500px;
-  background: rgba(12, 12, 12, 0.842);
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 0 20px rgba(20, 20, 20, 0.2);
-  z-index: 1000;
-  /* backgroundColor: rgba(0,0,0,0.5); */
-}
-
-.close-button {
-  position: absolute;
-  right: 10px;
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #333;
-  padding: 5px 10px;
-}
-
-.close-button:hover {
-  color: #000;
-  background: #f0f0f0;
-  border-radius: 50%;
-}
-/* CLOSE */
-
-.close-button {
-    position: fixed;
-    top: 70px;
-    right: 20px;
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #333;
-    padding: 5px 10px;
     z-index: 1000;
-    background: white;
+    overflow: auto;
+}
+
+.close-button {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background-color: #6B7280;
+    color: white;
+    border: none;
     border-radius: 50%;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    transition: all 0.3s ease;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.5rem;
+    z-index: 1001;
+    transition: background-color 0.2s;
 }
 
 .close-button:hover {
-    color: #000;
-    background: #f0f0f0;
+    background-color: #4B5563;
 }
 
-/* Tablet styles (768px - 1024px) */
-@media (max-width: 1024px) {
-    .fullscreen-container {
-        left: 220px; /* Reduced sidebar width */
-        top: 60px;
-    }
-    
-    .close-button {
-        top: 75px;
-        right: 15px;
-        font-size: 22px;
-        padding: 4px 8px;
-    }
-}
-
-/* Mobile landscape and smaller tablets (max-width: 768px) */
+/* Responsive design */
 @media (max-width: 768px) {
-    .fullscreen-container {
-        left: 0; /* Full width on mobile */
-        top: 50px; /* Adjusted for smaller navbar */
-        padding: 10px;
+    .carousel-container {
+        margin: 0 -1rem;
     }
     
-    .close-button {
-        top: 60px;
-        right: 10px;
-        font-size: 20px;
-        padding: 3px 6px;
-        background: rgba(255, 255, 255, 0.9);
+    .carousel-nav {
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
+    }
+    
+    .carousel-nav.left {
+        left: -16px;
+    }
+    
+    .carousel-nav.right {
+        right: -16px;
+    }
+    
+    .card-carousel {
+        min-width: 280px;
     }
 }
 
-/* Small mobile devices (max-width: 480px) */
-@media (max-width: 480px) {
-    .fullscreen-container {
-        top: 45px; /* Even smaller navbar height */
-        padding: 8px;
-    }
-    
-    .close-button {
-        top: 55px;
-        right: 8px;
-        font-size: 18px;
-        padding: 2px 5px;
-    }
+/* Loading animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-/* Extra small devices (max-width: 320px) */
-@media (max-width: 320px) {
-    .fullscreen-container {
-        top: 40px;
-        padding: 5px;
-    }
-    
-    .close-button {
-        top: 50px;
-        right: 5px;
-        font-size: 16px;
-        padding: 2px 4px;
-    }
+.spinner-border {
+    animation: spin 1s linear infinite;
 }
 
-/* Landscape orientation for mobile */
-@media (max-height: 500px) and (orientation: landscape) {
-    .fullscreen-container {
-        top: 45px;
-        padding: 5px;
-    }
-    
-    .close-button {
-        top: 55px;
-        right: 10px;
-        font-size: 18px;
-    }
+/* Card image styling */
+.card-img-top {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
 }
 
-/* High DPI screens */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-    .close-button {
-        border: 0.5px solid rgba(0, 0, 0, 0.1);
-    }
+/* Status badge animations */
+.status-badge {
+    animation: fadeIn 0.3s ease-in;
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    .fullscreen-container {
-        background-color: #fcfcfc;
-    }
-    
-    .close-button {
-        background: #2d2d2d;
-        color: #fff;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-    }
-    
-    .close-button:hover {
-        background: #3d3d3d;
-        color: #fff;
-    }
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
 }
 
-/* Reduced motion for accessibility */
-@media (prefers-reduced-motion: reduce) {
-    .fullscreen-container,
-    .close-button {
-        transition: none;
-    }
+/* Smooth transitions for all interactive elements */
+button, select, .card-carousel {
+    transition: all 0.2s ease-in-out;
 }
 
-/* Print styles */
-@media print {
-    .fullscreen-container {
-        position: static;
-        background: white;
-    }
-    
-    .close-button {
-        display: none;
-    }
+/* Focus states for accessibility */
+button:focus, select:focus {
+    outline: 2px solid #4338CA;
+    outline-offset: 2px;
+}
+
+/* Custom scrollbar for webkit browsers */
+.carousel-track::-webkit-scrollbar {
+    display: none;
+}
+
+.carousel-track {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }

@@ -193,7 +193,7 @@ class QCMSerializer(serializers.ModelSerializer):
 class ModuleSerializer(serializers.ModelSerializer):
     contents = serializers.SerializerMethodField()
     content_stats = serializers.SerializerMethodField()
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
     calculated_estimated_duration = serializers.SerializerMethodField()
     calculated_min_required_time = serializers.SerializerMethodField()
     
@@ -205,6 +205,15 @@ class ModuleSerializer(serializers.ModelSerializer):
             'contents', 'content_stats','estimated_duration', 'min_required_time',
             'calculated_estimated_duration', 'calculated_min_required_time'
         ]
+    
+    def get_status_display(self, obj):
+        """Convert numeric status to French display string"""
+        status_map = {
+            0: 'Brouillon',
+            1: 'Actif', 
+            2: 'Archivé'
+        }
+        return status_map.get(obj.status, 'Non défini')
     
     def get_contents(self, obj):
         if hasattr(obj, 'prefetched_contents'):
@@ -371,7 +380,7 @@ class CourseContentSerializer(serializers.ModelSerializer):
     content_type_name = serializers.CharField(source='content_type.name', read_only=True)
     is_completed = serializers.SerializerMethodField()
     can_access = serializers.SerializerMethodField()
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
     time_spent = serializers.SerializerMethodField()
     last_accessed = serializers.SerializerMethodField()
     
@@ -383,6 +392,15 @@ class CourseContentSerializer(serializers.ModelSerializer):
             'video_content', 'pdf_content', 'qcm', 'is_completed', 'can_access',
             'time_spent', 'last_accessed', 'created_at', 'updated_at'
         ]
+    
+    def get_status_display(self, obj):
+        """Convert numeric status to French display string"""
+        status_map = {
+            0: 'Brouillon',
+            1: 'Actif', 
+            2: 'Archivé'
+        }
+        return status_map.get(obj.status, 'Non défini')
     
     def get_is_completed(self, obj):
         """Check if the current user has completed this content"""
@@ -475,6 +493,7 @@ class CourseContentSerializer(serializers.ModelSerializer):
         ).order_by('-end_time').first()
         
         return last_tracking.end_time if last_tracking else None
+
 class CourseSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
@@ -482,12 +501,11 @@ class CourseSerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='creator.username', read_only=True)
     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
     department_display = serializers.CharField(source='get_department_display', read_only=True)
     calculated_estimated_duration = serializers.SerializerMethodField()
     calculated_min_required_time = serializers.SerializerMethodField()
 
-    
     class Meta:
         model = Course
         fields = [
@@ -498,7 +516,7 @@ class CourseSerializer(serializers.ModelSerializer):
             'department', 
             'department_display',
             'status',
-            'status_display',
+            'status_display',  # FIXED: Include status_display
             'created_at',
             'updated_at',
             'estimated_duration',
@@ -511,6 +529,15 @@ class CourseSerializer(serializers.ModelSerializer):
             'estimated_duration', 'min_required_time',
             'calculated_estimated_duration', 'calculated_min_required_time'
         ]
+    
+    def get_status_display(self, obj):
+        """Convert numeric status to French display string"""
+        status_map = {
+            0: 'Brouillon',
+            1: 'Actif', 
+            2: 'Archivé'
+        }
+        return status_map.get(obj.status, 'Non défini')
     
     def get_image_url(self, obj):
         if obj.image:
@@ -582,7 +609,7 @@ class CourseDetailSerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='creator.username', read_only=True)
     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
     department_display = serializers.CharField(source='get_department_display', read_only=True)
     
     class Meta:
@@ -593,6 +620,15 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             'creator_first_name', 'creator_last_name', 'created_at', 'updated_at',
             'estimated_duration', 'min_required_time', 'modules'
         ]
+    
+    def get_status_display(self, obj):
+        """Convert numeric status to French display string"""
+        status_map = {
+            0: 'Brouillon',
+            1: 'Actif', 
+            2: 'Archivé'
+        }
+        return status_map.get(obj.status, 'Non défini')
     
     def get_modules(self, obj):
         modules = obj.modules.all().order_by('order')
@@ -607,7 +643,6 @@ class CourseDetailSerializer(serializers.ModelSerializer):
                 is_active=True
             ).first()
         
-        # ✅ USE ModuleWithContentsSerializer instead of ModuleSerializer
         return ModuleWithContentsSerializer(
             modules, 
             many=True, 

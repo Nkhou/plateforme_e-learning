@@ -82,12 +82,12 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         // setUser(res.data.user)
         setIsAuthenticated(authenticated);
         setLoading(false);
-        if (!authenticated && location.pathname !== '/') {
-          navigate('/');
-        }
-        if (authenticated && location.pathname === '/') {
-          navigate('/dashboard');
-        }
+        // if (!authenticated && location.pathname !== '/') {
+        //   navigate('/');
+        // }
+        // if (authenticated && location.pathname === '/') {
+        //   navigate('/dashboard');
+        // }
       })
       .catch(() => {
         console.log('Authentication check failed');

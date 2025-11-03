@@ -40,7 +40,7 @@ function App() {
         }
         />
         <Route
-          path="/dashboard"
+          path="/Formation"
           element={
             <AuthGuard>
               <></>

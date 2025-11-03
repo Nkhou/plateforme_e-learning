@@ -669,8 +669,9 @@ class RegisterwithoutFileView(APIView):
             )
 
 # Course Views
+# Update your CourseList class to include subscriber count
 class CourseList(APIView):
-    permission_classes = [IsAuthenticated]  # Ensure user is authenticated
+    permission_classes = [IsAuthenticated]
     
     def get(self, request):
         # Filtrer les cours selon le statut et le privilège de l'utilisateur
@@ -678,13 +679,23 @@ class CourseList(APIView):
         
         # Par défaut, montrer seulement les cours actifs
         base_query = Q(status=1)  # Cours actifs
-        print('+++++++++++++++++++++++++++++++++++++++')
+        
         if user.is_authenticated:
             if user.privilege in ['F', 'A']:  # Formateurs et Admins voient plus
                 base_query = Q(status__in=[0, 1])  # Brouillon + Actif
             # Les apprenants (AP) voient seulement les cours actifs
         
-        courses = Course.objects.filter(base_query).select_related('creator')
+        # Annotate with subscriber count
+        courses = Course.objects.filter(base_query)\
+            .select_related('creator')\
+            .annotate(
+                subscribers_count=Count(
+                    'course_subscriptions', 
+                    filter=Q(course_subscriptions__is_active=True),
+                    distinct=True
+                )
+            )
+        
         serializer = CourseSerializer(courses, many=True, context={'request': request})
         return Response(serializer.data)
     
@@ -736,6 +747,139 @@ class CourseList(APIView):
             print(f"Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+# Add this new function to get course students
+class CourseStudentsAPIView(APIView):
+    """API to get all students subscribed to a specific course"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, course_id):
+        try:
+            course = get_object_or_404(Course, id=course_id)
+            
+            # Check if user has permission to view course students
+            user = request.user
+            if user.privilege not in ['F', 'A'] and course.creator != user:
+                return Response(
+                    {'error': 'You do not have permission to view students for this course'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Get all active subscriptions with user details
+            subscriptions = Subscription.objects.filter(
+                course=course,
+                is_active=True
+            ).select_related('user').order_by('-subscribed_at')
+            
+            students_data = []
+            for subscription in subscriptions:
+                student_data = {
+                    'id': subscription.user.id,
+                    'username': subscription.user.username,
+                    'email': subscription.user.email,
+                    'first_name': subscription.user.first_name,
+                    'last_name': subscription.user.last_name,
+                    'full_name': f"{subscription.user.first_name} {subscription.user.last_name}".strip(),
+                    'department': subscription.user.department,
+                    'department_display': subscription.user.get_department_display(),
+                    'subscribed_at': subscription.subscribed_at.isoformat() if subscription.subscribed_at else None,
+                    'progress_percentage': subscription.progress_percentage,
+                    'total_score': subscription.total_score,
+                    'is_completed': subscription.is_completed,
+                    'total_time_spent': subscription.total_time_spent
+                }
+                students_data.append(student_data)
+            
+            return Response({
+                'course_id': course.id,
+                'course_title': course.title_of_course,
+                'total_students': len(students_data),
+                'students': students_data
+            })
+            
+        except Course.DoesNotExist:
+            return Response(
+                {'error': 'Course not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            print(f"Error fetching course students: {str(e)}")
+            return Response(
+                {'error': f'Failed to fetch students: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+# Add this new function to subscribe to a course
+class CourseSubscribeAPIView(APIView):
+    """API to subscribe to a course"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, course_id):
+        try:
+            course = get_object_or_404(Course, id=course_id)
+            user = request.user
+            
+            # Check if course is published (status=1)
+            if course.status != 1:
+                return Response(
+                    {'error': 'This course is not available for subscription'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user is already subscribed
+            existing_subscription = Subscription.objects.filter(
+                user=user,
+                course=course
+            ).first()
+            
+            if existing_subscription:
+                if existing_subscription.is_active:
+                    return Response(
+                        {'error': 'You are already subscribed to this course'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                else:
+                    # Reactivate existing subscription
+                    existing_subscription.is_active = True
+                    existing_subscription.subscribed_at = timezone.now()
+                    existing_subscription.save()
+                    subscription = existing_subscription
+            else:
+                # Create new subscription
+                subscription = Subscription.objects.create(
+                    user=user,
+                    course=course,
+                    is_active=True,
+                    subscribed_at=timezone.now()
+                )
+            
+            # Get updated subscriber count
+            subscribers_count = Subscription.objects.filter(
+                course=course,
+                is_active=True
+            ).count()
+            
+            return Response({
+                'message': 'Successfully subscribed to the course',
+                'course_id': course.id,
+                'course_title': course.title_of_course,
+                'subscription_id': subscription.id,
+                'subscribers_count': subscribers_count,
+                'subscribed_at': subscription.subscribed_at.isoformat()
+            }, status=status.HTTP_200_OK)
+            
+        except Course.DoesNotExist:
+            return Response(
+                {'error': 'Course not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            print(f"Error subscribing to course: {str(e)}")
+            return Response(
+                {'error': f'Failed to subscribe: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 class CourseDetail(APIView):
     permission_classes = [AllowAny]
     
@@ -965,12 +1109,14 @@ class RecommendedCoursesView(APIView):
         """Get recommended courses based on user's department, excluding subscribed courses"""
         try:
             user_department = request.user.department
+            print(f"DEBUG - User: {request.user.username}, Department: {user_department}")
             
             # Get user's subscribed course IDs first
             subscribed_course_ids = Subscription.objects.filter(
                 user=request.user,
                 is_active=True
             ).values_list('course_id', flat=True)
+            print(f"DEBUG - Subscribed course IDs: {list(subscribed_course_ids)}")
             
             # Base query - seulement les cours actifs pour les apprenants
             base_query = Q(status=1)  # Seulement cours actifs
@@ -979,21 +1125,30 @@ class RecommendedCoursesView(APIView):
                 # Les formateurs et admin voient aussi les brouillons
                 base_query = Q(status__in=[0, 1])
             
+            print(f"DEBUG - Base query status: {[0, 1] if request.user.privilege in ['F', 'A'] else [1]}")
+            
             if not user_department:
+                print("DEBUG - No user department, fetching all courses")
                 courses = Course.objects.filter(base_query).exclude(
                     id__in=subscribed_course_ids
                 ).order_by('-created_at')[:20]
             else:
-                courses = Course.objects.filter(
+                print(f"DEBUG - Looking for courses in department: {user_department}")
+                # Check department courses
+                department_courses = Course.objects.filter(
                     base_query & Q(creator__department=user_department)
-                ).exclude(
-                    id__in=subscribed_course_ids
-                ).order_by('-created_at')
+                ).exclude(id__in=subscribed_course_ids)
+                print(f"DEBUG - Department courses found: {department_courses.count()}")
+                
+                courses = department_courses.order_by('-created_at')
                 
                 if not courses.exists():
+                    print("DEBUG - No department courses, falling back to all courses")
                     courses = Course.objects.filter(base_query).exclude(
                         id__in=subscribed_course_ids
                     ).order_by('-created_at')[:20]
+            
+            print(f"DEBUG - Final courses count: {courses.count()}")
             
             serializer = CourseSerializer(courses, many=True, context={'request': request})
             
@@ -1003,11 +1158,11 @@ class RecommendedCoursesView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            print(f"DEBUG - Error: {str(e)}")
             return Response(
                 {'error': f'Failed to fetch recommended courses: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -2282,8 +2437,11 @@ class ContentStatusUpdateView(APIView):
             'content': serializer.data
         })
 
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+
 class ModuleDetail(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]  # ADD THIS LINE
     
     def get_object(self, course_pk, module_pk):
         course = get_object_or_404(Course, pk=course_pk)
@@ -2350,29 +2508,6 @@ class ModuleDetail(APIView):
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self, request, course_pk, module_pk):
-        module = self.get_object(course_pk, module_pk)
-        
-        if module.course.creator != request.user and request.user.privilege != 'A':
-            return Response(
-                {'error': 'You are not the creator of this course'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Archive the module instead of deleting
-        module.status = 2  # Archived
-        module.save()
-        
-        return Response(
-            {
-                'message': 'Module archived successfully',
-                'module_id': module.id,
-                'status': module.status,
-                'status_display': module.get_status_display()
-            },
-            status=status.HTTP_200_OK
-        )
 
 # Content Views
 class CourseContentsView(APIView):
@@ -3010,19 +3145,70 @@ class CheckSubscription(APIView):
                 'total_active_modules': active_modules.count()
             }
         }
+# In your Django views.py, update the MySubscriptions view:
+
 class MySubscriptions(APIView):
     permission_classes = [IsAuthenticated]
+    
     def get(self, request):
-        # Get courses where user has active subscription
-        subscriptions = Subscription.objects.filter(user=request.user, is_active=True)
-        courses = [subscription.course for subscription in subscriptions]
-        
-        serializer = CourseSerializer(
-            courses, 
-            many=True, 
-            context={'request': request}
-        )
-        return Response(serializer.data)
+        """Get courses where user has active subscription with progress data"""
+        try:
+            # Get active subscriptions with course details
+            subscriptions = Subscription.objects.filter(
+                user=request.user, 
+                is_active=True
+            ).select_related('course', 'course__creator')
+            
+            # Prepare course data with subscription progress
+            courses_data = []
+            for subscription in subscriptions:
+                course = subscription.course
+                
+                # Calculate progress based on completed contents
+                total_contents = CourseContent.objects.filter(
+                    module__course=course,
+                    module__status=1,  # Active modules only
+                    status=1  # Active content only
+                ).count()
+                
+                completed_contents = subscription.completed_contents.filter(
+                    module__course=course,
+                    module__status=1,
+                    status=1
+                ).count()
+                
+                progress_percentage = (completed_contents / total_contents * 100) if total_contents > 0 else 0
+                
+                course_data = {
+                    'id': course.id,
+                    'title_of_course': course.title_of_course,
+                    'description': course.description,
+                    'image': course.image.url if course.image else None,
+                    'image_url': course.image.url if course.image else None,
+                    'creator_username': course.creator.username,
+                    'creator_first_name': course.creator.first_name,
+                    'creator_last_name': course.creator.last_name,
+                    'created_at': course.created_at,
+                    'updated_at': course.updated_at,
+                    'department': course.department,
+                    'status': course.status,
+                    'status_display': course.get_status_display(),
+                    'is_subscribed': True,
+                    'progress_percentage': progress_percentage,
+                    'total_score': subscription.total_score,
+                    'is_completed': subscription.is_completed,
+                    'total_time_spent': subscription.total_time_spent
+                }
+                courses_data.append(course_data)
+            
+            return Response(courses_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(f"Error in MySubscriptions: {str(e)}")
+            return Response(
+                {'error': 'Failed to fetch subscribed courses'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # QCM Views
 class SubmitQCM(APIView):
@@ -4342,9 +4528,11 @@ class MyCoursesView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+
 class ModuleDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]  # ADD JSONParser HERE
     
     def get_object(self, course_id, module_id):
         course = get_object_or_404(Course, id=course_id)
@@ -4380,7 +4568,7 @@ class ModuleDetailAPIView(APIView):
         module = self.get_object(course_id, module_id)
         course = get_object_or_404(Course, id=course_id)
         
-        if course.creator != request.user and request.user.privilege != 'A' :
+        if course.creator != request.user and request.user.privilege != 'A':
             return Response(
                 {'error': 'You do not have permission to edit this module'},
                 status=status.HTTP_403_FORBIDDEN
@@ -4392,18 +4580,66 @@ class ModuleDetailAPIView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    def delete(self, request, course_id, module_id):
+    def patch(self, request, course_id, module_id):
+        """Update module status instead of deleting"""
         module = self.get_object(course_id, module_id)
         course = get_object_or_404(Course, id=course_id)
         
         if course.creator != request.user and request.user.privilege != 'A':
             return Response(
-                {'error': 'You do not have permission to delete this module'},
+                {'error': 'You do not have permission to modify this module'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        module.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        # Handle status updates
+        new_status = request.data.get('status')
+        if new_status is not None:
+            if new_status not in [0, 1, 2]:
+                return Response(
+                    {'error': 'Invalid status. Use: 0 (Draft), 1 (Active), or 2 (Archived)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            module.status = new_status
+            module.save()
+            
+            serializer = ModuleSerializer(module)
+            return Response({
+                'message': f'Module status updated to {module.get_status_display()}',
+                'module': serializer.data
+            })
+        
+        # Handle other PATCH updates
+        serializer = ModuleSerializer(module, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, course_id, module_id):
+        """Archive module instead of deleting (status = 2)"""
+        module = self.get_object(course_id, module_id)
+        course = get_object_or_404(Course, id=course_id)
+        
+        if course.creator != request.user and request.user.privilege != 'A':
+            return Response(
+                {'error': 'You do not have permission to archive this module'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Archive the module instead of deleting
+        module.status = 2  # Archived
+        module.save()
+        
+        return Response(
+            {
+                'message': 'Module archived successfully',
+                'module_id': module.id,
+                'status': module.status,
+                'status_display': module.get_status_display()
+            },
+            status=status.HTTP_200_OK
+        )
 
 class ModuleListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]

@@ -384,7 +384,7 @@ const CourseDetail = () => {
 
         {/* Right Content - Modules */}
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
+          {/* <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
             <button 
               style={{
                 backgroundColor: '#2D2B6B',
@@ -399,7 +399,7 @@ const CourseDetail = () => {
             >
               ➕ Nouveau module
             </button>
-          </div>
+          </div> */}
 
           {course.modules && course.modules.length > 0 ? (
             course.modules.map((module) => (
@@ -409,11 +409,11 @@ const CourseDetail = () => {
                     <h3 style={{ fontSize: '1rem', fontWeight: '600', margin: 0 }}>
                       Module {module.order} • {module.title}
                     </h3>
-                    <button 
+                    {/* <button 
                       style={{ color: '#2D2B6B', cursor: 'pointer', background: 'none', border: 'none', fontSize: '0.875rem', fontWeight: '500', padding: 0 }}
                     >
                       + nouveau contenu
-                    </button>
+                    </button> */}
                   </div>
 
                   {module.contents && module.contents.length > 0 ? (

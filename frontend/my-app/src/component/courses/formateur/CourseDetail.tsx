@@ -105,8 +105,8 @@ const CourseDetail = () => {
   const [selectedModule, setSelectedModule] = useState<number | null>(null);
   const [selectedContentType, setSelectedContentType] = useState<string | null>(null);
   const [showContentMenu, setShowContentMenu] = useState<number | null>(null);
-  
-  
+
+
   // Enhanced form states with QCM support
   const [moduleForm, setModuleForm] = useState({
     title: '',
@@ -145,7 +145,24 @@ const CourseDetail = () => {
     startTime: null,
     currentContent: null
   });
+  // Add module status change handler
+  const handleChangeModuleStatus = async (module: Module, newStatus: number) => {
+    if (!id) return;
 
+    try {
+      await api.patch(`courses/${id}/modules/${module.id}/`, {
+        status: newStatus
+      });
+
+      const response = await api.get(`courses/${id}/`);
+      setCourse(response.data);
+
+      alert('Statut du module mis à jour avec succès!');
+    } catch (error) {
+      console.error('Failed to update module status:', error);
+      alert('Échec de mise à jour du statut du module.');
+    }
+  };
   // User progress state
   const [userProgress, setUserProgress] = useState<{
     completedContents: number[];
@@ -216,12 +233,21 @@ const CourseDetail = () => {
   };
 
   // Enhanced click outside handler
+  // Enhanced click outside handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (contentMenuRef.current && !contentMenuRef.current.contains(event.target as Node)) {
         setShowContentMenu(null);
         setSelectedContent(null);
       }
+
+      // Close all status dropdowns
+      const statusDropdowns = document.querySelectorAll('[id^="course-status-dropdown"], [id^="module-status-dropdown-"]');
+      statusDropdowns.forEach(dropdown => {
+        if (dropdown instanceof HTMLElement && !dropdown.contains(event.target as Node)) {
+          dropdown.style.display = 'none';
+        }
+      });
 
       const modals = [
         { show: showNewModuleModal, ref: newModuleModalRef, reset: () => { setShowNewModuleModal(false); setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined }); } },
@@ -241,7 +267,6 @@ const CourseDetail = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showNewModuleModal, showEditModuleModal, showNewContentModal, showEditContentModal, showModal]);
-
   // Reset content form helper
   const resetContentForm = () => {
     setContentForm({
@@ -321,12 +346,12 @@ const CourseDetail = () => {
         clearInterval(timerInterval);
         setTimerInterval(null);
       }
-      
+
       // Save time spent when modal closes
       if (timeTracking.isTracking && timeTracking.startTime && timeTracking.currentContent) {
         const endTime = new Date();
         const duration = Math.floor((endTime.getTime() - timeTracking.startTime.getTime()) / 1000);
-        
+
         setUserProgress(prev => {
           const newProgress = {
             ...prev,
@@ -335,7 +360,7 @@ const CourseDetail = () => {
               [timeTracking.currentContent!]: (prev.timeSpent[timeTracking.currentContent!] || 0) + duration
             }
           };
-          
+
           // Save to localStorage
           localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
           return newProgress;
@@ -347,7 +372,7 @@ const CourseDetail = () => {
           currentContent: null
         });
       }
-      
+
       setTimeSpent(0);
     }
   }, [showModal, selectedContent]);
@@ -372,7 +397,7 @@ const CourseDetail = () => {
   const getContentIcon = (contentType: string) => {
     if (!contentType) return '📌';
     switch (contentType.toLowerCase()) {
-      case 'video' :
+      case 'video':
         return '🎬';
       case 'pdf':
         return '📄';
@@ -385,7 +410,7 @@ const CourseDetail = () => {
 
   const getContentTypeDisplay = (contentType: string | undefined) => {
     if (!contentType) return 'Contenu';
-    
+
     switch (contentType.toLowerCase()) {
       case 'video':
         return 'Vidéo';
@@ -422,7 +447,7 @@ const CourseDetail = () => {
   // Enhanced mark as completed with time validation
   const handleMarkAsCompleted = async () => {
     if (selectedContent) {
-      const hasMetTimeRequirement = !selectedContent.min_required_time || 
+      const hasMetTimeRequirement = !selectedContent.min_required_time ||
         (userProgress.timeSpent[selectedContent.id] || 0) >= (selectedContent.min_required_time * 60);
 
       if (!hasMetTimeRequirement) {
@@ -432,7 +457,7 @@ const CourseDetail = () => {
 
       try {
         await api.patch(`contents/${selectedContent.id}/complete/`);
-        
+
         // Update local state
         setUserProgress(prev => {
           const newProgress = {
@@ -446,7 +471,7 @@ const CourseDetail = () => {
         alert('Contenu marqué comme terminé');
         setShowModal(false);
         setSelectedContent(null);
-        
+
         // Refresh course data
         const response = await api.get(`courses/${id}/`);
         setCourse(response.data);
@@ -465,7 +490,7 @@ const CourseDetail = () => {
   // Enhanced module creation with time tracking
   const handleCreateModule = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!id || !moduleForm.title.trim()) {
       alert('Veuillez entrer un titre pour le module');
       return;
@@ -483,7 +508,7 @@ const CourseDetail = () => {
 
       const response = await api.get(`courses/${id}/`);
       setCourse(response.data);
-      
+
       setShowNewModuleModal(false);
       setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
       alert('Module créé avec succès!');
@@ -495,8 +520,8 @@ const CourseDetail = () => {
 
   const handleEditModule = (module: Module) => {
     setEditingModule(module);
-    setModuleForm({ 
-      title: module.title, 
+    setModuleForm({
+      title: module.title,
       description: module.description || '',
       estimated_duration: module.estimated_duration,
       min_required_time: module.min_required_time
@@ -506,7 +531,7 @@ const CourseDetail = () => {
 
   const handleUpdateModule = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!id || !editingModule || !moduleForm.title.trim()) {
       alert('Veuillez entrer un titre pour le module');
       return;
@@ -522,7 +547,7 @@ const CourseDetail = () => {
 
       const response = await api.get(`courses/${id}/`);
       setCourse(response.data);
-      
+
       setShowEditModuleModal(false);
       setEditingModule(null);
       setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
@@ -537,10 +562,10 @@ const CourseDetail = () => {
   const handleEditContent = (content: Content) => {
     console.log('=== EDITING CONTENT ===');
     console.log('Raw content:', content);
-    
+
     const normalizedContent = normalizeQCMContent(content);
     console.log('Normalized content:', normalizedContent);
-    
+
     setEditingContent(normalizedContent);
 
     const contentType = normalizedContent.content_type_name?.toLowerCase();
@@ -554,26 +579,26 @@ const CourseDetail = () => {
       // Ensure questions array exists and has valid data
       const questions = qcm.questions && qcm.questions.length > 0
         ? qcm.questions.map(question => ({
-            question: question.question || '',
-            question_type: question.question_type || 'single',
-            options: question.options && question.options.length > 0
-              ? question.options.map(option => ({
-                  text: option.text || '',
-                  is_correct: Boolean(option.is_correct)
-                }))
-              : [
-                  { text: '', is_correct: false },
-                  { text: '', is_correct: false }
-                ]
-          }))
-        : [{
-            question: '',
-            question_type: 'single' as 'single' | 'multiple',
-            options: [
+          question: question.question || '',
+          question_type: question.question_type || 'single',
+          options: question.options && question.options.length > 0
+            ? question.options.map(option => ({
+              text: option.text || '',
+              is_correct: Boolean(option.is_correct)
+            }))
+            : [
               { text: '', is_correct: false },
               { text: '', is_correct: false }
             ]
-          }];
+        }))
+        : [{
+          question: '',
+          question_type: 'single' as 'single' | 'multiple',
+          options: [
+            { text: '', is_correct: false },
+            { text: '', is_correct: false }
+          ]
+        }];
 
       console.log('Mapped Questions:', questions);
 
@@ -623,7 +648,7 @@ const CourseDetail = () => {
 
   const handleUpdateContent = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!id || !editingContent || !contentForm.title.trim()) {
       alert('Veuillez remplir tous les champs requis');
       return;
@@ -696,7 +721,7 @@ const CourseDetail = () => {
 
       const response = await api.get(`courses/${id}/`);
       setCourse(response.data);
-      
+
       setShowEditContentModal(false);
       setEditingContent(null);
       resetContentForm();
@@ -710,7 +735,7 @@ const CourseDetail = () => {
   // Enhanced content creation with QCM support
   const handleCreateContent = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!id || !selectedModule || !selectedContentType || !contentForm.title.trim()) {
       alert('Veuillez remplir tous les champs requis');
       return;
@@ -781,7 +806,7 @@ const CourseDetail = () => {
 
       const response = await api.get(`courses/${id}/`);
       setCourse(response.data);
-      
+
       setShowNewContentModal(false);
       setSelectedContentType(null);
       setSelectedModule(null);
@@ -879,7 +904,7 @@ const CourseDetail = () => {
 
   const handleChangeContentStatus = async (content: Content, newStatus: number) => {
     if (!id) return;
-    
+
     try {
       await api.patch(`courses/${id}/contents/${content.id}/update-status/`, {
         status: newStatus
@@ -887,7 +912,7 @@ const CourseDetail = () => {
 
       const response = await api.get(`courses/${id}/`);
       setCourse(response.data);
-      
+
       setShowContentMenu(null);
       alert('Statut mis à jour avec succès!');
     } catch (error) {
@@ -986,10 +1011,10 @@ const CourseDetail = () => {
     if (!dateString) return 'Date inconnue';
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('fr-FR', { 
-        day: 'numeric', 
-        month: 'short', 
-        year: 'numeric' 
+      return date.toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
       });
     } catch (error) {
       return 'Date invalide';
@@ -1004,7 +1029,7 @@ const CourseDetail = () => {
 
   if (loading) {
     return (
-      <div style={{ 
+      <div style={{
         backgroundColor: '#F3F4F6',
         minHeight: '100vh',
         display: 'flex',
@@ -1018,7 +1043,7 @@ const CourseDetail = () => {
 
   if (!course) {
     return (
-      <div style={{ 
+      <div style={{
         backgroundColor: '#F3F4F6',
         minHeight: '100vh',
         display: 'flex',
@@ -1038,11 +1063,11 @@ const CourseDetail = () => {
       <div style={{ backgroundColor: '#2D2B6B', color: 'white', padding: '1.5rem 2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>{course.title_of_course}</h1>
-          <span style={{ 
-            backgroundColor: statusBadge.color, 
-            color: 'white', 
-            padding: '0.25rem 0.75rem', 
-            borderRadius: '12px', 
+          <span style={{
+            backgroundColor: statusBadge.color,
+            color: 'white',
+            padding: '0.25rem 0.75rem',
+            borderRadius: '12px',
             fontSize: '0.75rem'
           }}>
             {statusBadge.text}
@@ -1087,10 +1112,10 @@ const CourseDetail = () => {
       <div style={{ padding: '2rem', display: 'flex', gap: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* Left Sidebar */}
         <div style={{ width: '300px', flexShrink: 0 }}>
-          <div style={{ 
-            backgroundColor: '#E5E7EB', 
-            borderRadius: '8px', 
-            height: '200px', 
+          <div style={{
+            backgroundColor: '#E5E7EB',
+            borderRadius: '8px',
+            height: '200px',
             marginBottom: '1.5rem',
             display: 'flex',
             alignItems: 'center',
@@ -1107,11 +1132,11 @@ const CourseDetail = () => {
           </div>
 
           {(course.department || course.category) && (
-            <div style={{ 
-              backgroundColor: '#FED7AA', 
-              color: '#9A3412', 
-              padding: '0.5rem 1rem', 
-              borderRadius: '20px', 
+            <div style={{
+              backgroundColor: '#FED7AA',
+              color: '#9A3412',
+              padding: '0.5rem 1rem',
+              borderRadius: '20px',
               fontSize: '0.875rem',
               display: 'inline-block',
               marginBottom: '1rem'
@@ -1144,7 +1169,7 @@ const CourseDetail = () => {
         {/* Right Content - Modules */}
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
-            <button 
+            <button
               onClick={() => setShowNewModuleModal(true)}
               style={{
                 backgroundColor: '#2D2B6B',
@@ -1165,26 +1190,147 @@ const CourseDetail = () => {
             course.modules.map((module) => (
               <div key={module.id} style={{ marginBottom: '1.5rem' }}>
                 <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1rem 1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: '200', margin: 0 }}>
-                      Module {module.order} • {module.title}
-                    </h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: '200', margin: 0 }}>
+                        Module {module.order} • {module.title}
+                      </h3>
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <span
+                          style={{
+                            backgroundColor: getStatusBadge(module.status).color,
+                            color: 'white',
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '8px',
+                            fontSize: '0.7rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Toggle module status dropdown
+                            const current = document.getElementById(`module-status-dropdown-${module.id}`);
+                            if (current) {
+                              current.style.display = current.style.display === 'block' ? 'none' : 'block';
+                            }
+                          }}
+                        >
+                          {getStatusBadge(module.status).text}
+                          <span style={{ fontSize: '0.5rem' }}>▼</span>
+                        </span>
+
+                        {/* Module Status Dropdown */}
+                        <div
+                          id={`module-status-dropdown-${module.id}`}
+                          style={{
+                            display: 'none',
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            backgroundColor: 'white',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '6px',
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                            minWidth: '140px',
+                            zIndex: 20,
+                            marginTop: '0.25rem'
+                          }}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleChangeModuleStatus(module, 0);
+                              document.getElementById(`module-status-dropdown-${module.id}`)!.style.display = 'none';
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem 0.75rem',
+                              textAlign: 'left',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              color: '#F59E0B',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              borderRadius: '4px 4px 0 0'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                          >
+                            📝 Brouillon
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleChangeModuleStatus(module, 1);
+                              document.getElementById(`module-status-dropdown-${module.id}`)!.style.display = 'none';
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem 0.75rem',
+                              textAlign: 'left',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              color: '#10B981',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D1FAE5'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                          >
+                            ✓ Actif
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleChangeModuleStatus(module, 2);
+                              document.getElementById(`module-status-dropdown-${module.id}`)!.style.display = 'none';
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem 0.75rem',
+                              textAlign: 'left',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              color: '#6B7280',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              borderRadius: '0 0 4px 4px'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                          >
+                            📦 Archivé
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                       <button
                         onClick={() => handleEditModule(module)}
-                        style={{ 
-                          color: '#F97316', 
-                          cursor: 'pointer', 
-                          background: 'none', 
-                          border: 'none', 
-                          fontSize: '0.875rem', 
+                        style={{
+                          color: '#F97316',
+                          cursor: 'pointer',
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '0.875rem',
                           fontWeight: '500',
                           padding: 0
                         }}
                       >
                         Modifier
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           setSelectedModule(module.id);
                           setShowNewContentModal(true);
@@ -1203,7 +1349,7 @@ const CourseDetail = () => {
                       const hasMetTimeRequirement = !content.min_required_time || contentTimeSpent >= (content.min_required_time * 60);
 
                       return (
-                        <div 
+                        <div
                           key={content.id}
                           onClick={() => handleContentClick(content)}
                           style={{
@@ -1249,15 +1395,15 @@ const CourseDetail = () => {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <div style={{ position: 'relative' }}>
-                              <button 
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setShowContentMenu(showContentMenu === content.id ? null : content.id);
                                 }}
-                                style={{ 
-                                  background: 'none', 
-                                  border: 'none', 
-                                  cursor: 'pointer', 
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
                                   color: '#6B7280',
                                   fontSize: '1.25rem',
                                   padding: '0.25rem 0.5rem',
@@ -1268,9 +1414,9 @@ const CourseDetail = () => {
                               >
                                 ⋯
                               </button>
-                              
+
                               {showContentMenu === content.id && (
-                                <div 
+                                <div
                                   ref={contentMenuRef}
                                   style={{
                                     position: 'absolute',
@@ -1336,7 +1482,7 @@ const CourseDetail = () => {
                                   </button>
 
                                   <div style={{ borderTop: '1px solid #E5E7EB', margin: '0.25rem 0' }} />
-                                  
+
                                   <div style={{ padding: '0.5rem 1rem' }}>
                                     <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6B7280', marginBottom: '0.5rem' }}>
                                       Changer le statut
@@ -1454,7 +1600,7 @@ const CourseDetail = () => {
           zIndex: 1000,
           padding: '2rem'
         }}>
-          <div 
+          <div
             ref={contentViewerModalRef}
             style={{
               backgroundColor: 'white',
@@ -1487,7 +1633,7 @@ const CourseDetail = () => {
             )}
 
             {/* Enhanced Timer Display */}
-            <div style={{ 
+            <div style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#EEF2FF',
               borderBottom: '1px solid #E5E7EB',
@@ -1514,7 +1660,7 @@ const CourseDetail = () => {
               {selectedContent.content_type_name?.toLowerCase() === 'pdf' && (
                 <div>
                   {getPdfUrl(selectedContent) ? (
-                    <iframe 
+                    <iframe
                       src={getPdfUrl(selectedContent)!}
                       style={{
                         width: '100%',
@@ -1543,7 +1689,7 @@ const CourseDetail = () => {
               {selectedContent.content_type_name?.toLowerCase() === 'video' && (
                 <div>
                   {getVideoUrl(selectedContent) ? (
-                    <video 
+                    <video
                       controls
                       style={{
                         width: '100%',
@@ -1674,7 +1820,7 @@ const CourseDetail = () => {
               )}
 
               {/* Enhanced File Download Section */}
-              <div style={{ 
+              <div style={{
                 marginTop: '1rem',
                 padding: '1rem',
                 backgroundColor: '#F3F4F6',
@@ -1731,7 +1877,7 @@ const CourseDetail = () => {
             </div>
 
             {/* Enhanced Footer Actions */}
-            <div style={{ 
+            <div style={{
               padding: '1.5rem',
               borderTop: '1px solid #E5E7EB',
               display: 'flex',
@@ -1765,24 +1911,24 @@ const CourseDetail = () => {
                 <button
                   onClick={handleMarkAsCompleted}
                   disabled={
-                    userProgress.completedContents.includes(selectedContent.id) || 
+                    userProgress.completedContents.includes(selectedContent.id) ||
                     (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                   }
                   style={{
                     padding: '0.625rem 1.5rem',
-                    backgroundColor: userProgress.completedContents.includes(selectedContent.id) 
-                      ? '#10B981' 
-                      : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60)) 
-                        ? '#9CA3AF' 
+                    backgroundColor: userProgress.completedContents.includes(selectedContent.id)
+                      ? '#10B981'
+                      : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                        ? '#9CA3AF'
                         : '#4338CA',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
                     fontSize: '0.875rem',
                     fontWeight: '500',
-                    cursor: userProgress.completedContents.includes(selectedContent.id) || 
-                           (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
-                      ? 'not-allowed' 
+                    cursor: userProgress.completedContents.includes(selectedContent.id) ||
+                      (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                      ? 'not-allowed'
                       : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -1812,7 +1958,7 @@ const CourseDetail = () => {
           alignItems: 'center',
           zIndex: 1000
         }}>
-          <div 
+          <div
             ref={newModuleModalRef}
             style={{
               backgroundColor: 'white',
@@ -1864,7 +2010,7 @@ const CourseDetail = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     setShowNewModuleModal(false);
@@ -1881,7 +2027,7 @@ const CourseDetail = () => {
                 >
                   Annuler
                 </button>
-                <button 
+                <button
                   type="submit"
                   style={{
                     padding: '0.5rem 1rem',
@@ -1916,7 +2062,7 @@ const CourseDetail = () => {
           alignItems: 'center',
           zIndex: 1000
         }}>
-          <div 
+          <div
             ref={editModuleModalRef}
             style={{
               backgroundColor: 'white',
@@ -1968,7 +2114,7 @@ const CourseDetail = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     setShowEditModuleModal(false);
@@ -1986,7 +2132,7 @@ const CourseDetail = () => {
                 >
                   Annuler
                 </button>
-                <button 
+                <button
                   type="submit"
                   style={{
                     padding: '0.5rem 1rem',
@@ -2021,7 +2167,7 @@ const CourseDetail = () => {
           alignItems: 'center',
           zIndex: 1000
         }}>
-          <div 
+          <div
             ref={newContentModalRef}
             style={{
               backgroundColor: 'white',
@@ -2039,9 +2185,9 @@ const CourseDetail = () => {
                 <div className="text-center">
                   <h6 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Choisir le type de contenu</h6>
                   <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-                    <button 
+                    <button
                       type="button"
-                      className="btn btn-outline-primary" 
+                      className="btn btn-outline-primary"
                       onClick={() => setSelectedContentType('pdf')}
                       style={{
                         padding: '1rem 1.5rem',
@@ -2060,9 +2206,9 @@ const CourseDetail = () => {
                       <span style={{ fontSize: '1.5rem' }}>📄</span>
                       <span>PDF</span>
                     </button>
-                    <button 
+                    <button
                       type="button"
-                      className="btn btn-outline-primary" 
+                      className="btn btn-outline-primary"
                       onClick={() => setSelectedContentType('video')}
                       style={{
                         padding: '1rem 1.5rem',
@@ -2081,9 +2227,9 @@ const CourseDetail = () => {
                       <span style={{ fontSize: '1.5rem' }}>🎬</span>
                       <span>Vidéo</span>
                     </button>
-                    <button 
+                    <button
                       type="button"
-                      className="btn btn-outline-primary" 
+                      className="btn btn-outline-primary"
                       onClick={() => setSelectedContentType('qcm')}
                       style={{
                         padding: '1rem 1.5rem',
@@ -2117,7 +2263,7 @@ const CourseDetail = () => {
                         {selectedContentType === 'video' && 'Vidéo'}
                         {selectedContentType === 'qcm' && 'Quiz QCM'}
                       </span>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setSelectedContentType(null)}
                         style={{
@@ -2326,7 +2472,7 @@ const CourseDetail = () => {
                                 + Ajouter une option
                               </button>
                             </div>
-                            
+
                             {question.options.map((option, oIndex) => (
                               <div key={oIndex} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
                                 <input
@@ -2468,7 +2614,7 @@ const CourseDetail = () => {
                   )}
 
                   <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => {
                         setShowNewContentModal(false);
@@ -2487,7 +2633,7 @@ const CourseDetail = () => {
                     >
                       Annuler
                     </button>
-                    <button 
+                    <button
                       type="submit"
                       style={{
                         padding: '0.5rem 1rem',
@@ -2524,7 +2670,7 @@ const CourseDetail = () => {
           alignItems: 'center',
           zIndex: 1000
         }}>
-          <div 
+          <div
             ref={editContentModalRef}
             style={{
               backgroundColor: 'white',
@@ -2847,7 +2993,7 @@ const CourseDetail = () => {
               )}
 
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     setShowEditContentModal(false);
@@ -2865,7 +3011,7 @@ const CourseDetail = () => {
                 >
                   Annuler
                 </button>
-                <button 
+                <button
                   type="submit"
                   style={{
                     padding: '0.5rem 1rem',

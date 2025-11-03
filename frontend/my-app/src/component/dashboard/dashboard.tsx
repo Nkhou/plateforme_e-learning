@@ -1,8 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import "./dashboard.css";
-import '../../css/cours.css';
 import api from '../../api/api';
-import CourseDetailShow from "../courses/apprent/CourseDetailShow";
 import CourseImage from "../courses/CourseImage";
 import { useNavigate } from 'react-router-dom';
 
@@ -20,59 +17,246 @@ interface Course {
     department?: string;
     is_subscribed?: boolean;
     progress_percentage?: number;
-    status?: number; // 0: Draft, 1: Active, 2: Archived
+    status?: number;
     status_display?: string;
+    // New fields from backend
+    module_count?: number;
+    total_duration_minutes?: number;
+    enrolled_learners_count?: number;
+}
+
+interface CourseLog {
+    id: number;
+    title_of_course: string;
+    status?: number;
+    department?: string;
 }
 
 const Dashboard = () => {
-    const trackRef1 = useRef<HTMLDivElement | null>(null) as React.RefObject<HTMLDivElement>;
-    const [currentPosition1, setCurrentPosition1] = useState(0);
-    const trackRef2 = useRef<HTMLDivElement | null>(null) as React.RefObject<HTMLDivElement>;
-    const [currentPosition2, setCurrentPosition2] = useState(0);
-    const [showCourseDetail, setShowCourseDetail] = useState(false);
-    const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
-    const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
+    const scrollContainer1 = useRef<HTMLDivElement>(null);
+    const scrollContainer2 = useRef<HTMLDivElement>(null);
     const [myCourses, setMyCourses] = useState<Course[]>([]);
+    const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [courseFilter, setCourseFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
     const navigate = useNavigate();
 
     // Filter only active courses (status = 1)
     const filterActiveCourses = (courses: Course[]): Course[] => {
-        return courses.filter(course => course.status === 1);
+        console.log('Filtering courses. Total courses:', courses.length);
+        const activeCourses = courses.filter(course => {
+            console.log('Course:', course.id, course.title_of_course, 'Status:', course.status);
+            return course.status === 1;
+        });
+        console.log('Active courses after filtering:', activeCourses.length);
+        return activeCourses;
     };
 
-    // Fetch courses from backend
+    // Format duration from minutes to "Xh Ym" format
+    const formatDuration = (minutes: number | undefined): string => {
+        if (!minutes) return '1h 55m';
+        
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        
+        if (hours === 0) return `${mins}m`;
+        if (mins === 0) return `${hours}h`;
+        return `${hours}h ${mins}m`;
+    };
+
+    // Fetch course details including modules, duration, and learners
+    const fetchCourseDetails = async (courseId: number): Promise<Course> => {
+        try {
+            console.log('Fetching details for course:', courseId);
+            const response = await api.get(`courses/${courseId}/`);
+            console.log('Course details response:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error(`Error fetching details for course ${courseId}:`, error);
+            // Return default values if API fails
+            return {
+                id: courseId,
+                module_count: 5,
+                total_duration_minutes: 115,
+                enrolled_learners_count: 32
+            } as Course;
+        }
+    };
+
+    // Subscribe to a course
+    const subscribeToCourse = async (courseId: number) => {
+        try {
+            console.log('Subscribing to course:', courseId);
+            const response = await api.post(`courses/${courseId}/subscribe/`);
+            
+            if (response.status === 201 || response.status === 200) {
+                // Fetch the course details that was just subscribed to
+                const courseDetails = await fetchCourseDetails(courseId);
+                
+                // Add the course to myCourses with progress
+                const subscribedCourse = {
+                    ...courseDetails,
+                    is_subscribed: true,
+                    progress_percentage: 0
+                };
+                
+                setMyCourses(prev => [...prev, subscribedCourse]);
+                
+                // Remove from recommended
+                setRecommendedCourses(prev => 
+                    prev.filter(course => course.id !== courseId)
+                );
+                
+                console.log(`Successfully subscribed to course ${courseId}`);
+                
+                // Show success message
+                alert(`Vous êtes maintenant inscrit à "${courseDetails.title_of_course}"`);
+            }
+        } catch (error: any) {
+            console.error("Error subscribing to course:", error);
+            alert(`Failed to subscribe to course. Error: ${error.response?.data?.message || 'Unknown error'}`);
+        }
+    };
+
+    // Fetch user's subscribed courses (Formations en cours)
+    const fetchMyCourses = async () => {
+        try {
+            console.log('Fetching my subscribed courses...');
+            const response = await api.get('courses/my-subscriptions/');
+            console.log('My subscribed courses API response:', response);
+            console.log('My subscribed courses data:', response.data);
+            
+            if (!response.data) {
+                console.log('No data in my-subscriptions response');
+                return [];
+            }
+
+        // Check if response.data is an array
+        if (!Array.isArray(response.data)) {
+            console.log('My subscribed courses response is not an array:', typeof response.data);
+            console.log('Response structure:', response.data);
+            // Try to extract courses from different possible response structures
+            if (response.data.courses && Array.isArray(response.data.courses)) {
+                console.log('Found courses in response.data.courses');
+                response.data = response.data.courses;
+            } else if (response.data.results && Array.isArray(response.data.results)) {
+                console.log('Found courses in response.data.results');
+                response.data = response.data.results;
+            } else {
+                console.log('Cannot find courses array in response');
+                return [];
+            }
+        }
+        
+        console.log('Processing my subscribed courses:', response.data.length);
+        
+        // Filter active courses and fetch details for each
+        const activeCourses = filterActiveCourses(response.data);
+        console.log('Active my subscribed courses after filtering:', activeCourses);
+        
+        const coursesWithDetails = await Promise.all(
+            activeCourses.map(async (course: Course) => {
+                console.log('Processing subscribed course:', course.id, course.title_of_course);
+                const details = await fetchCourseDetails(course.id);
+                return { 
+                    ...course, 
+                    ...details,
+                    progress_percentage: course.progress_percentage || 0,
+                    is_subscribed: true // Mark as subscribed
+                };
+            })
+        );
+        
+        console.log('Final my subscribed courses with details:', coursesWithDetails);
+        setMyCourses(coursesWithDetails);
+        return coursesWithDetails;
+    } catch (error: any) {
+        console.error("Error fetching my subscribed courses:", error);
+        console.error("Error details:", error.response);
+        setError(`Failed to load your courses. Error ${error.response?.status}: ${error.response?.statusText}`);
+        return [];
+    }
+};
+
+    // Fetch recommended courses
+    const fetchRecommendedCourses = async (myCourseIds: number[] = []) => {
+        try {
+            console.log('Fetching recommended courses...');
+            const response = await api.get('courses/recommended/');
+            console.log('Recommended courses API response:', response);
+            console.log('Recommended courses data:', response.data);
+            
+            if (!response.data) {
+                console.log('No data in recommended courses response');
+                return;
+            }
+
+            // Check if response.data is an array
+            if (!Array.isArray(response.data)) {
+                console.log('Recommended courses response is not an array:', typeof response.data);
+                console.log('Response structure:', response.data);
+                // Try to extract courses from different possible response structures
+                if (response.data.courses && Array.isArray(response.data.courses)) {
+                    console.log('Found courses in response.data.courses');
+                    response.data = response.data.courses;
+                } else if (response.data.results && Array.isArray(response.data.results)) {
+                    console.log('Found courses in response.data.results');
+                    response.data = response.data.results;
+                } else {
+                    console.log('Cannot find courses array in response');
+                    return;
+                }
+            }
+            
+            console.log('Processing recommended courses:', response.data.length);
+            
+            // Filter active courses and exclude already subscribed ones
+            const activeCourses = filterActiveCourses(response.data);
+            console.log('Active recommended courses after filtering:', activeCourses);
+            
+            const filteredRecommended = activeCourses.filter(
+                course => !myCourseIds.includes(course.id)
+            );
+            
+            console.log('Recommended courses after filtering subscribed ones:', filteredRecommended);
+            
+            // Fetch details for recommended courses
+            const recommendedWithDetails = await Promise.all(
+                filteredRecommended.map(async (course: Course) => {
+                    const details = await fetchCourseDetails(course.id);
+                    return { ...course, ...details };
+                })
+            );
+            
+            console.log('Final recommended courses with details:', recommendedWithDetails);
+            setRecommendedCourses(recommendedWithDetails);
+        } catch (error: any) {
+            console.error("Error fetching recommended courses:", error);
+            console.error("Error details:", error.response);
+            setError(`Failed to load recommended courses. Error ${error.response?.status}: ${error.response?.statusText}`);
+        }
+    };
+
+    // Fetch all courses from backend
     const fetchCourses = async () => {
         try {
             setLoading(true);
+            console.log('Starting to fetch all courses...');
             
-            // Fetch courses I'm subscribed to
-            // console.log('Fetching my subscribed courses from:', `${api.defaults.baseURL}/courses/my-courses/`);
-            const myCoursesRes = await api.get('courses/mysubscriptions/');
-            console.log('My courses response:', myCoursesRes.data);
+            // First fetch user's courses
+            const myCoursesData = await fetchMyCourses();
+            const myCourseIds = myCoursesData.map(course => course.id);
+            console.log('My course IDs:', myCourseIds);
             
-            // Fetch recommended courses by department
-            console.log('Fetching recommended courses from:', `${api.defaults.baseURL}/courses/recommended/`);
-            const recommendedRes = await api.get('courses/recommended/');
-
-            // Filter to show only active courses
-            const activeMyCourses = filterActiveCourses(myCoursesRes.data);
-            const activeRecommendedCourses = filterActiveCourses(recommendedRes.data);
-
-            setMyCourses(activeMyCourses);
-            setRecommendedCourses(activeRecommendedCourses);
-            setError('');
+            // Then fetch recommended courses (excluding already subscribed ones)
+            await fetchRecommendedCourses(myCourseIds);
+            
+            console.log('Finished fetching all courses');
+            console.log('My courses state:', myCoursesData);
+            console.log('Recommended courses state:', recommendedCourses);
+            
         } catch (error: any) {
-            console.error("Detailed error information:", {
-                message: error.message,
-                status: error.response?.status,
-                statusText: error.response?.statusText,
-                url: error.config?.url,
-                method: error.config?.method,
-                fullError: error.response
-            });
+            console.error("Error fetching courses:", error);
             setError(`Failed to load courses. Error ${error.response?.status}: ${error.response?.statusText}`);
         } finally {
             setLoading(false);
@@ -83,46 +267,43 @@ const Dashboard = () => {
         fetchCourses();
     }, []);
 
-    const scrollLeft = (ref: React.RefObject<HTMLDivElement>, set: React.Dispatch<React.SetStateAction<number>>) => {
-        if (!ref.current) return;
-        const cardWidth = ref.current.children[0]?.clientWidth || 300;
-        const gap = 16;
-        set(prev => Math.min(prev + cardWidth + gap, 0));
+    const scrollLeft = (ref: React.RefObject<HTMLDivElement | null>) => {
+        if (ref.current) {
+            ref.current.scrollBy({ left: -300, behavior: 'smooth' });
+        }
     };
 
-    const scrollRight = (ref: React.RefObject<HTMLDivElement>, set: React.Dispatch<React.SetStateAction<number>>) => {
-        if (!ref.current) return;
-        const cardWidth = ref.current.children[0]?.clientWidth || 300;
-        const gap = 16;
-        const maxScroll = ref.current.scrollWidth - ref.current.clientWidth;
-        set(prev => Math.max(prev - cardWidth - gap, -maxScroll));
+    const scrollRight = (ref: React.RefObject<HTMLDivElement | null>) => {
+        if (ref.current) {
+            ref.current.scrollBy({ left: 300, behavior: 'smooth' });
+        }
     };
 
     const handleCardClick = (courseId: number) => {
-        setSelectedCourseId(courseId);
         navigate(`/cours/${courseId}`);
-        // setShowCourseDetail(true);
     };
 
-    const handleCloseCourseDetail = () => {
-        setSelectedCourseId(null);
-        setShowCourseDetail(false);
-        // Refresh courses when returning from course detail
-        fetchCourses();
+    const handleSubscribeClick = async (courseId: number, event: React.MouseEvent) => {
+        event.stopPropagation(); // Prevent card click navigation
+        await subscribeToCourse(courseId);
     };
 
-    // Filter courses based on progress (only active courses)
-    const filteredMyCourses = myCourses.filter(course => {
-        switch (courseFilter) {
-            case 'completed':
-                return course.progress_percentage === 100;
-            case 'in-progress':
-                return course.progress_percentage !== undefined && course.progress_percentage > 0 && course.progress_percentage < 100;
-            case 'all':
-            default:
-                return true;
-        }
-    });
+    // Debug component to see what's happening
+    const DebugInfo = () => (
+        <div style={{ 
+            backgroundColor: '#f8f9fa', 
+            padding: '10px', 
+            margin: '10px 0', 
+            border: '1px solid #ddd',
+            fontSize: '12px'
+        }}>
+            <strong>Debug Info:</strong><br />
+            My Courses Count: {myCourses.length}<br />
+            Recommended Courses Count: {recommendedCourses.length}<br />
+            Loading: {loading ? 'Yes' : 'No'}<br />
+            Error: {error || 'None'}
+        </div>
+    );
 
     if (loading) return (
         <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
@@ -137,150 +318,407 @@ const Dashboard = () => {
             <div className="alert alert-danger" role="alert">
                 {error}
             </div>
+            <DebugInfo />
         </div>
     );
 
     return (
-        <>
-            {!showCourseDetail ? (
-                <div className="dashboard-wrapper">
-                    {/* My Subscribed Courses Section */}
-                    <div className="d-flex justify-content-between align-items-center mb-4">
-                        <div>
-                            <h4>My Courses</h4>
-                            {/* <small className="text-muted">Showing only active courses</small> */}
-                        </div>
-                        <div className="btn-group">
-                            <button 
-                                className={`btn btn-sm ${courseFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
-                                onClick={() => setCourseFilter('all')}
-                            >
-                                All Courses
-                            </button>
-                            <button 
-                                className={`btn btn-sm ${courseFilter === 'in-progress' ? 'btn-primary' : 'btn-outline-primary'}`}
-                                onClick={() => setCourseFilter('in-progress')}
-                            >
-                                In Progress
-                            </button>
-                            <button 
-                                className={`btn btn-sm ${courseFilter === 'completed' ? 'btn-primary' : 'btn-outline-primary'}`}
-                                onClick={() => setCourseFilter('completed')}
-                            >
-                                Completed
-                            </button>
-                        </div>
-                    </div>
-                    
-                    {filteredMyCourses.length > 0 ? (
-                        <div className="carousel-container">
-                            <button className="carousel-nav left" onClick={() => scrollLeft(trackRef2, setCurrentPosition2)}>&lt;</button>
-                            <div className="carousel-track" ref={trackRef2} style={{ transform: `translateX(${currentPosition2}px)` }}>
-                                {filteredMyCourses.map(course => (
-                                    <div className="card-carousel card-hover" key={course.id} onClick={() => handleCardClick(course.id)} style={{ cursor: 'pointer' }}>
-                                        <CourseImage
-                                            src={course.image_url || course.image}
-                                            fallback="/group.avif"
-                                            alt={course.title_of_course}
-                                            className="card-img-top"
-                                            style={{ height: '200px', objectFit: 'cover' }}
-                                        />
-                                        <div className="card-body">
-                                            <h5 className="card-title">{course.title_of_course}</h5>
-                                            <p className="card-text">{course.description}</p>
-                                            <div className="course-meta">
-                                                <small className="text-muted">
-                                                    By: {course.creator_first_name} {course.creator_last_name}
-                                                </small>
-                                                <div className="progress mt-2" style={{height: '8px'}}>
-                                                    <div 
-                                                        className={`progress-bar ${
-                                                            course.progress_percentage === 100 ? 'bg-success' : 'bg-primary'
-                                                        }`} 
-                                                        style={{width: `${course.progress_percentage || 0}%`}}
-                                                    ></div>
-                                                </div>
-                                                <div className="d-flex justify-content-between align-items-center mt-1">
-                                                    <small className="text-muted">
-                                                        {course.progress_percentage === 100 ? 'Completed' : `${course.progress_percentage || 0}% Complete`}
-                                                    </small>
-                                                    <div className="badge bg-success">Active</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <button className="carousel-nav right" onClick={() => scrollRight(trackRef2, setCurrentPosition2)}>&gt;</button>
-                        </div>
-                    ) : (
-                        <div className="alert alert-info">
-                            {courseFilter === 'completed' 
-                                ? "You haven't completed any active courses yet."
-                                : courseFilter === 'in-progress'
-                                ? "You don't have any active courses in progress."
-                                : "You haven't subscribed to any active courses yet. Check out the recommended courses below!"
-                            }
-                        </div>
-                    )}
+        <div style={{ 
+            padding: '2rem 3rem',
+            backgroundColor: '#f8f9fa',
+            minHeight: '100vh'
+        }}>
+            <style>
+                {`
+                    .scroll-container::-webkit-scrollbar {
+                        display: none;
+                    }
+                    .course-image-container {
+                        position: relative;
+                        width: 100%;
+                        padding-bottom: 100%; /* This creates a square aspect ratio */
+                        overflow: hidden;
+                    }
+                    .course-image {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                    }
+                `}
+            </style>
 
-                    {/* Recommended Courses by Department Section */}
-                    <div className="d-flex justify-content-between align-items-center mb-4 mt-5">
-                        <div>
-                            <h4>Recommended Courses for Your Department</h4>
-                            {/* <small className="text-muted">Showing only active courses</small> */}
-                        </div>
+            {/* Debug information - remove in production */}
+            <DebugInfo />
+
+            {/* My Courses Section - Formations en cours */}
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 style={{ fontWeight: '600', marginBottom: '0.5rem', color: '#1a1a1a' }}>
+                        Formations en cours
+                    </h3>
+                    <p style={{ fontSize: '0.95rem', color: '#666', marginBottom: '0' }}>
+                        Continuez votre apprentissage là où vous vous étiez arrêté
+                    </p>
+                </div>
+                {myCourses.length > 0 && (
+                    <div className="d-flex gap-2">
+                        <button 
+                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            onClick={() => scrollLeft(scrollContainer2)}
+                            style={{ 
+                                width: '40px', 
+                                height: '40px',
+                                border: '1px solid #e0e0e0',
+                                fontSize: '1.5rem',
+                                padding: '0'
+                            }}
+                        >
+                            ‹
+                        </button>
+                        <button 
+                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            onClick={() => scrollRight(scrollContainer2)}
+                            style={{ 
+                                width: '40px', 
+                                height: '40px',
+                                border: '1px solid #e0e0e0',
+                                fontSize: '1.5rem',
+                                padding: '0'
+                            }}
+                        >
+                            ›
+                        </button>
                     </div>
-                    {recommendedCourses.length > 0 ? (
-                        <div className="carousel-container">
-                            <button className="carousel-nav left" onClick={() => scrollLeft(trackRef1, setCurrentPosition1)}>&lt;</button>
-                            <div className="carousel-track" ref={trackRef1} style={{ transform: `translateX(${currentPosition1}px)` }}>
-                                {recommendedCourses.map(course => (
-                                    <div className="card-carousel card-hover" key={course.id} onClick={() => handleCardClick(course.id)} style={{ cursor: 'pointer' }}>
-                                        <CourseImage
-                                            src={course.image_url || course.image}
-                                            fallback="/group.avif"
-                                            alt={course.title_of_course}
-                                            className="card-img-top"
-                                            style={{ height: '200px', objectFit: 'cover' }}
-                                        />
-                                        <div className="card-body">
-                                            <h5 className="card-title">{course.title_of_course}</h5>
-                                            <p className="card-text">{course.description}</p>
-                                            <div className="course-meta">
-                                                <small className="text-muted">
-                                                    By: {course.creator_first_name} {course.creator_last_name}
-                                                </small>
-                                                <div className="d-flex justify-content-between align-items-center mt-2">
-                                                    {course.is_subscribed ? (
-                                                        <div className="badge bg-success">Subscribed</div>
-                                                    ) : (
-                                                        <div className="badge bg-primary">Available</div>
-                                                    )}
-                                                    <div className="badge bg-info">Active</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                )}
+            </div>
+
+            {myCourses.length > 0 ? (
+                <div 
+                    ref={scrollContainer2}
+                    className="d-flex gap-3 mb-5 scroll-container" 
+                    style={{ 
+                        overflowX: 'auto', 
+                        scrollBehavior: 'smooth',
+                        paddingBottom: '1rem',
+                        scrollbarWidth: 'none',
+                        msOverflowStyle: 'none'
+                    }}
+                >
+                    {myCourses.map(course => (
+                        <div 
+                            key={course.id} 
+                            onClick={() => handleCardClick(course.id)} 
+                            style={{ 
+                                cursor: 'pointer',
+                                minWidth: '260px',
+                                maxWidth: '260px',
+                                backgroundColor: 'white',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-4px)';
+                                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                            }}
+                        >
+                            <div style={{ position: 'relative' }}>
+                                <div className="course-image-container">
+                                    <CourseImage
+                                        src={course.image_url || course.image}
+                                        fallback="/group.avif"
+                                        alt={course.title_of_course}
+                                        className="course-image"
+                                        style={{ 
+                                            backgroundColor: '#E8E8F5'
+                                        }}
+                                    />
+                                </div>
+                                <div style={{
+                                    position: 'absolute',
+                                    bottom: '0',
+                                    left: 0,
+                                    right: 0,
+                                    height: '6px',
+                                    background: `linear-gradient(90deg, 
+                                        #C85B3C ${course.progress_percentage || 0}%, 
+                                        transparent ${course.progress_percentage || 0}%)`
+                                }}></div>
                             </div>
-                            <button className="carousel-nav right" onClick={() => scrollRight(trackRef1, setCurrentPosition1)}>&gt;</button>
+                            <div style={{ padding: '1rem' }}>
+                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                    <span style={{ 
+                                        backgroundColor: '#FFE4D6',
+                                        color: '#C85B3C',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '500',
+                                        padding: '0.25rem 0.75rem',
+                                        borderRadius: '6px'
+                                    }}>
+                                        {course.department || 'Finance dept.'}
+                                    </span>
+                                    <button 
+                                        style={{ 
+                                            border: 'none', 
+                                            background: 'transparent',
+                                            fontSize: '1.25rem',
+                                            cursor: 'pointer',
+                                            padding: '0',
+                                            color: course.progress_percentage === 100 ? '#FFD700' : '#ddd'
+                                        }}
+                                    >
+                                        {course.progress_percentage === 100 ? '★' : '☆'}
+                                    </button>
+                                </div>
+                                <h5 style={{ 
+                                    fontSize: '1rem', 
+                                    fontWeight: '600',
+                                    marginBottom: '0.5rem',
+                                    color: '#1a1a1a'
+                                }}>
+                                    {course.title_of_course}
+                                </h5>
+                                <p style={{ 
+                                    fontSize: '0.875rem',
+                                    color: '#666',
+                                    marginBottom: '1rem',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    lineHeight: '1.4'
+                                }}>
+                                    {course.description}
+                                </p>
+                                <div className="d-flex justify-content-between align-items-center" style={{ 
+                                    fontSize: '0.8rem',
+                                    color: '#666',
+                                    paddingTop: '0.75rem',
+                                    borderTop: '1px solid #f0f0f0'
+                                }}>
+                                    <span>📚 {course.module_count || 5} modules</span>
+                                    <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
+                                    <span>👥 {course.enrolled_learners_count || 32} apprenants</span>
+                                </div>
+                                <button 
+                                    style={{
+                                        width: '100%',
+                                        marginTop: '1rem',
+                                        backgroundColor: course.progress_percentage === 100 ? '#8B92C4' : '#C85B3C',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        padding: '0.625rem',
+                                        fontSize: '0.9rem',
+                                        fontWeight: '500',
+                                        cursor: 'pointer',
+                                        transition: 'opacity 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                                    onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                                >
+                                    {course.progress_percentage === 100 ? 'Relire la formation ?' : 'Continuer la lecture'}
+                                </button>
+                            </div>
                         </div>
-                    ) : (
-                        <div className="alert alert-info">
-                            No active recommended courses available for your department at the moment.
-                        </div>
-                    )}
+                    ))}
                 </div>
             ) : (
-                <>
-                </>
-                // <div className="fullscreen-container">
-                //     <button className="close-button" onClick={handleCloseCourseDetail}>×</button>
-                //     <CourseDetailShow courseId={selectedCourseId} onClose={handleCloseCourseDetail} />
-                // </div>
+                <div className="alert alert-info mb-5">
+                    <strong>Aucune formation en cours</strong><br />
+                    Vous n'êtes pas encore inscrit à des formations. Découvrez nos formations recommandées ci-dessous !
+                </div>
             )}
-        </>
+
+            {/* Recommended Courses Section */}
+            <div className="d-flex justify-content-between align-items-center mb-4 mt-5">
+                <div>
+                    <h3 style={{ fontWeight: '600', marginBottom: '0.5rem', color: '#1a1a1a' }}>
+                        Formations recommandées
+                    </h3>
+                    <p style={{ fontSize: '0.95rem', color: '#666', marginBottom: '0' }}>
+                        Découvrez de nouvelles formations adaptées à vos besoins
+                    </p>
+                </div>
+                {recommendedCourses.length > 0 && (
+                    <div className="d-flex gap-2">
+                        <button 
+                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            onClick={() => scrollLeft(scrollContainer1)}
+                            style={{ 
+                                width: '40px', 
+                                height: '40px',
+                                border: '1px solid #e0e0e0',
+                                fontSize: '1.5rem',
+                                padding: '0'
+                            }}
+                        >
+                            ‹
+                        </button>
+                        <button 
+                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            onClick={() => scrollRight(scrollContainer1)}
+                            style={{ 
+                                width: '40px', 
+                                height: '40px',
+                                border: '1px solid #e0e0e0',
+                                fontSize: '1.5rem',
+                                padding: '0'
+                            }}
+                        >
+                            ›
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {recommendedCourses.length > 0 ? (
+                <div 
+                    ref={scrollContainer1}
+                    className="d-flex gap-3 scroll-container" 
+                    style={{ 
+                        overflowX: 'auto', 
+                        scrollBehavior: 'smooth',
+                        paddingBottom: '1rem',
+                        scrollbarWidth: 'none',
+                        msOverflowStyle: 'none'
+                    }}
+                >
+                    {recommendedCourses.map(course => (
+                        <div 
+                            key={course.id} 
+                            onClick={() => handleCardClick(course.id)} 
+                            style={{ 
+                                cursor: 'pointer',
+                                minWidth: '260px',
+                                maxWidth: '260px',
+                                backgroundColor: 'white',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-4px)';
+                                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                            }}
+                        >
+                            <div style={{ position: 'relative' }}>
+                                <div className="course-image-container">
+                                    <CourseImage
+                                        src={course.image_url || course.image}
+                                        fallback="/group.avif"
+                                        alt={course.title_of_course}
+                                        className="course-image"
+                                        style={{ 
+                                            backgroundColor: '#E8E8F5'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <div style={{ padding: '1rem' }}>
+                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                    <span style={{ 
+                                        backgroundColor: '#E3F2FD',
+                                        color: '#1976D2',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '500',
+                                        padding: '0.25rem 0.75rem',
+                                        borderRadius: '6px'
+                                    }}>
+                                        {course.department || 'Finance dept.'}
+                                    </span>
+                                    <button 
+                                        style={{ 
+                                            border: 'none', 
+                                            background: 'transparent',
+                                            fontSize: '1.25rem',
+                                            cursor: 'pointer',
+                                            padding: '0',
+                                            color: '#ddd'
+                                        }}
+                                    >
+                                        ☆
+                                    </button>
+                                </div>
+                                <h5 style={{ 
+                                    fontSize: '1rem', 
+                                    fontWeight: '600',
+                                    marginBottom: '0.5rem',
+                                    color: '#1a1a1a'
+                                }}>
+                                    {course.title_of_course}
+                                </h5>
+                                <p style={{ 
+                                    fontSize: '0.875rem',
+                                    color: '#666',
+                                    marginBottom: '1rem',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    lineHeight: '1.4'
+                                }}>
+                                    {course.description}
+                                </p>
+                                <div className="d-flex justify-content-between align-items-center" style={{ 
+                                    fontSize: '0.8rem',
+                                    color: '#666',
+                                    paddingTop: '0.75rem',
+                                    borderTop: '1px solid #f0f0f0'
+                                }}>
+                                    <span>📚 {course.module_count || 5} modules</span>
+                                    <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
+                                    <span>👥 {course.enrolled_learners_count || 32} apprenants</span>
+                                </div>
+                                <button 
+                                    onClick={(e) => handleSubscribeClick(course.id, e)}
+                                    style={{
+                                        width: '100%',
+                                        marginTop: '1rem',
+                                        backgroundColor: '#28a745',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        padding: '0.625rem',
+                                        fontSize: '0.9rem',
+                                        fontWeight: '500',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.opacity = '0.9';
+                                        e.currentTarget.style.transform = 'scale(1.02)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.opacity = '1';
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                    }}
+                                >
+                                    S'inscrire et commencer
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="alert alert-info">
+                    Aucune formation recommandée disponible pour votre département pour le moment.
+                </div>
+            )}
+        </div>
     );
 };
 

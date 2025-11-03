@@ -4,7 +4,7 @@ from . import views
 from .views import (
     # Authentication & User Views
     UserView, LoginView, LogoutView, CheckAuthentificationView, 
-    RegisterwithoutFileView, CSVUploadView, DashboardView, CourseContentsView,
+    RegisterwithoutFileView, CSVUploadView, DashboardView, CourseContentsView, CourseStudentsAPIView, CourseSubscribeAPIView,
     
     # Admin Views
     AdminDashboardView, UserManagementView, CourseStatusManagementView,
@@ -22,7 +22,7 @@ from .views import (
     SubmitQCM,CourseList,
     
     # Time Tracking Views - ADD THESE
-    CourseTimeStatsView, TimeTrackingRecordView
+    CourseTimeStatsView, TimeTrackingRecordView,
 )
 
 # Create router for CourseViewSet
@@ -122,6 +122,10 @@ urlpatterns = [
     path('admin/contents/', ContentManagementView.as_view(), name='admin-contents'),
     path('admin/system-health/', SystemHealthView.as_view(), name='system-health'),
     path('admin/CourseList/', CourseList.as_view(), name='CourseList'),
+    path('courses/<int:course_id>/students/', CourseStudentsAPIView.as_view(), name='course-students'),
+    path('courses/<int:course_id>/subscribe/', CourseSubscribeAPIView.as_view(), name='course-subscribe'),
+    # path('courses/<int:course_id>/unsubscribe/', CourseUnsubscribeAPIView.as_view(), name='course-unsubscribe'),
+    # path('courses/<int:course_id>/subscriber-stats/', CourseSubscriberStatsAPIView.as_view(), name='course-subscriber-stats'),
 
     # In your CourseList view
     # Content completion endpoints
