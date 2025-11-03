@@ -456,7 +456,7 @@ const CourseDetail = () => {
       }
 
       try {
-        await api.patch(`contents/${selectedContent.id}/complete/`);
+        await api.patch(`contents/${selectedContent.id}/complete-content/`);
 
         // Update local state
         setUserProgress(prev => {
@@ -1657,7 +1657,7 @@ const CourseDetail = () => {
               <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Contenu à lire</h4>
 
               {/* PDF Content */}
-              {selectedContent.content_type_name?.toLowerCase() === 'pdf' && (
+              {/* {selectedContent.content_type_name?.toLowerCase() === 'pdf' && (
                 <div>
                   {getPdfUrl(selectedContent) ? (
                     <iframe
@@ -1683,7 +1683,7 @@ const CourseDetail = () => {
                     </div>
                   )}
                 </div>
-              )}
+              )} */}
 
               {/* Video Content */}
               {selectedContent.content_type_name?.toLowerCase() === 'video' && (
@@ -2371,6 +2371,7 @@ const CourseDetail = () => {
 
                   {/* Enhanced QCM Form */}
                   {selectedContentType === 'qcm' && (
+                    <>
                     <div style={{ marginBottom: '1.5rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h4 style={{ fontSize: '0.875rem', fontWeight: '600' }}>Configuration du QCM</h4>
@@ -2529,7 +2530,22 @@ const CourseDetail = () => {
                           </div>
 
                           {/* QCM Settings */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          
+                      
+                        </div>
+
+                        
+                      ))}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        
+                         
+                          </div>
+                          <div style={{ marginBottom: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: '600' }}>Configuration du QCM</h4>
+                                </div>
+                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div>
                               <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
                                 Points
@@ -2607,10 +2623,10 @@ const CourseDetail = () => {
                                 }}
                               />
                             </div>
+                         
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                          </div>
+                    </>
                   )}
 
                   <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>

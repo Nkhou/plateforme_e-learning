@@ -21,19 +21,25 @@ interface QCMOption {
 interface QCMQuestion {
   id: number;
   question: string;
+  question_type: 'single' | 'multiple';
   options: QCMOption[];
+  points?: number;
+  order?: number;
 }
 
 interface QCM {
   id: number;
   title: string;
   questions: QCMQuestion[];
+  passing_score?: number;
+  max_attempts?: number;
+  time_limit?: number;
 }
 
 interface Content {
   id: number;
   title: string;
-  content_type: string;
+  content_type_name: string;
   caption?: string;
   order: number;
   status: number;
@@ -60,7 +66,7 @@ interface Course {
   id: number;
   title_of_course: string;
   description: string;
-  image?: string;
+  image_url?: string;
   status: number;
   department?: string;
   category?: string;
@@ -87,14 +93,91 @@ const CourseDetail = () => {
   const [showModal, setShowModal] = useState(false);
   const [timeSpent, setTimeSpent] = useState(0);
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
+  const [selectedQCMOptions, setSelectedQCMOptions] = useState<{[questionId: number]: number[]}>({});
+
+  const normalizeQCMContent = (content: Content): Content => {
+    const normalizedContent = { ...content };
+
+    if (content.content_type_name?.toLowerCase() === 'qcm' && content.qcm) {
+      const qcm = content.qcm;
+
+      // Normalisation des questions
+      let questions: QCMQuestion[] = [];
+      console.log('just +++++++++++', qcm);
+      if (Array.isArray(qcm.questions) && qcm.questions.length > 0) {
+        // Format multi-questions
+        questions = qcm.questions.map((q: any, index: number) => ({
+          id: q.id || index + 1,
+          question: q.question || '',
+          question_type: q.question_type || 'single',
+          options: (q.options || []).map((opt: any, optIndex: number) => ({
+            id: opt.id || optIndex + 1,
+            text: opt.text || '',
+            is_correct: Boolean(opt.is_correct)
+          })),
+          points: q.points || 1,
+          order: q.order || index + 1
+        }));
+      } else {
+        // Si pas de questions ou format invalide, créer une question par défaut
+        questions = [{
+          id: 1,
+          question: content.title || 'Question',
+          question_type: 'single',
+          options: [
+            { id: 1, text: 'Option 1', is_correct: false },
+            { id: 2, text: 'Option 2', is_correct: false }
+          ],
+          points: 1,
+          order: 1
+        }];
+      }
+
+      normalizedContent.qcm = {
+        id: qcm.id,
+        title: qcm.title || content.title,
+        questions,
+        passing_score: qcm.passing_score || 80,
+        max_attempts: qcm.max_attempts || 3,
+        time_limit: qcm.time_limit || 0
+      };
+    }
+
+    return normalizedContent;
+  };
+
+  const [userProgress, setUserProgress] = useState<{
+    completedContents: number[];
+    completedQCMs: number[];
+    timeSpent: { [contentId: number]: number };
+  }>({
+    completedContents: [],
+    completedQCMs: [],
+    timeSpent: {}
+  });
 
   useEffect(() => {
     const fetchCourse = async () => {
       try {
         setLoading(true);
         const response = await api.get(`courses/${id}/`);
-        console.log('course needed', response.data);
         setCourse(response.data);
+        console.log('---------------------i need it', response.data);
+
+        // Normaliser les contenus QCM
+        if (response.data.modules) {
+          const normalizedModules = response.data.modules.map((module: Module) => ({
+            ...module,
+            contents: module.contents.map((content: Content) => normalizeQCMContent(content))
+          }));
+          setCourse(prev => prev ? { ...prev, modules: normalizedModules } : null);
+        }
+
+        // Load user progress from localStorage
+        const savedProgress = localStorage.getItem(`course_progress_${id}`);
+        if (savedProgress) {
+          setUserProgress(JSON.parse(savedProgress));
+        }
       } catch (error) {
         console.error('Error fetching course:', error);
       } finally {
@@ -124,6 +207,25 @@ const CourseDetail = () => {
     }
   }, [showModal, selectedContent]);
 
+  // Update time spent in userProgress when modal closes
+  useEffect(() => {
+    return () => {
+      if (selectedContent && timeSpent > 0) {
+        setUserProgress(prev => {
+          const newProgress = {
+            ...prev,
+            timeSpent: {
+              ...prev.timeSpent,
+              [selectedContent.id]: (prev.timeSpent[selectedContent.id] || 0) + timeSpent
+            }
+          };
+          localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+          return newProgress;
+        });
+      }
+    };
+  }, [selectedContent, timeSpent, id]);
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -144,14 +246,60 @@ const CourseDetail = () => {
     if (!contentType) return '📌';
     switch (contentType.toLowerCase()) {
       case 'video':
-        return '🎥';
+        return '🎬';
       case 'pdf':
         return '📄';
       case 'qcm':
-        return '📝';
+        return <img src="/cerveau.png" alt="QCM" width={20} height={20} />;
       default:
         return '📌';
     }
+  };
+
+  const BASE_URL = 'http://localhost:8000';
+
+  const getVideoUrl = (content: Content) => {
+    console.log(content)
+    const videoFile = content.video_content?.video_file;
+    if (videoFile) {
+      let url = videoFile;
+
+      // Replace backend domain with localhost if necessary
+      url = url.replace('http://backend:8000', BASE_URL);
+      console.log('url', url);
+
+      if (!url.startsWith('http')) {
+        url = `${BASE_URL}${url}`;
+      }
+
+      return url;
+    }
+    return null;
+  };
+
+  const getimageUrl = (contentOrPath: Content | string | undefined): string | undefined => {
+    if (!contentOrPath) return undefined;
+
+    let imagePath: string | undefined;
+
+    if (typeof contentOrPath === 'string') {
+      imagePath = contentOrPath;
+    } else {
+      imagePath = contentOrPath.video_content?.video_file
+        || (contentOrPath as any).video_file
+        || contentOrPath.pdf_content?.pdf_file
+        || (contentOrPath as any).image_url;
+    }
+
+    if (!imagePath) return undefined;
+
+    let url = imagePath.replace('http://backend:8000', BASE_URL);
+
+    if (!url.startsWith('http')) {
+      url = `${BASE_URL}${url}`;
+    }
+
+    return url;
   };
 
   const getStatusBadge = (status: number) => {
@@ -165,17 +313,69 @@ const CourseDetail = () => {
     setSelectedContent(content);
     setShowModal(true);
     setTimeSpent(0);
+    setSelectedQCMOptions({});
   };
 
   const handleMarkAsCompleted = async () => {
     if (selectedContent) {
+      const hasMetTimeRequirement = !selectedContent.min_required_time ||
+        (userProgress.timeSpent[selectedContent.id] || 0) >= (selectedContent.min_required_time * 60);
+
+      if (!hasMetTimeRequirement) {
+        alert(`Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`);
+        return;
+      }
+
       try {
-        await api.patch(`contents/${selectedContent.id}/complete/`);
+        const contentType = selectedContent.content_type_name?.toLowerCase();
+
+        if (contentType === 'qcm') {
+          // For QCM content, check if it has already been completed
+          const isQCMCompleted = userProgress.completedQCMs?.includes(selectedContent.id);
+          
+          if (!isQCMCompleted) {
+            alert('Vous devez d\'abord compléter et soumettre le QCM avant de marquer ce contenu comme terminé.');
+            return;
+          }
+
+          // If QCM is already completed, mark the content as completed
+          await api.patch(`contents/${selectedContent.id}/complete/`);
+
+        } else if (contentType === 'pdf') {
+          // For PDF content
+          await api.post(`courses/${id}/completePdf/`, {
+            content_id: selectedContent.id,
+          });
+
+        } else if (contentType === 'video') {
+          // For Video content
+          await api.post(`courses/${id}/completeVideo/`, {
+            content_id: selectedContent.id,
+          });
+
+        } else {
+          // For other content types
+          await api.patch(`contents/${selectedContent.id}/complete/`);
+        }
+
+        // Update local state
+        setUserProgress(prev => {
+          const newProgress = {
+            ...prev,
+            completedContents: [...prev.completedContents, selectedContent.id]
+          };
+          localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+          return newProgress;
+        });
+
         alert('Contenu marqué comme terminé');
         setShowModal(false);
         setSelectedContent(null);
+
+        // Refresh course data
         const response = await api.get(`courses/${id}/`);
         setCourse(response.data);
+        
       } catch (error) {
         console.error('Error marking content as completed:', error);
         alert('Erreur lors de la mise à jour');
@@ -183,28 +383,104 @@ const CourseDetail = () => {
     }
   };
 
+  const handleQCMOptionChange = (questionId: number, optionId: number, isMultiple: boolean) => {
+    setSelectedQCMOptions(prev => {
+      if (isMultiple) {
+        const currentOptions = prev[questionId] || [];
+        const newOptions = currentOptions.includes(optionId)
+          ? currentOptions.filter(id => id !== optionId)
+          : [...currentOptions, optionId];
+        return {
+          ...prev,
+          [questionId]: newOptions
+        };
+      } else {
+        return {
+          ...prev,
+          [questionId]: [optionId]
+        };
+      }
+    });
+  };
+
+  const handleQCMSubmit = async () => {
+  if (!selectedContent) return;
+
+  try {
+    // Create the correct structure for question_answers
+    const questionAnswers: { [questionId: number]: number[] } = {};
+    
+    // Populate the question_answers object
+    Object.keys(selectedQCMOptions).forEach(questionId => {
+      const questionIdNum = parseInt(questionId);
+      const selectedOptions = selectedQCMOptions[questionIdNum];
+      if (selectedOptions && selectedOptions.length > 0) {
+        questionAnswers[questionIdNum] = selectedOptions;
+      }
+    });
+
+    console.log('Submitting QCM with data:', {
+      content_id: selectedContent.id,
+      question_answers: questionAnswers,
+      time_taken: timeSpent
+    });
+
+    const response = await api.post(`courses/${id}/submit-qcm/`, {
+      content_id: selectedContent.id,
+      question_answers: questionAnswers, // Send as structured object
+      time_taken: timeSpent,
+    });
+
+    // Check if user passed the QCM
+    if (response.data.is_passed) {
+      // Update local state to mark QCM as completed
+      setUserProgress(prev => {
+        const newProgress = {
+          ...prev,
+          completedQCMs: [...(prev.completedQCMs || []), selectedContent.id],
+          completedContents: [...prev.completedContents, selectedContent.id]
+        };
+        localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+        return newProgress;
+      });
+
+      // Mark content as completed on backend
+      // await api.patch(`contents/${selectedContent.id}/complete/`);
+
+      // alert('QCM réussi! Contenu marqué comme terminé.');
+      // setShowModal(false);
+      // setSelectedContent(null);
+
+      // Refresh course data
+      const courseResponse = await api.get(`courses/${id}/`);
+      setCourse(courseResponse.data);
+    } else {
+      alert(`QCM échoué. Score: ${response.data.percentage}% (Minimum requis: ${response.data.passing_score}%). Veuillez réessayer.`);
+    }
+  } catch (error) {
+    console.error('Error submitting QCM:', error);
+    alert('Erreur lors de la soumission du QCM');
+  }
+};
+
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedContent(null);
-  };
-
-  const getVideoUrl = (content: Content) => {
-    if (content.video_url) {
-      if (content.video_url.startsWith('http')) {
-        return content.video_url;
-      }
-      return `${window.location.protocol}//${window.location.hostname}:8000${content.video_url}`;
-    }
-    return null;
+    setSelectedQCMOptions({});
   };
 
   const getPdfUrl = (content: Content) => {
     if (content.pdf_content?.pdf_file) {
-      const pdfPath = content.pdf_content.pdf_file;
-      if (pdfPath.startsWith('http')) {
-        return pdfPath;
+      let pdfPath = content.pdf_content.pdf_file;
+
+      // Replace backend domain with localhost if necessary
+      pdfPath = pdfPath.replace('http://backend:8000', BASE_URL);
+
+      if (!pdfPath.startsWith('http')) {
+        pdfPath = `${BASE_URL}${pdfPath}`;
       }
-      return `${window.location.protocol}//${window.location.hostname}:8000${pdfPath}`;
+
+      return pdfPath;
     }
     return null;
   };
@@ -221,9 +497,9 @@ const CourseDetail = () => {
   };
 
   const getFileSize = (content: Content): string => {
-    if (content.content_type?.toLowerCase() === 'pdf') {
+    if (content.content_type_name?.toLowerCase() === 'pdf') {
       return '15MB';
-    } else if (content.content_type?.toLowerCase() === 'video') {
+    } else if (content.content_type_name?.toLowerCase() === 'video') {
       return '26.8MB';
     }
     return '';
@@ -233,10 +509,10 @@ const CourseDetail = () => {
     if (!dateString) return 'Date inconnue';
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('fr-FR', { 
-        day: 'numeric', 
-        month: 'short', 
-        year: 'numeric' 
+      return date.toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
       });
     } catch (error) {
       return 'Date invalide';
@@ -245,7 +521,7 @@ const CourseDetail = () => {
 
   if (loading) {
     return (
-      <div style={{ 
+      <div style={{
         backgroundColor: '#F3F4F6',
         minHeight: '100vh',
         display: 'flex',
@@ -259,7 +535,7 @@ const CourseDetail = () => {
 
   if (!course) {
     return (
-      <div style={{ 
+      <div style={{
         backgroundColor: '#F3F4F6',
         minHeight: '100vh',
         display: 'flex',
@@ -279,11 +555,11 @@ const CourseDetail = () => {
       <div style={{ backgroundColor: '#2D2B6B', color: 'white', padding: '1.5rem 2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>{course.title_of_course}</h1>
-          <span style={{ 
-            backgroundColor: statusBadge.color, 
-            color: 'white', 
-            padding: '0.25rem 0.75rem', 
-            borderRadius: '12px', 
+          <span style={{
+            backgroundColor: statusBadge.color,
+            color: 'white',
+            padding: '0.25rem 0.75rem',
+            borderRadius: '12px',
             fontSize: '0.75rem'
           }}>
             {statusBadge.text}
@@ -328,17 +604,17 @@ const CourseDetail = () => {
       <div style={{ padding: '2rem', display: 'flex', gap: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* Left Sidebar */}
         <div style={{ width: '300px', flexShrink: 0 }}>
-          <div style={{ 
-            backgroundColor: '#E5E7EB', 
-            borderRadius: '8px', 
-            height: '200px', 
+          <div style={{
+            backgroundColor: '#E5E7EB',
+            borderRadius: '8px',
+            height: '200px',
             marginBottom: '1.5rem',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            {course.image ? (
-              <img src={course.image} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+            {course.image_url ? (
+              <img src={getimageUrl(course.image_url)} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
             ) : (
               <div style={{ textAlign: 'center', color: '#9CA3AF' }}>
                 <div style={{ fontSize: '3rem' }}>📚</div>
@@ -348,11 +624,11 @@ const CourseDetail = () => {
           </div>
 
           {(course.department || course.category) && (
-            <div style={{ 
-              backgroundColor: '#FED7AA', 
-              color: '#9A3412', 
-              padding: '0.5rem 1rem', 
-              borderRadius: '20px', 
+            <div style={{
+              backgroundColor: '#FED7AA',
+              color: '#9A3412',
+              padding: '0.5rem 1rem',
+              borderRadius: '20px',
               fontSize: '0.875rem',
               display: 'inline-block',
               marginBottom: '1rem'
@@ -384,23 +660,6 @@ const CourseDetail = () => {
 
         {/* Right Content - Modules */}
         <div style={{ flex: 1 }}>
-          {/* <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
-            <button 
-              style={{
-                backgroundColor: '#2D2B6B',
-                color: 'white',
-                border: 'none',
-                padding: '0.625rem 1.25rem',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500'
-              }}
-            >
-              ➕ Nouveau module
-            </button>
-          </div> */}
-
           {course.modules && course.modules.length > 0 ? (
             course.modules.map((module) => (
               <div key={module.id} style={{ marginBottom: '1.5rem' }}>
@@ -409,16 +668,11 @@ const CourseDetail = () => {
                     <h3 style={{ fontSize: '1rem', fontWeight: '600', margin: 0 }}>
                       Module {module.order} • {module.title}
                     </h3>
-                    {/* <button 
-                      style={{ color: '#2D2B6B', cursor: 'pointer', background: 'none', border: 'none', fontSize: '0.875rem', fontWeight: '500', padding: 0 }}
-                    >
-                      + nouveau contenu
-                    </button> */}
                   </div>
 
                   {module.contents && module.contents.length > 0 ? (
                     module.contents.map((content) => (
-                      <div 
+                      <div
                         key={content.id}
                         onClick={() => handleContentClick(content)}
                         style={{
@@ -443,7 +697,7 @@ const CourseDetail = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                          <span>{getContentIcon(content.content_type)}</span>
+                          <span>{getContentIcon(content.content_type_name)}</span>
                           <span style={{ fontSize: '0.875rem', color: '#1F2937' }}>{content.title}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -452,7 +706,7 @@ const CourseDetail = () => {
                               {formatDuration(content.estimated_duration)}
                             </span>
                           )}
-                          {content.is_completed && (
+                          {userProgress.completedContents.includes(content.id) && (
                             <span style={{ fontSize: '0.875rem', color: '#10B981', fontWeight: '500' }}>
                               ✓ Complété
                             </span>
@@ -506,7 +760,7 @@ const CourseDetail = () => {
             {/* Header */}
             <div style={{ padding: '1.5rem', borderBottom: '1px solid #E5E7EB' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type)}</span>
+                <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type_name)}</span>
                 <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>{selectedContent.title}</h3>
               </div>
               <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
@@ -516,8 +770,8 @@ const CourseDetail = () => {
 
             {/* Time Required Banner */}
             {selectedContent.min_required_time && (
-              <div style={{ 
-                backgroundColor: '#FEF3C7', 
+              <div style={{
+                backgroundColor: '#FEF3C7',
                 padding: '1rem 1.5rem',
                 borderBottom: '1px solid #E5E7EB'
               }}>
@@ -536,7 +790,7 @@ const CourseDetail = () => {
             )}
 
             {/* Timer Display */}
-            <div style={{ 
+            <div style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#EEF2FF',
               borderBottom: '1px solid #E5E7EB',
@@ -547,11 +801,11 @@ const CourseDetail = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ fontSize: '1.25rem' }}>⏱️</span>
                 <span style={{ fontSize: '0.875rem', color: '#4338CA', fontWeight: '500' }}>
-                  Temps estimé de lecture : {selectedContent.estimated_duration || 15}min
+                  Temps estimé de lecture : {selectedContent.estimated_duration || 0}min
                 </span>
               </div>
               <div style={{ fontSize: '1rem', fontWeight: '600', color: '#4338CA' }}>
-                {formatTime(timeSpent)} / {formatTime((selectedContent.estimated_duration || 15) * 60)}
+                {formatTime(timeSpent)} / {formatTime((selectedContent.estimated_duration || 0) * 60)}
               </div>
             </div>
 
@@ -559,40 +813,11 @@ const CourseDetail = () => {
             <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
               <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Contenu à lire</h4>
 
-              {/* PDF Content */}
-              {selectedContent.content_type?.toLowerCase() === 'pdf' && (
-                <div>
-                  {getPdfUrl(selectedContent) ? (
-                    <iframe 
-                      src={getPdfUrl(selectedContent)!}
-                      style={{
-                        width: '100%',
-                        height: '500px',
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '6px',
-                        backgroundColor: '#000'
-                      }}
-                      title={selectedContent.title}
-                    />
-                  ) : (
-                    <div style={{
-                      backgroundColor: '#F3F4F6',
-                      borderRadius: '8px',
-                      padding: '3rem',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
-                      <div style={{ color: '#6B7280' }}>Document PDF non disponible</div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Video Content */}
-              {selectedContent.content_type?.toLowerCase() === 'video' && (
+              {selectedContent.content_type_name?.toLowerCase() === 'video' && (
                 <div>
                   {getVideoUrl(selectedContent) ? (
-                    <video 
+                    <video
                       controls
                       style={{
                         width: '100%',
@@ -621,50 +846,120 @@ const CourseDetail = () => {
               )}
 
               {/* QCM Content */}
-              {selectedContent.content_type?.toLowerCase() === 'qcm' && selectedContent.qcm && (
+              {selectedContent.content_type_name?.toLowerCase() === 'qcm' && selectedContent.qcm && (
                 <div style={{
                   padding: '1.5rem',
                   backgroundColor: '#F9FAFB',
                   borderRadius: '6px',
                   border: '1px solid #E5E7EB'
                 }}>
-                  <h5 style={{ marginBottom: '1rem', fontSize: '1rem' }}>{selectedContent.qcm.title}</h5>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '1.5rem',
+                    paddingBottom: '1rem',
+                    borderBottom: '1px solid #E5E7EB'
+                  }}>
+                    <h5 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>
+                      {selectedContent.qcm.title}
+                    </h5>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem', color: '#6B7280' }}>
+                      <span>Score de passage: {selectedContent.qcm.passing_score}%</span>
+                      <span>Tentatives: {selectedContent.qcm.max_attempts}</span>
+                      {selectedContent.qcm.time_limit && selectedContent.qcm.time_limit > 0 && (
+                        <span>Temps: {selectedContent.qcm.time_limit}min</span>
+                      )}
+                    </div>
+                  </div>
+
                   {selectedContent.qcm.questions?.map((question, qIndex) => (
-                    <div key={question.id} style={{ marginBottom: '2rem' }}>
-                      <div style={{ 
-                        fontWeight: '500', 
+                    <div key={question.id || qIndex} style={{
+                      marginBottom: '2rem',
+                      padding: '1rem',
+                      backgroundColor: 'white',
+                      borderRadius: '6px',
+                      border: '1px solid #E5E7EB'
+                    }}>
+                      <div style={{
+                        fontWeight: '500',
                         marginBottom: '1rem',
-                        fontSize: '1rem'
+                        fontSize: '1rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start'
                       }}>
-                        {qIndex + 1}. {question.question}
+                        <span>{qIndex + 1}. {question.question}</span>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          backgroundColor: '#EEF2FF',
+                          color: '#4338CA',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {question.question_type === 'single' ? 'Choix unique' : 'Choix multiple'}
+                          {question.points && ` • ${question.points} pt${question.points > 1 ? 's' : ''}`}
+                        </span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {question.options.map((option) => (
-                          <label 
-                            key={option.id}
+                        {question.options.map((option, oIndex) => (
+                          <label
+                            key={option.id || oIndex}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: '0.75rem',
                               padding: '0.75rem',
-                              backgroundColor: 'white',
-                              border: '1px solid #E5E7EB',
                               borderRadius: '4px',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              backgroundColor: selectedQCMOptions[question.id]?.includes(option.id) ? '#EEF2FF' : 'white',
+                              border: `1px solid ${selectedQCMOptions[question.id]?.includes(option.id) ? '#4338CA' : '#E5E7EB'}`
                             }}
                           >
-                            <input type="radio" name={`question-${question.id}`} style={{ cursor: 'pointer' }} />
-                            <span style={{ fontSize: '0.875rem' }}>{option.text}</span>
+                            <input
+                              type={question.question_type === 'single' ? 'radio' : 'checkbox'}
+                              name={`question-${question.id || qIndex}`}
+                              checked={selectedQCMOptions[question.id]?.includes(option.id) || false}
+                              onChange={() => handleQCMOptionChange(question.id, option.id, question.question_type === 'multiple')}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <span style={{
+                              fontSize: '0.875rem',
+                              color: selectedQCMOptions[question.id]?.includes(option.id) ? '#4338CA' : '#374151'
+                            }}>
+                              {option.text}
+                            </span>
                           </label>
                         ))}
                       </div>
                     </div>
                   ))}
+
+                  {/* QCM Submit Button */}
+                  {/* <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
+                    <button
+                      onClick={handleQCMSubmit}
+                      style={{
+                        padding: '0.75rem 2rem',
+                        backgroundColor: '#4338CA',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Soumettre le QCM
+                    </button>
+                  </div> */}
                 </div>
               )}
 
               {/* File Download Section */}
-              <div style={{ 
+              <div style={{
                 marginTop: '1rem',
                 padding: '1rem',
                 backgroundColor: '#F3F4F6',
@@ -674,7 +969,7 @@ const CourseDetail = () => {
                 justifyContent: 'space-between'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type)}</span>
+                  <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type_name)}</span>
                   <div>
                     <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>{getFileName(selectedContent)}</div>
                     <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>{getFileSize(selectedContent)}</div>
@@ -718,7 +1013,7 @@ const CourseDetail = () => {
             </div>
 
             {/* Footer Actions */}
-            <div style={{ 
+            <div style={{
               padding: '1.5rem',
               borderTop: '1px solid #E5E7EB',
               display: 'flex',
@@ -740,26 +1035,70 @@ const CourseDetail = () => {
               >
                 Fermer
               </button>
-              <button
-                onClick={handleMarkAsCompleted}
-                disabled={selectedContent.min_required_time ? timeSpent < (selectedContent.min_required_time * 60) : false}
-                style={{
-                  padding: '0.625rem 1.5rem',
-                  backgroundColor: (selectedContent.min_required_time && timeSpent < (selectedContent.min_required_time * 60)) ? '#9CA3AF' : '#4338CA',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  cursor: (selectedContent.min_required_time && timeSpent < (selectedContent.min_required_time * 60)) ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                <span>✓</span>
-                Mark as completed
-              </button>
+              {selectedContent.content_type_name?.toLowerCase() !== 'qcm' && (
+                <button
+                  onClick={handleMarkAsCompleted}
+                  disabled={
+                    userProgress.completedContents.includes(selectedContent.id) ||
+                    (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                  }
+                  style={{
+                    padding: '0.625rem 1.5rem',
+                    backgroundColor: userProgress.completedContents.includes(selectedContent.id)
+                      ? '#10B981'
+                      : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                        ? '#9CA3AF'
+                        : '#4338CA',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    cursor: userProgress.completedContents.includes(selectedContent.id) ||
+                      (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                      ? 'not-allowed'
+                      : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <span>✓</span>
+                  {userProgress.completedContents.includes(selectedContent.id) ? 'Terminé' : 'Marquer comme terminé'}
+                </button>
+              )}
+              {selectedContent.content_type_name?.toLowerCase() === 'qcm' && (
+                <button
+                  onClick={handleQCMSubmit}
+                  disabled={
+                    userProgress.completedContents.includes(selectedContent.id) ||
+                    (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                  }
+                  style={{
+                    padding: '0.625rem 1.5rem',
+                    backgroundColor: userProgress.completedContents.includes(selectedContent.id)
+                      ? '#10B981'
+                      : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                        ? '#9CA3AF'
+                        : '#4338CA',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    cursor: userProgress.completedContents.includes(selectedContent.id) ||
+                      (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
+                      ? 'not-allowed'
+                      : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <span>✓</span>
+                  {userProgress.completedContents.includes(selectedContent.id) ? 'Terminé' : 'Marquer comme terminé'}
+                </button>
+              )}
             </div>
           </div>
         </div>

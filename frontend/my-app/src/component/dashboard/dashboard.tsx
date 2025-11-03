@@ -289,21 +289,21 @@ const Dashboard = () => {
     };
 
     // Debug component to see what's happening
-    const DebugInfo = () => (
-        <div style={{ 
-            backgroundColor: '#f8f9fa', 
-            padding: '10px', 
-            margin: '10px 0', 
-            border: '1px solid #ddd',
-            fontSize: '12px'
-        }}>
-            <strong>Debug Info:</strong><br />
-            My Courses Count: {myCourses.length}<br />
-            Recommended Courses Count: {recommendedCourses.length}<br />
-            Loading: {loading ? 'Yes' : 'No'}<br />
-            Error: {error || 'None'}
-        </div>
-    );
+    // const DebugInfo = () => (
+    //     <div style={{ 
+    //         backgroundColor: '#f8f9fa', 
+    //         padding: '10px', 
+    //         margin: '10px 0', 
+    //         border: '1px solid #ddd',
+    //         fontSize: '12px'
+    //     }}>
+    //         <strong>Debug Info:</strong><br />
+    //         My Courses Count: {myCourses.length}<br />
+    //         Recommended Courses Count: {recommendedCourses.length}<br />
+    //         Loading: {loading ? 'Yes' : 'No'}<br />
+    //         Error: {error || 'None'}
+    //     </div>
+    // );
 
     if (loading) return (
         <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
@@ -318,7 +318,7 @@ const Dashboard = () => {
             <div className="alert alert-danger" role="alert">
                 {error}
             </div>
-            <DebugInfo />
+            {/* <DebugInfo /> */}
         </div>
     );
 
@@ -351,7 +351,7 @@ const Dashboard = () => {
             </style>
 
             {/* Debug information - remove in production */}
-            <DebugInfo />
+            {/* <DebugInfo /> */}
 
             {/* My Courses Section - Formations en cours */}
             <div className="d-flex justify-content-between align-items-center mb-4">
@@ -447,7 +447,7 @@ const Dashboard = () => {
                                     bottom: '0',
                                     left: 0,
                                     right: 0,
-                                    height: '6px',
+                                    height: '10px',
                                     background: `linear-gradient(90deg, 
                                         #C85B3C ${course.progress_percentage || 0}%, 
                                         transparent ${course.progress_percentage || 0}%)`

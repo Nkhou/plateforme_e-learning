@@ -3218,7 +3218,9 @@ class SubmitQCM(APIView):
             user = request.user
             content_id = request.data.get('content_id')
             # Expecting: { "question_answers": { "question_id": [selected_option_ids] } }
+            print('**********************************')
             question_answers = request.data.get('question_answers', {})
+            print('++++++++++++++++++++++++++++++++')
             time_taken = request.data.get('time_taken', 0)
             
             print(f"🔍 QCM Submission - Course: {course.id}, Content: {content_id}")
@@ -3275,6 +3277,7 @@ class SubmitQCM(APIView):
                     is_correct = (selected_correct == 1 and selected_incorrect == 0 and 
                                  selected_options.count() == 1)
                     question_score = question.points if is_correct else 0
+                    print('question_score', question_score)
                     
                 else:  # Multiple choice
                     # Partial scoring: (correct_selected - incorrect_selected) / total_correct * points
