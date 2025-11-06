@@ -29,6 +29,7 @@ interface SearchResult {
   course_id?: number;
   module_id?: number;
 }
+
 const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
   <button
     onClick={onClick}
@@ -39,18 +40,21 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; 
       backgroundColor: active ? '#4338CA' : 'transparent',
       color: active ? 'white' : '#A0AEC0',
       border: 'none',
-      padding: '0.625rem 1rem',
+      padding: '0.5rem 0.875rem',
       borderRadius: '6px',
       cursor: 'pointer',
-      fontSize: '0.9375rem',
+      fontSize: '0.875rem',
       fontWeight: '500',
-      transition: 'all 0.2s ease'
+      transition: 'all 0.2s ease',
+      whiteSpace: 'nowrap',
+      flexShrink: 0
     }}
   >
-    <span style={{ fontSize: '1.125rem' }}>{icon}</span>
+    <span style={{ fontSize: '1rem' }}>{icon}</span>
     {label}
   </button>
 );
+
 const AuthGuard = ({ children }: AuthGuardProps) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -66,24 +70,24 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const [activeNavItem, setActiveNavItem] = useState('dashboard');
 
   useEffect(() => {
-  const handleClickOutside = (event: MouseEvent) => {
-    const target = event.target as Node;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
 
-    if (dropdownRef.current && !dropdownRef.current.contains(target)) {
-      setOpen(false);
-      setOpenNotif(false);
-    }
-    
-    // Don't close if clicking inside the search card (including buttons)
-    if (searchCardRef.current && !searchCardRef.current.contains(target) &&
-      !(target as Element).closest('.search-bar')) {
-      setShowSearchCard(false);
-    }
-  };
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
+        setOpen(false);
+        setOpenNotif(false);
+      }
+      
+      // Don't close if clicking inside the search card (including buttons)
+      if (searchCardRef.current && !searchCardRef.current.contains(target) &&
+        !(target as Element).closest('.search-bar')) {
+        setShowSearchCard(false);
+      }
+    };
 
-  document.addEventListener('mousedown', handleClickOutside);
-  return () => document.removeEventListener('mousedown', handleClickOutside);
-}, []);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Close search card when pressing Escape key
   useEffect(() => {
@@ -179,6 +183,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
     checkAuthentication();
   }, [navigate, location]);
+
   const handleNavigation = (item: string) => {
     // update active nav item
     setActiveNavItem(item);
@@ -223,11 +228,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         navigate('/dashboard');
         break;
     }
-    // setActiveNavItem(item);
-    // if (item === 'dashboard') {
-    //   setActiveTab('overview');
-    // }
   };
+
   const handleLogOut = async () => {
     try {
       await api.post('logout/', {}, {
@@ -257,7 +259,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         >
           <div
             ref={searchCardRef}
-            className="card position-absolute top-50 start-50 translate-middle"
+            className="card position-absolute translate-middle"
             style={{
               width: '90%',
               maxWidth: '600px',
@@ -265,34 +267,20 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               zIndex: 1050,
               boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
               border: 'none',
-              borderRadius: '12px'
+              borderRadius: '12px',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)'
             }}
           >
-            {/* <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center"
-              style={{ borderTopLeftRadius: '12px', borderTopRightRadius: '12px' }}>
-              <h5 className="mb-0">
-                <i className="fas fa-search me-2"></i>
-                Recherche
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white"
-                onClick={() => setShowSearchCard(false)}
-                aria-label="Close"
-              ></button>
-            </div> */}
-            <div className="card-body p-4">
+            <div className="card-body p-3 p-md-4">
               <SearchComponent
                 onSearchResultClick={handleSearchResultClick}
                 placeholder="Que cherchez-vous?"
                 className="w-100"
-              autoFocus={true}
+                autoFocus={true}
               />
               <div className="text-muted mt-3">
-                {/* <small>
-                  <i className="fas fa-info-circle me-1"></i>
-                  Recherchez parmi vos cours, modules et contenus. Appuyez sur Échap pour fermer.
-                </small> */}
               </div>
             </div>
           </div>
@@ -303,174 +291,436 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
       <div className="flex-grow-1 d-flex flex-column">
         {/* Top Navbar */}
         <nav
-          className="navbar navbar-light border-bottom px-3"
+          className="navbar navbar-light border-bottom px-2 px-md-3"
           style={{ background: 'rgba(5, 44, 101, 0.9)' }}
         >
           <div className="container-fluid">
             <div className="d-flex align-items-center w-100">
-              <button
-                className="btn btn-outline-light d-md-none me-3"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                style={{ borderColor: 'rgba(255,255,255,0.5)' }}
-                aria-label="Toggle sidebar"
+              {/* Logo Image - Always visible */}
+              <img
+                src="/logo-colored.png"
+                alt="Logo"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  objectFit: 'contain',
+                  marginRight: '0.75rem'
+                }}
+              />
+
+              {/* Search Bar - Hidden on small screens, visible on md+ */}
+              <div
+                className="search-bar-container position-relative d-none d-md-block"
+                style={{
+                  maxWidth: '250px',
+                  minWidth: '200px',
+                  marginRight: 'auto'
+                }}
               >
-                {sidebarOpen ? '×' : '☰'}
+                <div
+                  className="search-bar d-flex align-items-center"
+                  onClick={handleSearchIconClick}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #dee2e6',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    height: '40px'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = '#f8f9fa';
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'white';
+                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                  }}
+                >
+                  <i className="fas fa-search me-2" style={{ color: '#6c757d' }}></i>
+                  <span style={{ color: '#6c757d', fontWeight: '400', fontSize: '0.875rem' }}>
+                    Que cherchez-vous?
+                  </span>
+
+                  <div
+                    style={{
+                      width: '1px',
+                      height: '24px',
+                      backgroundColor: '#ced4da',
+                      marginLeft: '8px',
+                      marginRight: '8px'
+                    }}
+                  ></div>
+                  <button
+                    type="button"
+                    className="btn bg-gray-100 text-black px-2 py-1 rounded"
+                    style={{
+                      border: 'none',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    🔎︎
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile Search Icon - Visible only on small screens */}
+              <button
+                className="btn btn-outline-light d-md-none ms-auto me-2"
+                onClick={handleSearchIconClick}
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  backgroundColor: '#1e1b4b',
+                  border: 'none',
+                  padding: 0
+                }}
+                aria-label="Search"
+              >
+                🔍
               </button>
 
-              {!sidebarOpen && (
-                <div className="d-flex align-items-center justify-content-between w-100">
-                  {/* Left Side: Logo + Search Bar */}
-                  <div className="d-flex align-items-center justify-content-between w-100">
-                    {/* Left Side: Logo + Search Bar */}
-                    <div className="d-flex align-items-center gap-3">
-                      {/* Logo Image */}
-                      <img
-                        src="/logo-colored.png"
-                        alt="Logo"
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          objectFit: 'contain',
+              <div className="btn-group custom-dropdown-group ms-auto ms-md-0" ref={dropdownRef}>
+                {/* Notifications Dropdown */}
+                <div className="dropdown me-2">
+                  <button
+                    type="button"
+                    className="btn btn-outline-light dropdown-toggle"
+                    onClick={handleNotif}
+                    aria-expanded={openNotif}
+                    aria-label="Notifications"
+                    style={{
+                      width: '45px',
+                      height: '45px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '6px',
+                      backgroundColor: '#1e1b4b',
+                      border: 'none'
+                    }}
+                  >
+                    🔔
+                  </button>
+                  {openNotif && (
+                    <div className="dropdown-menu show mt-2" style={{
+                      minWidth: '380px',
+                      maxWidth: '95vw',
+                      maxHeight: '70vh',
+                      overflowY: 'auto',
+                      backgroundColor: '#e8eaf6',
+                      border: 'none',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                      padding: '0',
+                      right: '0',
+                      left: 'auto'
+                    }}>
+                      <div style={{
+                        padding: '1rem 1.5rem',
+                        borderBottom: '1px solid #d1d5db',
+                        backgroundColor: '#e8eaf6',
+                        borderTopLeftRadius: '12px',
+                        borderTopRightRadius: '12px'
+                      }}>
+                        <h6 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#1f2937' }}>
+                          Notifications
+                        </h6>
+                      </div>
+                      
+                      <div style={{ padding: '0.5rem' }}>
+                        <div style={{
+                          padding: '0.5rem 1rem',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          color: '#6b7280',
+                          textTransform: 'uppercase'
+                        }}>
+                          Aujourd'hui
+                        </div>
+                        
+                        {/* Notification Item */}
+                        <div style={{
+                          display: 'flex',
+                          gap: '0.75rem',
+                          padding: '0.75rem 1rem',
+                          backgroundColor: 'white',
+                          borderRadius: '8px',
+                          marginBottom: '0.5rem',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s'
                         }}
-                      />
-
-                      {/* Search Bar */}
-                      <div
-                        className="search-bar-container position-relative"
-                        style={{
-                          maxWidth: '250px',
-                          minWidth: '200px',
-                        }}
-                      >
-                        <div
-                          className="search-bar d-flex align-items-center"
-                          onClick={handleSearchIconClick}
-                          style={{
-                            background: 'white',
-                            border: '1px solid #dee2e6',
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
                             borderRadius: '8px',
-                            padding: '8px 12px',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                            height: '40px'
-                          }}
-                          onMouseOver={(e) => {
-                            e.currentTarget.style.background = '#f8f9fa';
-                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
-                          }}
-                          onMouseOut={(e) => {
-                            e.currentTarget.style.background = 'white';
-                            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-                          }}
-                        >
-                          <i className="fas fa-search me-2" style={{ color: '#6c757d' }}></i>
-                          <span style={{ color: '#6c757d', fontWeight: '400' }}>
-                            Que cherchez-vous?
-                          </span>
+                            backgroundColor: '#c7d2fe',
+                            flexShrink: 0
+                          }}></div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.875rem', color: '#1f2937', marginBottom: '0.25rem' }}>
+                              <strong>Nouveau module disponible</strong> "titre du module" par [nom formateur]
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                              • Il y a 2 heures
+                            </div>
+                          </div>
+                        </div>
 
-                          <div
-                            style={{
-                              width: '1px',
-                              height: '24px',
-                              backgroundColor: '#ced4da',
-                              marginRight: '2px'
-                            }}
-                          ></div>
-                          <button
-                            type="button"
-                            className="btn bg-gray-100 text-black px-2 py-1 rounded "
-                            style={{
-                              // backgroundColor: '#d3d3d3', // light gray
-                              border: 'none'
-                            }}
-                          >
-                            🔎︎
-                          </button>
+                        <div style={{
+                          padding: '0.5rem 1rem',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          color: '#6b7280',
+                          textTransform: 'uppercase',
+                          marginTop: '0.5rem'
+                        }}>
+                          11 Octobre, 2025
+                        </div>
+
+                        {/* More Notification Items */}
+                        <div style={{
+                          display: 'flex',
+                          gap: '0.75rem',
+                          padding: '0.75rem 1rem',
+                          backgroundColor: 'white',
+                          borderRadius: '8px',
+                          marginBottom: '0.5rem',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '8px',
+                            backgroundColor: '#c7d2fe',
+                            flexShrink: 0
+                          }}></div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.875rem', color: '#1f2937', marginBottom: '0.25rem' }}>
+                              <strong>Jean dupont</strong> a terminer la lecture du module [titre du module]
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                              • Il y a 2 heures
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{
+                          display: 'flex',
+                          gap: '0.75rem',
+                          padding: '0.75rem 1rem',
+                          backgroundColor: 'white',
+                          borderRadius: '8px',
+                          marginBottom: '0.5rem',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '8px',
+                            backgroundColor: '#c7d2fe',
+                            flexShrink: 0
+                          }}></div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.875rem', color: '#1f2937', marginBottom: '0.25rem' }}>
+                              <strong>Nouveau module disponible</strong> "titre du module" par [nom formateur]
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                              • Il y a 2 heures
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="btn-group custom-dropdown-group" ref={dropdownRef}>
-                    {/* Notifications Dropdown */}
-                    <div className="dropdown me-2">
-                      <button
-                        type="button"
-                        className="btn btn-outline-light dropdown-toggle"
-                        onClick={handleNotif}
-                        aria-expanded={openNotif}
-                        aria-label="Notifications"
-                        style={{
-                          width: '45px',
-                          height: '45px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '6px'
-                        }}
-                      >
-                        🔔
-                      </button>
-                      {openNotif && (
-                        <div className="dropdown-menu show custom-dark-dropdown mt-2">
-                          <h6 className="dropdown-header custom-header">Hello, {user?.username}</h6>
-                          <a className="dropdown-item custom-item" href="#">cours</a>
-                        </div>
-                      )}
-                    </div>
 
-                    {/* User Menu Dropdown */}
-                    <div className="dropdown">
-                      <button
-                        type="button"
-                        className="btn btn-outline-light dropdown-toggle"
-                        onClick={handleMenu}
-                        aria-expanded={open}
-                        aria-label="User menu"
-                        style={{
-                          width: '45px',
-                          height: '45px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '6px'
+                      <div style={{
+                        padding: '1rem',
+                        borderTop: '1px solid #d1d5db',
+                        backgroundColor: '#e8eaf6',
+                        borderBottomLeftRadius: '12px',
+                        borderBottomRightRadius: '12px',
+                        textAlign: 'center'
+                      }}>
+                        <a href="#" style={{
+                          color: '#4338ca',
+                          fontSize: '0.875rem',
+                          fontWeight: '600',
+                          textDecoration: 'none'
                         }}
-                      >
-                        👤
-                      </button>
-                      {open && (
-                        <div className="dropdown-menu show custom-dark-dropdown mt-2">
-                          <h6 className="dropdown-header custom-header">Hello, {user?.username}</h6>
-                          <a className="dropdown-item custom-item" href="#">Profile</a>
-                          <a className="dropdown-item custom-item" href="#">Settings</a>
-                          <div className="dropdown-divider custom-divider"></div>
-                          <button
-                            className="dropdown-item custom-item"
-                            onClick={handleLogOut}
-                            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left' }}
-                          >
-                            Log out
-                          </button>
-                        </div>
-                      )}
+                        onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                        onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>
+                          Voir toutes les notifications
+                        </a>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              )}
+
+                {/* User Menu Dropdown */}
+                <div className="dropdown">
+                  <button
+                    type="button"
+                    className="btn btn-outline-light dropdown-toggle"
+                    onClick={handleMenu}
+                    aria-expanded={open}
+                    aria-label="User menu"
+                    style={{
+                      width: '45px',
+                      height: '45px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '6px',
+                      backgroundColor: '#1e1b4b',
+                      border: 'none'
+                    }}
+                  >
+                    👤
+                  </button>
+                  {open && (
+                    <div className="dropdown-menu show mt-2" style={{
+                      minWidth: '280px',
+                      maxWidth: '95vw',
+                      backgroundColor: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                      padding: '0.5rem',
+                      right: '0',
+                      left: 'auto'
+                    }}>
+                      <div style={{
+                        padding: '0.75rem 1rem',
+                        borderBottom: '1px solid #e5e7eb',
+                        marginBottom: '0.5rem'
+                      }}>
+                        <h6 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
+                          Mon compte
+                        </h6>
+                      </div>
+                      
+                      <a href="#" style={{
+                        display: 'block',
+                        padding: '0.75rem 1rem',
+                        color: '#374151',
+                        textDecoration: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        Mon compte
+                      </a>
+                      
+                      <a href="#" style={{
+                        display: 'block',
+                        padding: '0.75rem 1rem',
+                        color: '#374151',
+                        textDecoration: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        Paramètres
+                      </a>
+
+                      <div style={{
+                        borderTop: '1px solid #e5e7eb',
+                        margin: '0.5rem 0'
+                      }}></div>
+
+                      <button
+                        onClick={handleLogOut}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '0.75rem 1rem',
+                          color: '#dc2626',
+                          textDecoration: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          transition: 'background-color 0.2s',
+                          background: 'none',
+                          border: 'none',
+                          textAlign: 'left',
+                          cursor: 'pointer'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        Se déconnecter
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-      </nav>
-        <nav style={{ backgroundColor: '#12114a', padding: '0.80rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', maxWidth: '1400px', margin: '0 auto' }}>
-          <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
-          <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
-          <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
-          <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
-          <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
-        </div>
         </nav>
+
+        {/* Bottom Navigation Bar */}
+        <nav style={{ 
+          backgroundColor: '#12114a', 
+          padding: '0.80rem 1rem', 
+          borderBottom: '1px solid rgba(255,255,255,0.1)', 
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255,255,255,0.3) transparent'
+        }}>
+          <style>
+            {`
+              nav::-webkit-scrollbar {
+                height: 4px;
+              }
+              nav::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              nav::-webkit-scrollbar-thumb {
+                background: rgba(255,255,255,0.3);
+                border-radius: 2px;
+              }
+              nav::-webkit-scrollbar-thumb:hover {
+                background: rgba(255,255,255,0.5);
+              }
+            `}
+          </style>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.5rem', 
+            maxWidth: '1400px', 
+            margin: '0 auto', 
+            minWidth: 'max-content',
+            paddingLeft: '0.5rem',
+            paddingRight: '0.5rem'
+          }}>
+            <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
+            <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
+            <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
+            <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
+            <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
+          </div>
+        </nav>
+
         {/* Page Content */}
-        <div className="flex-grow-1 " style={{ background: '#f8f9fa' }}>
+        <div className="flex-grow-1" style={{ background: '#f8f9fa' }}>
           {children}
         </div>
       </div>
