@@ -156,6 +156,17 @@ const CourseDetail = () => {
     timeSpent: {}
   });
 
+  // Add this helper function to check if content is completed
+  const isContentCompleted = (content: Content) => {
+    return content.is_completed || userProgress.completedContents.includes(content.id);
+  };
+
+  // Add debug useEffect
+  useEffect(() => {
+    console.log('Current userProgress:', userProgress);
+    console.log('LocalStorage content:', localStorage.getItem(`course_progress_${id}`));
+  }, [userProgress, id]);
+
   useEffect(() => {
     const fetchCourse = async () => {
       try {
@@ -175,9 +186,41 @@ const CourseDetail = () => {
 
         // Load user progress from localStorage
         const savedProgress = localStorage.getItem(`course_progress_${id}`);
+        let userProgressData:any;
+        
         if (savedProgress) {
-          setUserProgress(JSON.parse(savedProgress));
+          userProgressData = JSON.parse(savedProgress);
+        } else {
+          userProgressData = {
+            completedContents: [],
+            completedQCMs: [],
+            timeSpent: {}
+          };
         }
+
+        // Sync with backend completion status
+        if (response.data.modules) {
+          const backendCompletedContents: number[] = [];
+          
+          response.data.modules.forEach((module: Module) => {
+            module.contents.forEach((content: Content) => {
+              if (content.is_completed && !userProgressData.completedContents.includes(content.id)) {
+                backendCompletedContents.push(content.id);
+              }
+            });
+          });
+
+          if (backendCompletedContents.length > 0) {
+            userProgressData = {
+              ...userProgressData,
+              completedContents: [...userProgressData.completedContents, ...backendCompletedContents]
+            };
+            localStorage.setItem(`course_progress_${id}`, JSON.stringify(userProgressData));
+          }
+        }
+
+        setUserProgress(userProgressData);
+        
       } catch (error) {
         console.error('Error fetching course:', error);
       } finally {
@@ -316,6 +359,17 @@ const CourseDetail = () => {
     setSelectedQCMOptions({});
   };
 
+  // Add this function to reset progress if needed
+  const resetProgress = () => {
+    localStorage.removeItem(`course_progress_${id}`);
+    setUserProgress({
+      completedContents: [],
+      completedQCMs: [],
+      timeSpent: {}
+    });
+    alert('Progression réinitialisée');
+  };
+
   const handleMarkAsCompleted = async () => {
     if (selectedContent) {
       const hasMetTimeRequirement = !selectedContent.min_required_time ||
@@ -328,51 +382,84 @@ const CourseDetail = () => {
 
       try {
         const contentType = selectedContent.content_type_name?.toLowerCase();
+        const actualTimeSpent = Math.ceil((userProgress.timeSpent[selectedContent.id] || 0) / 60); // Convert seconds to minutes
 
+        let apiCall;
+        
         if (contentType === 'qcm') {
           // For QCM content, check if it has already been completed
-          const isQCMCompleted = userProgress.completedQCMs?.includes(selectedContent.id);
+          const isQCMCompleted = userProgress.completedQCMs?.includes(selectedContent.id) || selectedContent.is_completed;
           
           if (!isQCMCompleted) {
             alert('Vous devez d\'abord compléter et soumettre le QCM avant de marquer ce contenu comme terminé.');
             return;
           }
 
-          // If QCM is already completed, mark the content as completed
-          await api.patch(`contents/${selectedContent.id}/complete/`);
+          apiCall = api.patch(`contents/${selectedContent.id}/complete/`, {
+            estimated_duration: actualTimeSpent
+          });
 
         } else if (contentType === 'pdf') {
-          // For PDF content
-          await api.post(`courses/${id}/completePdf/`, {
+          apiCall = api.post(`courses/${id}/completePdf/`, {
             content_id: selectedContent.id,
+            estimated_duration: actualTimeSpent
           });
 
         } else if (contentType === 'video') {
-          // For Video content
-          await api.post(`courses/${id}/completeVideo/`, {
+          apiCall = api.post(`courses/${id}/completeVideo/`, {
             content_id: selectedContent.id,
+            estimated_duration: actualTimeSpent
           });
 
+        } else {
+          apiCall = api.patch(`contents/${selectedContent.id}/complete/`, {
+            estimated_duration: actualTimeSpent
+          });
         }
 
-        // Update local state
-        setUserProgress(prev => {
-          const newProgress = {
+        await apiCall;
+
+        // Update local state FIRST
+        const newProgress = {
+          ...userProgress,
+          completedContents: [...userProgress.completedContents, selectedContent.id]
+        };
+        
+        console.log('Updating progress with:', newProgress);
+        
+        setUserProgress(newProgress);
+        
+        // Save to localStorage IMMEDIATELY
+        localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+        console.log('Saved to localStorage:', localStorage.getItem(`course_progress_${id}`));
+
+        // Update the course data with the new estimated_duration
+        setCourse(prev => {
+          if (!prev) return prev;
+          
+          const updatedModules = prev.modules.map(module => ({
+            ...module,
+            contents: module.contents.map(content => 
+              content.id === selectedContent.id 
+                ? { 
+                    ...content, 
+                    estimated_duration: actualTimeSpent,
+                    is_completed: true 
+                  }
+                : content
+            )
+          }));
+
+          return {
             ...prev,
-            completedContents: [...prev.completedContents, selectedContent.id]
+            modules: updatedModules
           };
-          localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
-          return newProgress;
         });
 
-        alert('Contenu marqué comme terminé');
+        alert('Contenu marqué comme terminé et durée mise à jour');
         setShowModal(false);
         setSelectedContent(null);
 
-        // Refresh course data
-        const response = await api.get(`courses/${id}/`);
-        setCourse(response.data);
-        
       } catch (error) {
         console.error('Error marking content as completed:', error);
         alert('Erreur lors de la mise à jour');
@@ -401,64 +488,88 @@ const CourseDetail = () => {
   };
 
   const handleQCMSubmit = async () => {
-  if (!selectedContent) return;
+    if (!selectedContent) return;
 
-  try {
-    // Create the correct structure for question_answers
-    const questionAnswers: { [questionId: number]: number[] } = {};
-    
-    // Populate the question_answers object
-    Object.keys(selectedQCMOptions).forEach(questionId => {
-      const questionIdNum = parseInt(questionId);
-      const selectedOptions = selectedQCMOptions[questionIdNum];
-      if (selectedOptions && selectedOptions.length > 0) {
-        questionAnswers[questionIdNum] = selectedOptions;
-      }
-    });
-
-    console.log('Submitting QCM with data:', {
-      content_id: selectedContent.id,
-      question_answers: questionAnswers,
-      time_taken: timeSpent
-    });
-
-    const response = await api.post(`courses/${id}/submit-qcm/`, {
-      content_id: selectedContent.id,
-      question_answers: questionAnswers, // Send as structured object
-      time_taken: timeSpent,
-    });
-
-    // Check if user passed the QCM
-    if (response.data.is_passed) {
-      // Update local state to mark QCM as completed
-      setUserProgress(prev => {
-        const newProgress = {
-          ...prev,
-          completedQCMs: [...(prev.completedQCMs || []), selectedContent.id],
-          completedContents: [...prev.completedContents, selectedContent.id]
-        };
-        localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
-        return newProgress;
+    try {
+      // Create the correct structure for question_answers
+      const questionAnswers: { [questionId: number]: number[] } = {};
+      
+      // Populate the question_answers object
+      Object.keys(selectedQCMOptions).forEach(questionId => {
+        const questionIdNum = parseInt(questionId);
+        const selectedOptions = selectedQCMOptions[questionIdNum];
+        if (selectedOptions && selectedOptions.length > 0) {
+          questionAnswers[questionIdNum] = selectedOptions;
+        }
       });
 
-      // Mark content as completed on backend
-      // await api.patch(`contents/${selectedContent.id}/complete/`);
+      const actualTimeSpent = Math.ceil(timeSpent / 60); // Convert seconds to minutes
 
-      // alert('QCM réussi! Contenu marqué comme terminé.');
-      // setShowModal(false);
-      // setSelectedContent(null);
+      console.log('Submitting QCM with data:', {
+        content_id: selectedContent.id,
+        question_answers: questionAnswers,
+        time_taken: timeSpent,
+        estimated_duration: actualTimeSpent
+      });
 
-      // Refresh course data
-      const courseResponse = await api.get(`courses/${id}/`);
-      setCourse(courseResponse.data);
-    } else {
-      alert(`QCM échoué. Score: ${response.data.percentage}% (Minimum requis: ${response.data.passing_score}%). Veuillez réessayer.`);
+      const response = await api.post(`courses/${id}/submit-qcm/`, {
+        content_id: selectedContent.id,
+        question_answers: questionAnswers,
+        time_taken: timeSpent,
+        estimated_duration: actualTimeSpent
+      });
+
+      // Check if user passed the QCM
+      if (response.data.is_passed) {
+        // Update local state to mark QCM as completed
+        setUserProgress(prev => {
+          const newProgress = {
+            ...prev,
+            completedQCMs: [...(prev.completedQCMs || []), selectedContent.id],
+            completedContents: [...prev.completedContents, selectedContent.id]
+          };
+          localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+          return newProgress;
+        });
+
+        // Update the course data with the new estimated_duration
+        setCourse(prev => {
+          if (!prev) return prev;
+          
+          const updatedModules = prev.modules.map(module => ({
+            ...module,
+            contents: module.contents.map(content => 
+              content.id === selectedContent.id 
+                ? { 
+                    ...content, 
+                    estimated_duration: actualTimeSpent,
+                    is_completed: true 
+                  }
+                : content
+            )
+          }));
+
+          return {
+            ...prev,
+            modules: updatedModules
+          };
+        });
+
+        alert('QCM réussi! Contenu marqué comme terminé.');
+        setShowModal(false);
+        setSelectedContent(null);
+
+        // Refresh course data
+        const courseResponse = await api.get(`courses/${id}/`);
+        setCourse(courseResponse.data);
+      } else {
+        alert(`QCM échoué. Score: ${response.data.percentage}% (Minimum requis: ${response.data.passing_score}%). Veuillez réessayer.`);
+      }
+    } catch (error) {
+      console.error('Error submitting QCM:', error);
+      alert('Erreur lors de la soumission du QCM');
     }
-  } catch (error) {
-    console.error('Error submitting QCM:', error);
-    alert('Erreur lors de la soumission du QCM');
-  }
-};
+  };
 
   const handleCloseModal = () => {
     setShowModal(false);
@@ -561,6 +672,21 @@ const CourseDetail = () => {
           }}>
             {statusBadge.text}
           </span>
+          {/* Temporary reset button - remove after testing */}
+          <button 
+            onClick={resetProgress}
+            style={{
+              padding: '0.25rem 0.75rem',
+              backgroundColor: '#EF4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.75rem',
+              cursor: 'pointer'
+            }}
+          >
+            Reset Progress
+          </button>
         </div>
         <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.9 }}>{course.description}</p>
       </div>
@@ -698,12 +824,12 @@ const CourseDetail = () => {
                           <span style={{ fontSize: '0.875rem', color: '#1F2937' }}>{content.title}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          {/* {content.estimated_duration && (
+                          {content.estimated_duration && (
                             <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>
                               {formatDuration(content.estimated_duration)}
                             </span>
-                          )} */}
-                          {userProgress.completedContents.includes(content.id) && (
+                          )}
+                          {isContentCompleted(content) && (
                             <span style={{ fontSize: '0.875rem', color: '#10B981', fontWeight: '500' }}>
                               ✓ Complété
                             </span>
@@ -1036,12 +1162,12 @@ const CourseDetail = () => {
                 <button
                   onClick={handleMarkAsCompleted}
                   disabled={
-                    userProgress.completedContents.includes(selectedContent.id) ||
+                    isContentCompleted(selectedContent) ||
                     (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                   }
                   style={{
                     padding: '0.625rem 1.5rem',
-                    backgroundColor: userProgress.completedContents.includes(selectedContent.id)
+                    backgroundColor: isContentCompleted(selectedContent)
                       ? '#10B981'
                       : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                         ? '#9CA3AF'
@@ -1051,7 +1177,7 @@ const CourseDetail = () => {
                     borderRadius: '6px',
                     fontSize: '0.875rem',
                     fontWeight: '500',
-                    cursor: userProgress.completedContents.includes(selectedContent.id) ||
+                    cursor: isContentCompleted(selectedContent) ||
                       (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                       ? 'not-allowed'
                       : 'pointer',
@@ -1061,19 +1187,19 @@ const CourseDetail = () => {
                   }}
                 >
                   <span>✓</span>
-                  {userProgress.completedContents.includes(selectedContent.id) ? 'Terminé' : 'Marquer comme terminé'}
+                  {isContentCompleted(selectedContent) ? 'Terminé' : 'Marquer comme terminé'}
                 </button>
               )}
               {selectedContent.content_type_name?.toLowerCase() === 'qcm' && (
                 <button
                   onClick={handleQCMSubmit}
                   disabled={
-                    userProgress.completedContents.includes(selectedContent.id) ||
+                    isContentCompleted(selectedContent) ||
                     (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                   }
                   style={{
                     padding: '0.625rem 1.5rem',
-                    backgroundColor: userProgress.completedContents.includes(selectedContent.id)
+                    backgroundColor: isContentCompleted(selectedContent)
                       ? '#10B981'
                       : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                         ? '#9CA3AF'
@@ -1083,7 +1209,7 @@ const CourseDetail = () => {
                     borderRadius: '6px',
                     fontSize: '0.875rem',
                     fontWeight: '500',
-                    cursor: userProgress.completedContents.includes(selectedContent.id) ||
+                    cursor: isContentCompleted(selectedContent) ||
                       (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                       ? 'not-allowed'
                       : 'pointer',
@@ -1093,7 +1219,7 @@ const CourseDetail = () => {
                   }}
                 >
                   <span>✓</span>
-                  {userProgress.completedContents.includes(selectedContent.id) ? 'Terminé' : 'Marquer comme terminé'}
+                  {isContentCompleted(selectedContent) ? 'Terminé' : 'Marquer comme terminé'}
                 </button>
               )}
             </div>
