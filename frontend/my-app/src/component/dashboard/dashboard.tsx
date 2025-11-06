@@ -24,7 +24,7 @@ interface Course {
     // New fields from backend
     module_count?: number;
     total_duration_minutes?: number;
-    enrolled_learners_count?: number;
+    subscriber_count?: number;
 }
 
 interface CourseLog {
@@ -81,7 +81,7 @@ const Dashboard = () => {
                 id: courseId,
                 module_count: 5,
                 total_duration_minutes: 115,
-                enrolled_learners_count: 32
+                subscriber_count: 32
             } as Course;
         }
     };
@@ -559,7 +559,7 @@ const Dashboard = () => {
                                 }}>
                                     <span>📚 {course.module_count || 5} modules</span>
                                     <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
-                                    <span>👥 {course.enrolled_learners_count || 32} apprenants</span>
+                                    <span>👥 {course.subscriber_count || 32} apprenants</span>
                                 </div>
                                 <button
                                     style={{
@@ -734,7 +734,7 @@ const Dashboard = () => {
                                 }}>
                                     <span>📚 {course.module_count || 5} modules</span>
                                     <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
-                                    <span>👥 {course.enrolled_learners_count || 32} apprenants</span>
+                                    <span>👥 {course.subscriber_count || 32} apprenants</span>
                                 </div>
                                 <button
                                     onClick={(e) => handleSubscribeClick(course.id, e)}

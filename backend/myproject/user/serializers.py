@@ -517,7 +517,7 @@ class CourseSerializer(serializers.ModelSerializer):
             'department', 
             'department_display',
             'status',
-            'status_display',  # FIXED: Include status_display
+            'status_display',
             'created_at',
             'updated_at',
             'estimated_duration',
@@ -621,7 +621,13 @@ class CourseDetailSerializer(serializers.ModelSerializer):
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
     status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
     department_display = serializers.CharField(source='get_department_display', read_only=True)
+    estimated_duration = serializers.CharField(source='get_estimated_duration', read_only=True)
+    # my_progress = serializers.CharField(source='get_your_progress', read_only=True)
     
+
+
+    # min_required_time = serializers.CharField(source= get)
+
     class Meta:
         model = Course
         fields = [
@@ -666,6 +672,108 @@ class CourseDetailSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.image.url)
             return f"{settings.BASE_URL}{obj.image.url}" if hasattr(settings, 'BASE_URL') else obj.image.url
         return None
+    def get_estimated_duration(self, obj):
+        """Get course duration information"""
+        return {
+            'estimated_duration_minutes': obj.estimated_duration or 0,
+            'estimated_duration_hours': round(obj.estimated_duration / 60, 1) if obj.estimated_duration else 0,
+            'min_required_time_minutes': obj.min_required_time or 0,
+            'min_required_time_hours': round(obj.min_required_time / 60, 1) if obj.min_required_time else 0,
+            'calculated_duration_minutes': obj.calculate_estimated_duration(),
+            'calculated_min_time_minutes': obj.calculate_min_required_time()
+        }
+    
+    def get_avg_progress(self, obj):
+        """Get average progress across all subscribers"""
+        try:
+            active_subscriptions = obj.course_subscriptions.filter(is_active=True)
+            if active_subscriptions.exists():
+                total_progress = sum(sub.progress_percentage for sub in active_subscriptions)
+                return round(total_progress / active_subscriptions.count(), 2)
+            return 0
+        except:
+            return 0
+    
+    def get_your_progress(self, obj):
+        """Get current user's progress"""
+        try:
+            request = self.context.get('request')
+            if request and request.user.is_authenticated:
+                subscription = obj.course_subscriptions.filter(
+                    user=request.user, 
+                    is_active=True
+                ).first()
+                return subscription.progress_percentage if subscription else 0
+            return 0
+        except:
+            return 0
+    
+    def get_apprenants_count(self, obj):
+        """Get number of apprenants subscribed to this course"""
+        try:
+            return obj.course_subscriptions.filter(
+                is_active=True, 
+                user__privilege='AP'
+            ).count()
+        except:
+            return 0
+    
+    def get_course_statistics(self, obj):
+        """Get comprehensive course statistics"""
+        try:
+            active_subscriptions = obj.course_subscriptions.filter(is_active=True)
+            total_subscribers = active_subscriptions.count()
+            
+            # Progress statistics
+            if total_subscribers > 0:
+                total_progress = sum(sub.progress_percentage for sub in active_subscriptions)
+                avg_progress = round(total_progress / total_subscribers, 2)
+                
+                # Count subscribers by progress ranges
+                beginner_count = active_subscriptions.filter(progress_percentage__lt=25).count()
+                intermediate_count = active_subscriptions.filter(progress_percentage__range=[25, 75]).count()
+                advanced_count = active_subscriptions.filter(progress_percentage__gt=75).count()
+                completed_count = active_subscriptions.filter(is_completed=True).count()
+            else:
+                avg_progress = 0
+                beginner_count = intermediate_count = advanced_count = completed_count = 0
+            
+            # User type counts
+            apprenants_count = active_subscriptions.filter(user__privilege='AP').count()
+            formateurs_count = active_subscriptions.filter(user__privilege='F').count()
+            admins_count = active_subscriptions.filter(user__privilege='A').count()
+            
+            return {
+                'total_subscribers': total_subscribers,
+                'apprenants_count': apprenants_count,
+                'formateurs_count': formateurs_count,
+                'admins_count': admins_count,
+                'avg_progress': avg_progress,
+                'progress_distribution': {
+                    'beginner': beginner_count,
+                    'intermediate': intermediate_count,
+                    'advanced': advanced_count,
+                    'completed': completed_count
+                },
+                'completion_rate': round((completed_count / total_subscribers * 100), 2) if total_subscribers > 0 else 0
+            }
+            
+        except Exception as e:
+            print(f"Error getting course statistics for course {obj.id}: {str(e)}")
+            return {
+                'total_subscribers': 0,
+                'apprenants_count': 0,
+                'formateurs_count': 0,
+                'admins_count': 0,
+                'avg_progress': 0,
+                'progress_distribution': {
+                    'beginner': 0,
+                    'intermediate': 0,
+                    'advanced': 0,
+                    'completed': 0
+                },
+                'completion_rate': 0
+            }
 
 # Course Create Serializer
 class CourseCreateSerializer(serializers.ModelSerializer):
@@ -1418,8 +1526,7 @@ class CourseStatsSerializer(serializers.Serializer):
     recent_enrollments = EnrollmentStatsSerializer(many=True)
     content_engagement = ContentEngagementSerializer(many=True)
 
-# Add to your serializers.py
-
+# A
 class FavoriteCourseSerializer(serializers.ModelSerializer):
     """Serializer for displaying favorite courses"""
     course_id = serializers.IntegerField(source='course.id', read_only=True)

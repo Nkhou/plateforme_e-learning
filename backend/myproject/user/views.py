@@ -3153,60 +3153,82 @@ class MySubscriptions(APIView):
     def get(self, request):
         """Get courses where user has active subscription with progress data"""
         try:
+            print("Starting MySubscriptions API call...")
+            
             # Get active subscriptions with course details
             subscriptions = Subscription.objects.filter(
                 user=request.user, 
                 is_active=True
             ).select_related('course', 'course__creator')
             
+            print(f"Found {subscriptions.count()} subscriptions for user {request.user.id}")
+            
             # Prepare course data with subscription progress
             courses_data = []
             for subscription in subscriptions:
-                course = subscription.course
-                
-                # Calculate progress based on completed contents
-                total_contents = CourseContent.objects.filter(
-                    module__course=course,
-                    module__status=1,  # Active modules only
-                    status=1  # Active content only
-                ).count()
-                
-                completed_contents = subscription.completed_contents.filter(
-                    module__course=course,
-                    module__status=1,
-                    status=1
-                ).count()
-                
-                progress_percentage = (completed_contents / total_contents * 100) if total_contents > 0 else 0
-                
-                course_data = {
-                    'id': course.id,
-                    'title_of_course': course.title_of_course,
-                    'description': course.description,
-                    'image': course.image.url if course.image else None,
-                    'image_url': course.image.url if course.image else None,
-                    'creator_username': course.creator.username,
-                    'creator_first_name': course.creator.first_name,
-                    'creator_last_name': course.creator.last_name,
-                    'created_at': course.created_at,
-                    'updated_at': course.updated_at,
-                    'department': course.department,
-                    'status': course.status,
-                    'status_display': course.get_status_display(),
-                    'is_subscribed': True,
-                    'progress_percentage': progress_percentage,
-                    'total_score': subscription.total_score,
-                    'is_completed': subscription.is_completed,
-                    'total_time_spent': subscription.total_time_spent
-                }
-                courses_data.append(course_data)
+                try:
+                    course = subscription.course
+                    print(f"Processing course: {course.title_of_course} (ID: {course.id})")
+                    
+                    # Calculate progress based on completed contents
+                    total_contents = CourseContent.objects.filter(
+                        module__course=course,
+                        module__status=1,
+                        status=1
+                    ).count()
+                    
+                    completed_contents = subscription.completed_contents.filter(
+                        module__course=course,
+                        module__status=1,
+                        status=1
+                    ).count()
+                    
+                    progress_percentage = (completed_contents / total_contents * 100) if total_contents > 0 else 0
+                    
+                    # Build course data with error handling for each field
+                    course_data = {
+                        'id': course.id,
+                        'title_of_course': course.title_of_course,
+                        'description': course.description or '',
+                        'image_url': course.image.url if course.image else None,
+                        'creator_username': course.creator.username,
+                        'creator_first_name': course.creator.first_name or '',
+                        'creator_last_name': course.creator.last_name or '',
+                        'created_at': course.created_at,
+                        'updated_at': course.updated_at,
+                        'department': course.department,
+                        'status': course.status,
+                        'status_display': course.get_status_display(),
+                        'is_subscribed': True,
+                        'is_favorited': course.get_is_favorited(request.user),
+                        'progress_percentage': progress_percentage,
+                        'total_score': subscription.total_score or 0,
+                        'is_completed': subscription.is_completed or False,
+                        'total_time_spent': subscription.total_time_spent or 0,
+                        # NEW FIELDS
+                        'module_count': course.get_active_module_count(),
+                        'total_time_required_minutes': course.get_total_time_required_minutes(),
+                        'total_time_required_hours': course.get_total_time_required_hours(),
+                        'subscriber_count': course.get_subscriber_count()
+                    }
+                    courses_data.append(course_data)
+                    print(f"Successfully processed course: {course.title_of_course}")
+                    
+                except Exception as course_error:
+                    print(f"Error processing course {subscription.course.id}: {str(course_error)}")
+                    # Continue with next course instead of failing entirely
+                    continue
             
+            print(f"Successfully processed {len(courses_data)} courses")
             return Response(courses_data, status=status.HTTP_200_OK)
             
         except Exception as e:
             print(f"Error in MySubscriptions: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            
             return Response(
-                {'error': 'Failed to fetch subscribed courses'}, 
+                {'error': 'Failed to fetch subscribed courses', 'details': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

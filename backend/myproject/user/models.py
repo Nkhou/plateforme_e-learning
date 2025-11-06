@@ -72,6 +72,7 @@ class CustomUser(AbstractUser):
         self.save()
 
 class Course(models.Model):
+
     title_of_course = models.CharField(max_length=100, blank=False, null=False)
     description = models.TextField(blank=True, null=True)
     department = models.CharField(max_length=20, choices=DEPARTMENT_CHOICES, default='F')
@@ -111,12 +112,41 @@ class Course(models.Model):
         creator_name = self.creator.get_full_name() or self.creator.username
         return f"{self.title_of_course} by {creator_name}"
 
+    # NEW METHODS FOR MODULE COUNT, TIME, AND SUBSCRIBERS
+    def get_active_module_count(self):
+        """Get count of active modules in this course"""
+        return self.modules.filter(status=1).count()
+
+    def get_total_time_required_minutes(self):
+        """Get total time required in minutes (sum of all active content durations)"""
+        from django.db.models import Sum
+        result = CourseContent.objects.filter(
+            module__course=self,
+            module__status=1,  # Active modules only
+            status=1  # Active content only
+        ).aggregate(total_duration=Sum('estimated_duration'))
+        return result['total_duration'] or 0
+
+    def get_total_time_required_hours(self):
+        """Get total time required in hours"""
+        minutes = self.get_total_time_required_minutes()
+        return round(minutes / 60, 1) if minutes > 0 else 0
+
+    def get_subscriber_count(self):
+        """Get count of active subscribers for this course"""
+        return self.course_subscriptions.filter(is_active=True).count()
+
+    def get_is_favorited(self, user=None):
+        """Check if course is favorited by current user"""
+        if user and user.is_authenticated:
+            return FavoriteCourse.objects.filter(
+                user=user,
+                course=self
+            ).exists()
+        return False
+
     def calculate_estimated_duration(self):
         """Calculate total duration from ACTIVE modules and contents only"""
-        # Safety check: can't calculate for unsaved instances
-        if not self.pk:
-            return 0
-            
         total_duration = 0
         
         # Filter only active modules (status = 1)
@@ -130,10 +160,6 @@ class Course(models.Model):
 
     def calculate_min_required_time(self):
         """Calculate minimum required time from ACTIVE modules and contents only"""
-        # Safety check: can't calculate for unsaved instances
-        if not self.pk:
-            return 0
-            
         total_min_time = 0
         
         # Filter only active modules (status = 1)
@@ -162,30 +188,11 @@ class Course(models.Model):
         
         return total_min_time
 
-    # REMOVE THIS ENTIRE save() METHOD - let Django handle the saving
-    # def save(self, *args, **kwargs):
-    #     # Check if this is a new instance by checking if it exists in the database
-    #     is_new = self._state.adding  # This is more reliable than self.pk is None
-    #     print('**************************************************************************')
-    #     if is_new:
-    #         # For new instances, set durations to 0 and save without calculation
-    #         if not self.estimated_duration:
-    #             self.estimated_duration = 0
-    #         if not self.min_required_time:
-    #             self.min_required_time = 0
-    #         # Save the instance to get a primary key
-    #         super().save(*args, **kwargs)
-    #     else:
-    #         # For existing instances, calculate durations before saving
-    #         self.estimated_duration = self.calculate_estimated_duration()
-    #         self.min_required_time = self.calculate_min_required_time()
-    #         # Save with updated durations
-    #         super().save(*args, **kwargs)
-
-
-
-
     # NEW PROPERTIES - Added for React compatibility
+    @staticmethod
+    def get_apprenants_count():
+        """Get total number of apprenants in the system"""
+        return CustomUser.objects.filter(privilege='AP').count()
     @property
     def creator_username(self):
         return self.creator.username
@@ -225,58 +232,6 @@ class Course(models.Model):
     def set_draft(self):
         self.status = 0
         self.save()
-    
-    def calculate_estimated_duration(self):
-        """Calculate total duration from ACTIVE modules and contents only"""
-        total_duration = 0
-        
-        # Filter only active modules (status = 1)
-        active_modules = self.modules.filter(status=1)
-        
-        for module in active_modules:
-            # Use the module's calculate_estimated_duration method
-            total_duration += module.calculate_estimated_duration()
-        
-        return total_duration
-    
-    def calculate_min_required_time(self):
-        """Calculate minimum required time from ACTIVE modules and contents only"""
-        total_min_time = 0
-        
-        # Filter only active modules (status = 1)
-        active_modules = self.modules.filter(status=1)
-        
-        for module in active_modules:
-            # Filter only active contents within the module
-            active_contents = module.contents.filter(status=1)
-            
-            for content in active_contents:
-                if content.min_required_time:
-                    total_min_time += content.min_required_time
-                else:
-                    # Fallback to estimated_duration if min_required_time not set
-                    if content.estimated_duration:
-                        total_min_time += content.estimated_duration
-                    else:
-                        # Default fallback based on content type
-                        content_type_name = content.content_type.name.lower()
-                        if content_type_name == 'video':
-                            total_min_time += 10  # Default 10 minutes for video
-                        elif content_type_name == 'pdf':
-                            total_min_time += 15  # Default 15 minutes for PDF
-                        elif content_type_name == 'qcm':
-                            total_min_time += 5   # Default 5 minutes for QCM
-        
-        return total_min_time
-
-    # def save(self, *args, **kwargs):
-    #     # Auto-calculate durations if not set
-    #     if not self.estimated_duration:
-    #         self.estimated_duration = self.calculate_estimated_duration()
-    #     if not self.min_required_time:
-    #         self.min_required_time = self.calculate_min_required_time()
-    #     super().save(*args, **kwargs)
-
 class Enrollment(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='enrollments')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')

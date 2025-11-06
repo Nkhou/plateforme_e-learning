@@ -353,9 +353,6 @@ const CourseDetail = () => {
             content_id: selectedContent.id,
           });
 
-        } else {
-          // For other content types
-          await api.patch(`contents/${selectedContent.id}/complete/`);
         }
 
         // Update local state
@@ -701,11 +698,11 @@ const CourseDetail = () => {
                           <span style={{ fontSize: '0.875rem', color: '#1F2937' }}>{content.title}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          {content.estimated_duration && (
+                          {/* {content.estimated_duration && (
                             <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>
                               {formatDuration(content.estimated_duration)}
                             </span>
-                          )}
+                          )} */}
                           {userProgress.completedContents.includes(content.id) && (
                             <span style={{ fontSize: '0.875rem', color: '#10B981', fontWeight: '500' }}>
                               ✓ Complété
