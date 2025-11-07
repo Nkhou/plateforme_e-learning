@@ -898,3 +898,51 @@ class FavoriteCourse(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.course.title_of_course}"
+    
+# user/models.py - Add this to your existing models
+class Notification(models.Model):
+    NOTIFICATION_TYPES = [
+        ('course_activated', 'Course Activated'),
+        ('module_activated', 'Module Activated'),
+        ('content_activated', 'Content Activated'),
+        ('qcm_result', 'QCM Result'),
+        ('system', 'System Announcement'),
+        ('message', 'New Message'),
+    ]
+
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    related_course = models.ForeignKey(Course, on_delete=models.CASCADE, null=True, blank=True)
+    related_module = models.ForeignKey(Module, on_delete=models.CASCADE, null=True, blank=True)
+    related_content = models.ForeignKey(CourseContent, on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
+
+    @property
+    def time_ago(self):
+        """Get human-readable time difference"""
+        now = timezone.now()
+        diff = now - self.created_at
+        
+        if diff.days > 0:
+            return f"Il y a {diff.days} jour{'s' if diff.days > 1 else ''}"
+        elif diff.seconds >= 3600:
+            hours = diff.seconds // 3600
+            return f"Il y a {hours} heure{'s' if hours > 1 else ''}"
+        elif diff.seconds >= 60:
+            minutes = diff.seconds // 60
+            return f"Il y a {minutes} minute{'s' if minutes > 1 else ''}"
+        else:
+            return "À l'instant"

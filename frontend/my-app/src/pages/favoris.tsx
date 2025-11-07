@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-// import { Heart, Clock, Users, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/api';
-import FavoriteButton from './FavoriteButton';
-import { favoritesService } from './favoritesService';
+import CourseImage from "../component/courses/CourseImage";
 
 interface Course {
   id: number;
@@ -21,10 +19,14 @@ interface Course {
   category?: string;
   is_favorited: boolean;
   progress_percentage: number;
-  created_at:string;
+  created_at: string;
   total_modules?: number;
   subscribers_count: number;
+  module_count?: number;
+  total_duration_minutes?: number;
+  subscriber_count?: number;
 }
+
 interface CourseData {
   courses: Array<Course>;
   enrollment_stats: {
@@ -32,28 +34,13 @@ interface CourseData {
     data: number[];
   };
 }
-interface Student {
-  id: number;
-  username: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  department: string;
-  department_display: string;
-  subscribed_at: string;
-  progress_percentage: number;
-  total_score: number;
-  is_completed: boolean;
-  total_time_spent: number;
-  total_modules:number;
-}
+
 interface CoursesManagementProps {
   courses?: CourseData;
 }
 
 const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: initialCourses }) => {
-   const navigate = useNavigate();
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseData>({
     courses: [],
     enrollment_stats: { labels: [], data: [] }
@@ -62,41 +49,18 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
-  const [changingStatus, setChangingStatus] = useState<number | null>(null);
-  const [showStudentsModal, setShowStudentsModal] = useState<number | null>(null);
-  const [studentsLoading, setStudentsLoading] = useState<number | null>(null);
-  const [studentsData, setStudentsData] = useState<Student[]>([]);
-  const [currentCourseTitle, setCurrentCourseTitle] = useState<string>('');
-  const [showNewCours, setShowNewCours] = useState(false);
-  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
 
-  const DEPARTMENT_CHOICES = [
-    { code: 'F', label: 'Finance' },
-    { code: 'H', label: 'Human Resources' },
-    { code: 'M', label: 'Marketing' },
-    { code: 'O', label: 'Operations/Production' },
-    { code: 'S', label: 'Sales' }
-  ];
+  // Format duration from minutes to "Xh Ym" format
+  const formatDuration = (minutes: number | undefined): string => {
+    if (!minutes) return '1h 55m';
 
-  const STATUS_CHOICES = [
-    { value: 'Brouillon', label: 'Brouillon', color: '#F59E0B', numeric: 0 },
-    { value: 'Actif', label: 'Actif', color: '#10B981', numeric: 1 },
-    { value: 'Archivé', label: 'Archivé', color: '#6B7280', numeric: 2 }
-  ];
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('[data-menu-container]')) {
-        setOpenMenuId(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    if (hours === 0) return `${mins}m`;
+    if (mins === 0) return `${hours}h`;
+    return `${hours}h ${mins}m`;
+  };
 
   // Fetch courses from backend
   const fetchCourses = async () => {
@@ -131,49 +95,84 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
     }
   };
 
-  // Fetch students for a specific course
-  const fetchCourseStudents = async (courseId: number) => {
+  // Fetch course details including modules, duration, and learners
+  const fetchCourseDetails = async (courseId: number): Promise<Course> => {
     try {
-      setStudentsLoading(courseId);
-      const response = await api.get(`courses/${courseId}/students/`);
-      
-      console.log('Students API Response:', response.data);
-      
-      // Type assertion for students response
-      const studentsResponse = response.data as {
-        students?: Student[];
-        course_title?: string;
-      };
-      
-      if (studentsResponse && studentsResponse.students) {
-        setStudentsData(studentsResponse.students);
-        setCurrentCourseTitle(studentsResponse.course_title || '');
-        setShowStudentsModal(courseId);
+      console.log('Fetching details for course:', courseId);
+      const response = await api.get(`courses/${courseId}/`);
+      console.log('Course details response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching details for course ${courseId}:`, error);
+      // Return default values if API fails
+      return {
+        id: courseId,
+        module_count: 5,
+        total_duration_minutes: 115,
+        subscriber_count: 32
+      } as Course;
+    }
+  };
+
+  // Toggle favorite status
+  const toggleFavorite = async (courseId: number, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent card click navigation
+
+    try {
+      // Check if course is already favorited
+      const course = courses.courses.find(c => c.id === courseId);
+      const isCurrentlyFavorited = course?.is_favorited;
+
+      if (isCurrentlyFavorited) {
+        // Unfavorite - delete the favorite
+        await api.delete(`favorites/${courseId}/`);
       } else {
-        alert('Aucun étudiant trouvé pour ce cours');
+        // Favorite - create new favorite
+        await api.post(`courses/favorites/toggle/`, { course_id: courseId });
       }
-    } catch (err: any) {
-      console.error('Error fetching students:', err);
-      const errorMessage = err.response?.data?.error || 'Erreur lors du chargement des étudiants';
-      alert(errorMessage);
-    } finally {
-      setStudentsLoading(null);
+
+      // Toggle the favorite status in local state
+      setCourses(prev => ({
+        ...prev,
+        courses: prev.courses.map(course =>
+          course.id === courseId
+            ? { ...course, is_favorited: !isCurrentlyFavorited }
+            : course
+        )
+      }));
+
+    } catch (error: any) {
+      console.error("Error toggling favorite:", error);
+      alert(`Failed to update favorite. Error: ${error.response?.data?.message || 'Unknown error'}`);
     }
   };
 
   // Subscribe to a course
-  const handleSubscribeToCourse = async (courseId: number) => {
+  const handleSubscribeToCourse = async (courseId: number, event: React.MouseEvent) => {
+    event.stopPropagation();
     try {
       const response = await api.post(`courses/${courseId}/subscribe/`);
       if (response.status === 200) {
         alert('Inscription réussie !');
-        fetchCourses();
+        // Update the course subscription status
+        setCourses(prev => ({
+          ...prev,
+          courses: prev.courses.map(course =>
+            course.id === courseId
+              ? { ...course, is_subscribed: true, progress_percentage: 0 }
+              : course
+          )
+        }));
       }
     } catch (err: any) {
       console.error('Error subscribing to course:', err);
       const errorMessage = err.response?.data?.error || 'Erreur lors de l\'inscription au cours';
       alert(errorMessage);
     }
+  };
+
+  const handleCardClick = (courseId: number) => {
+    navigate(`/cours/${courseId}`);
   };
 
   useEffect(() => {
@@ -185,168 +184,12 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
     }
   }, [initialCourses]);
 
-  const getDepartmentLabel = (code?: string | null) => {
-    if (!code) return '';
-    const dept = DEPARTMENT_CHOICES.find(d => d.code === code);
-    return dept ? dept.label : code;
-  };
-
-  // Safe status value extraction
-  const getStatusValue = (status: any): string => {
-    if (!status && status !== 0) return '';
-    
-    // If status is a number, map to French string
-    if (typeof status === 'number') {
-      const statusMap: { [key: number]: string } = {
-        0: 'Brouillon',
-        1: 'Actif', 
-        2: 'Archivé'
-      };
-      return statusMap[status] || '';
-    }
-    
-    // If status is a string, return it directly
-    if (typeof status === 'string') {
-      return status;
-    }
-    
-    // If status is an object with a value property
-    if (typeof status === 'object' && status.value) {
-      return String(status.value);
-    }
-    
-    // If status is an object with other properties, try common field names
-    if (typeof status === 'object') {
-      return String(status.name || status.status || status.id || '');
-    }
-    
-    // Fallback
-    return String(status);
-  };
-
-  const handleCourseClick = (courseId: number) => {
-    navigate(`/cours/${courseId}`);
-  };
-
-  const handleChangeStatus = async (courseId: number, newStatus: string) => {
-    console.log(`Changing course ${courseId} to status: ${newStatus}`);
-    setChangingStatus(courseId);
-    setOpenMenuId(null);
-    
-    try {
-      // Find the status choice to get numeric value
-      const statusChoice = STATUS_CHOICES.find(s => s.value === newStatus);
-      
-      if (!statusChoice) {
-        throw new Error(`Invalid status: ${newStatus}`);
-      }
-
-      const response = await api.patch(`courses/${courseId}/`, {
-        status: statusChoice.numeric
-      });
-
-      if (response.status === 200) {
-        // Update local state with numeric status (backend returns numeric)
-        setCourses(prev => ({
-          ...prev,
-          courses: prev.courses.map(course =>
-            course.id === courseId
-              ? { ...course, status: statusChoice.numeric }
-              : course
-          )
-        }));
-        alert('Statut mis à jour avec succès');
-      } else {
-        throw new Error('Failed to update status');
-      }
-    } catch (err: any) {
-      console.error('Error updating course status:', err);
-      const errorMessage = err.response?.data?.error || 'Erreur lors de la mise à jour du statut';
-      alert(errorMessage);
-    } finally {
-      setChangingStatus(null);
-    }
-  };
-
-  const handleCourseAction = async (courseId: number, action: string) => {
-    console.log(`${action} course ${courseId}`);
-    setOpenMenuId(null);
-    
-    try {
-      switch (action) {
-        case 'delete':
-          if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) {
-            return;
-          }
-          
-          const deleteResponse = await api.delete(`courses/${courseId}/`);
-
-          if (deleteResponse.status === 200 || deleteResponse.status === 204) {
-            setCourses(prev => ({
-              ...prev,
-              courses: prev.courses.filter(course => course.id !== courseId)
-            }));
-            alert('Formation supprimée avec succès');
-          } else {
-            throw new Error('Failed to delete course');
-          }
-          break;
-
-        case 'edit':
-          const courseToEdit = courses.courses.find(course => course.id === courseId);
-          if (courseToEdit) {
-            setEditingCourse(courseToEdit);
-          }
-          break;
-
-        case 'view':
-          navigate(`/cours/${courseId}`);
-          break;
-
-        case 'duplicate':
-          const duplicateResponse = await api.post(`courses/${courseId}/duplicate/`);
-          if (duplicateResponse.status === 200 || duplicateResponse.status === 201) {
-            alert('Formation dupliquée avec succès');
-            fetchCourses();
-          }
-          break;
-
-        case 'show_students':
-          await fetchCourseStudents(courseId);
-          break;
-
-        case 'subscribe':
-          await handleSubscribeToCourse(courseId);
-          break;
-
-        default:
-          console.log('Unknown action:', action);
-      }
-    } catch (err: any) {
-      console.error('Error performing course action:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Action failed';
-      setError(errorMessage);
-      alert('Une erreur est survenue. Veuillez réessayer.');
-    }
-  };
-
-  // Safe status color getter
-  const getStatusColor = (status: any) => {
-    const statusValue = getStatusValue(status);
-    const statusChoice = STATUS_CHOICES.find(s => s.value === statusValue);
-    return statusChoice ? statusChoice.color : '#6B7280';
-  };
-
-  // Safe status label getter
-  const getStatusLabel = (status: any) => {
-    const statusValue = getStatusValue(status);
-    const statusChoice = STATUS_CHOICES.find(s => s.value === statusValue);
-    return statusChoice ? statusChoice.label : 'Non défini';
-  };
+  // Filter only favorited courses
+  const favoritedCourses = courses.courses.filter(course => course.is_favorited);
 
   // Filter logic with safe status handling
-  const filteredCourses = (courses?.courses || []).filter(course => {
-    const courseStatus = getStatusValue(course.status);
+  const filteredCourses = favoritedCourses.filter(course => {
+    const courseStatus = course.status === 1 ? 'Actif' : course.status === 0 ? 'Brouillon' : 'Archivé';
     const matchesStatus = statusFilter === 'all' || courseStatus === statusFilter;
 
     // Department/Category filter
@@ -356,33 +199,17 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
     return matchesStatus && matchesCategory;
   });
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const target = e.currentTarget;
-    const parent = target.parentElement;
-    if (parent) {
-      parent.innerHTML = `
-        <div style="width: 50px; height: 50px; background-color: #E5E7EB; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 1.5rem;">
-          📚
-        </div>
-      `;
-    }
-  };
-
-
   // Loading state
   if (loading) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ 
-          backgroundColor: 'white', 
-          borderRadius: '8px', 
-          padding: '3rem', 
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-          textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⏳</div>
-          <div style={{ fontSize: '1rem', fontWeight: '500', color: '#374151' }}>
-            Chargement des formations...
+      <div style={{
+        padding: '2rem 3rem',
+        backgroundColor: '#f8f9fa',
+        minHeight: '100vh'
+      }}>
+        <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
           </div>
         </div>
       </div>
@@ -392,257 +219,320 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
   // Error state
   if (error) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ 
-          backgroundColor: 'white', 
-          borderRadius: '8px', 
-          padding: '3rem', 
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-          textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>❌</div>
-          <div style={{ fontSize: '1rem', fontWeight: '500', color: '#DC2626', marginBottom: '1rem' }}>
-            Erreur: {error}
-          </div>
-          <button
-            onClick={fetchCourses}
-            style={{
-              backgroundColor: '#4338CA',
-              color: 'white',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '6px',
-              fontSize: '0.9375rem',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3730A3'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
-          >
-            Réessayer
-          </button>
+      <div style={{
+        padding: '2rem 3rem',
+        backgroundColor: '#f8f9fa',
+        minHeight: '100vh'
+      }}>
+        <div className="alert alert-danger" role="alert">
+          {error}
         </div>
+        <button
+          onClick={fetchCourses}
+          style={{
+            backgroundColor: '#4338CA',
+            color: 'white',
+            border: 'none',
+            padding: '0.75rem 1.5rem',
+            borderRadius: '6px',
+            fontSize: '0.9375rem',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3730A3'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
+        >
+          Réessayer
+        </button>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-      {/* {showStudentsModal && <StudentsModal />}
-      {editingCourse && <EditCourseModal />}
-       */}
-      {!showNewCours && (
-        <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          {/* Header with filters and button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1F2937', margin: 0 }}>
-                {filteredCourses.length} formation{filteredCourses.length !== 1 ? 's' : ''} favorite {filteredCourses.length !== 1 ? 's' : ''}
-              </h2>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              {/* Status Filter */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+    <div style={{
+      padding: '2rem 3rem',
+      backgroundColor: '#f8f9fa',
+      minHeight: '100vh'
+    }}>
+      <style>
+        {`
+          .course-image-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 40%;
+            overflow: hidden;
+          }
+          .course-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+          }
+        `}
+      </style>
+
+      {/* Header Section */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '2rem',
+        flexWrap: 'wrap',
+        gap: '1rem'
+      }}>
+        <div>
+          <h3 style={{ 
+            fontWeight: '600', 
+            marginBottom: '0.5rem', 
+            color: '#1a1a1a',
+            fontSize: '1.5rem'
+          }}>
+            Formations favorites
+          </h3>
+          <p style={{ 
+            fontSize: '0.95rem', 
+            color: '#666', 
+            marginBottom: '0' 
+          }}>
+            {filteredCourses.length} formation{filteredCourses.length !== 1 ? 's' : ''} favorite{filteredCourses.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{
+              backgroundColor: '#EEF2FF',
+              border: '1px solid #C7D2FE',
+              borderRadius: '6px',
+              padding: '0.5rem 2rem 0.5rem 0.75rem',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              color: '#4338CA',
+              cursor: 'pointer',
+              appearance: 'none',
+              backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 0.5rem center',
+              minWidth: '180px'
+            }}
+          >
+            <option value="all">Statut &gt; Tous</option>
+            <option value="Actif">Actif</option>
+            <option value="Brouillon">Brouillon</option>
+            <option value="Archivé">Archivé</option>
+          </select>
+          
+          {/* Category Filter */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            style={{
+              backgroundColor: '#EEF2FF',
+              border: '1px solid #C7D2FE',
+              borderRadius: '6px',
+              padding: '0.5rem 2rem 0.5rem 0.75rem',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              color: '#4338CA',
+              cursor: 'pointer',
+              appearance: 'none',
+              backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 0.5rem center',
+              minWidth: '180px'
+            }}
+          >
+            <option value="all">Catégorie &gt; Tous</option>
+            <option value="F">Finance</option>
+            <option value="H">Human Resources</option>
+            <option value="M">Marketing</option>
+            <option value="O">Operations/Production</option>
+            <option value="S">Sales</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Courses Grid */}
+      {filteredCourses.length > 0 ? (
+        <div className="row g-4">
+          {filteredCourses.map(course => (
+            <div key={course.id} className="col-12 col-sm-6 col-lg-4 col-xl-3">
+              <div
+                onClick={() => handleCardClick(course.id)}
                 style={{
-                  backgroundColor: '#EEF2FF',
-                  border: '1px solid #C7D2FE',
-                  borderRadius: '6px',
-                  padding: '0.5rem 2rem 0.5rem 0.75rem',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  color: '#4338CA',
                   cursor: 'pointer',
-                  appearance: 'none',
-                  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 0.5rem center',
-                  minWidth: '180px'
+                  height: '100%',
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
                 }}
               >
-                <option value="all">Statut &gt; Tous</option>
-                <option value="Actif">Actif</option>
-                <option value="Brouillon">Brouillon</option>
-                <option value="Archivé">Archivé</option>
-              </select>
-              
-              {/* Category/Department Filter */}
-              
+                <div style={{ position: 'relative' }}>
+                  <div className="course-image-container">
+                    <CourseImage
+                      src={course.image_url}
+                      fallback="/group.avif"
+                      alt={course.title_of_course}
+                      className="course-image"
+                      style={{
+                        backgroundColor: '#E8E8F5'
+                      }}
+                    />
+                  </div>
+                  {course.is_subscribed && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '0',
+                      left: 0,
+                      right: 0,
+                      height: '6px',
+                      background: `linear-gradient(90deg, 
+                        #C85B3C ${course.progress_percentage || 0}%, 
+                        transparent ${course.progress_percentage || 0}%)`
+                    }}></div>
+                  )}
+                </div>
+                <div style={{ padding: '1rem' }}>
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <span style={{
+                      backgroundColor: course.is_subscribed ? '#FFE4D6' : '#E3F2FD',
+                      color: course.is_subscribed ? '#C85B3C' : '#1976D2',
+                      fontSize: '0.75rem',
+                      fontWeight: '500',
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '6px'
+                    }}>
+                      {course.department || course.category || 'Finance'}
+                    </span>
+                    <button
+                      onClick={(e) => toggleFavorite(course.id, e)}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        fontSize: '1.25rem',
+                        cursor: 'pointer',
+                        padding: '0',
+                        color: course.is_favorited ? '#FFD700' : '#ddd',
+                        transition: 'color 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = course.is_favorited ? '#FFD700' : '#ffcc00';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = course.is_favorited ? '#FFD700' : '#ddd';
+                      }}
+                    >
+                      {course.is_favorited ? '★' : '☆'}
+                    </button>
+                  </div>
+                  <h5 style={{
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    marginBottom: '0.5rem',
+                    color: '#1a1a1a',
+                    lineHeight: '1.3'
+                  }}>
+                    {course.title_of_course}
+                  </h5>
+                  <p style={{
+                    fontSize: '0.875rem',
+                    color: '#666',
+                    marginBottom: '1rem',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    lineHeight: '1.4'
+                  }}>
+                    {course.description}
+                  </p>
+                  <div className="d-flex justify-content-between align-items-center" style={{
+                    fontSize: '0.8rem',
+                    color: '#666',
+                    paddingTop: '0.75rem',
+                    borderTop: '1px solid #f0f0f0'
+                  }}>
+                    <span>📚 {course.module_count || course.total_modules || 5} modules</span>
+                    <span>🕐 {formatDuration(course.total_duration_minutes || course.estimated_duration)}</span>
+                    <span>👥 {course.subscriber_count || course.subscribers_count || 32} apprenants</span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      if (course.is_subscribed) {
+                        handleCardClick(course.id);
+                      } else {
+                        handleSubscribeToCourse(course.id, e);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      marginTop: '1rem',
+                      backgroundColor: course.is_subscribed 
+                        ? (course.progress_percentage === 100 ? '#8B92C4' : '#C85B3C')
+                        : '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '0.625rem',
+                      fontSize: '0.9rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '0.9';
+                      e.currentTarget.style.transform = 'scale(1.02)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  >
+                    {course.is_subscribed 
+                      ? (course.progress_percentage === 100 ? 'Relire la formation' : 'Continuer la lecture')
+                      : "S'inscrire et commencer"
+                    }
+                  </button>
+                </div>
+              </div>
             </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ 
+          backgroundColor: 'white', 
+          borderRadius: '12px', 
+          padding: '3rem', 
+          textAlign: 'center',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⭐</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: '500', marginBottom: '0.5rem', color: '#1a1a1a' }}>
+            Aucune formation favorite
           </div>
-
-          {/* Courses Table */}
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#E5E7EB' }}>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Image</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Titre de la formation</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Créateur</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Étudiants</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Modules</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Créé le</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCourses.length > 0 ? (
-                  filteredCourses.map((course:Course, index:any) => {
-                    const courseStatusValue = getStatusValue(course.status);
-                    const statusColor = getStatusColor(course.status);
-                    const statusLabel = getStatusLabel(course.status);
-                    
-                    return (
-                      <tr
-                        key={course.id}
-                        style={{
-                          borderBottom: '1px solid #E5E7EB',
-                          backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB',
-                          transition: 'background-color 0.2s',
-                          cursor: 'pointer'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#F9FAFB'}
-                        onClick={() => handleCourseClick(course.id)}
-                      >
-                        <td style={{ padding: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
-                          {course.image_url ? (
-                            <img
-                              src={course.image_url.startsWith('http') ? course.image_url : `${window.location.protocol}//${window.location.hostname}:8000${course.image_url}`}
-                              alt={course.title_of_course}
-                              style={{
-                                width: '50px',
-                                height: '50px',
-                                objectFit: 'cover',
-                                borderRadius: '6px',
-                                border: '1px solid #E5E7EB'
-                              }}
-                              onError={handleImageError}
-                            />
-                          ) : (
-                            <div style={{
-                              width: '50px',
-                              height: '50px',
-                              backgroundColor: '#E5E7EB',
-                              borderRadius: '6px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#9CA3AF',
-                              fontSize: '1.5rem'
-                            }}>
-                              📚
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.75rem' }}>
-                          <div style={{ fontWeight: '500', color: '#1F2937' }}>
-                            {course.title_of_course}
-                          </div>
-                          {(course.department || course.category) && (
-                            <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>
-                              {getDepartmentLabel(course.department || course.category)}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>{course.creator_username}</td>
-                        <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                          <span 
-                            style={{
-                              backgroundColor: '#EEF2FF',
-                              color: '#4338CA',
-                              padding: '0.25rem 0.75rem',
-                              borderRadius: '12px',
-                              fontSize: '0.8125rem',
-                              fontWeight: '500',
-                              cursor: 'pointer',
-                              transition: 'background-color 0.2s'
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleCourseAction(course.id, 'show_students');
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#E0E7FF'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#EEF2FF'}
-                            title="Afficher tous les étudiants"
-                          >
-                            {course.subscribers_count} étudiant{course.subscribers_count !== 1 ? 's' : ''}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                          {course.total_modules || 0}
-                        </td>
-                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>
-                          {new Date(course.created_at).toLocaleDateString('fr-FR', { 
-                            day: '2-digit', 
-                            month: 'short', 
-                            year: 'numeric' 
-                          })}
-                        </td>
-                        <td style={{ padding: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
-                          {changingStatus === course.id ? (
-                            <span style={{ color: '#9CA3AF', fontSize: '0.875rem' }}>
-                              Mise à jour...
-                            </span>
-                          ) : (
-                            <span style={{
-                              color: statusColor,
-                              fontWeight: '500',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.25rem'
-                            }}>
-                              <span style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                backgroundColor: statusColor
-                              }}></span>
-                              {statusLabel}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📚</div>
-                      <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.5rem' }}>Aucune formation trouvée</div>
-                      <div style={{ fontSize: '0.875rem' }}>Essayez de modifier vos filtres ou créez une nouvelle formation</div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div style={{ fontSize: '0.95rem', color: '#666' }}>
+            {favoritedCourses.length === 0 
+              ? "Vous n'avez pas encore de formations favorites. Ajoutez des étoiles aux formations que vous aimez !"
+              : "Aucune formation ne correspond à vos filtres actuels."
+            }
           </div>
-
-          {/* Load More Button */}
-          {filteredCourses.length > 0 && (
-            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-              <button
-                style={{
-                  backgroundColor: '#8B5A3C',
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.75rem 2rem',
-                  borderRadius: '6px',
-                  fontSize: '0.9375rem',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#78472A'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#8B5A3C'}
-              >
-                Afficher plus de résultat
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

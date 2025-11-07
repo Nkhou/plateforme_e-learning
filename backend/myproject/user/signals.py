@@ -5,21 +5,19 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.conf import settings
-from .models import Course, Module, CourseContent, Subscription
 from django.utils import timezone
 import logging
+from .models import Course, Module, CourseContent, Subscription, Notification
 
 logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=Course)
 def send_course_activation_email(sender, instance, created, **kwargs):
     """
-    Send email when course status changes to active
+    Send email and create notification when course status changes to active
     """
     try:
-        # Check if course was just activated (status changed to 1)
         if instance.status == 1:  # Course is active
-            # Get all active subscribers for this course
             subscriptions = Subscription.objects.filter(
                 course=instance, 
                 is_active=True
@@ -31,6 +29,16 @@ def send_course_activation_email(sender, instance, created, **kwargs):
                 
                 for subscription in subscriptions:
                     try:
+                        # Create notification
+                        Notification.objects.create(
+                            user=subscription.user,
+                            notification_type='course_activated',
+                            title="Nouveau cours disponible",
+                            message=f"Le cours '{instance.title_of_course}' est maintenant disponible. Commencez votre apprentissage!",
+                            related_course=instance
+                        )
+                        
+                        # Send email
                         html_message = render_to_string('emails/course_activated.html', {
                             'user': subscription.user,
                             'course': instance,
@@ -48,9 +56,9 @@ def send_course_activation_email(sender, instance, created, **kwargs):
                             html_message=html_message,
                             fail_silently=True
                         )
-                        logger.info(f"Course activation email sent to {subscription.user.email}")
+                        logger.info(f"Course activation email and notification sent to {subscription.user.email}")
                     except Exception as e:
-                        logger.error(f"Failed to send course activation email to {subscription.user.email}: {str(e)}")
+                        logger.error(f"Failed to send course activation to {subscription.user.email}: {str(e)}")
                         
     except Exception as e:
         logger.error(f"Error in course activation signal: {str(e)}")
@@ -58,11 +66,10 @@ def send_course_activation_email(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Module)
 def send_module_activation_email(sender, instance, created, **kwargs):
     """
-    Send email when module status changes to active
+    Send email and create notification when module status changes to active
     """
     try:
         if instance.status == 1:  # Module is active
-            # Get all active subscribers for the course
             subscriptions = Subscription.objects.filter(
                 course=instance.course, 
                 is_active=True
@@ -74,6 +81,17 @@ def send_module_activation_email(sender, instance, created, **kwargs):
                 
                 for subscription in subscriptions:
                     try:
+                        # Create notification
+                        Notification.objects.create(
+                            user=subscription.user,
+                            notification_type='module_activated',
+                            title="Nouveau module disponible",
+                            message=f"Le module '{instance.title}' a été ajouté au cours '{instance.course.title_of_course}'.",
+                            related_course=instance.course,
+                            related_module=instance
+                        )
+                        
+                        # Send email
                         html_message = render_to_string('emails/module_activated.html', {
                             'user': subscription.user,
                             'course': instance.course,
@@ -92,9 +110,9 @@ def send_module_activation_email(sender, instance, created, **kwargs):
                             html_message=html_message,
                             fail_silently=True
                         )
-                        logger.info(f"Module activation email sent to {subscription.user.email}")
+                        logger.info(f"Module activation email and notification sent to {subscription.user.email}")
                     except Exception as e:
-                        logger.error(f"Failed to send module activation email to {subscription.user.email}: {str(e)}")
+                        logger.error(f"Failed to send module activation to {subscription.user.email}: {str(e)}")
                         
     except Exception as e:
         logger.error(f"Error in module activation signal: {str(e)}")
@@ -102,11 +120,10 @@ def send_module_activation_email(sender, instance, created, **kwargs):
 @receiver(post_save, sender=CourseContent)
 def send_content_activation_email(sender, instance, created, **kwargs):
     """
-    Send email when content is created/updated with active status
+    Send email and create notification when content is created/updated with active status
     """
     try:
         if instance.status == 1:  # Content is active
-            # Get all active subscribers for the course
             subscriptions = Subscription.objects.filter(
                 course=instance.module.course, 
                 is_active=True
@@ -119,6 +136,18 @@ def send_content_activation_email(sender, instance, created, **kwargs):
                 
                 for subscription in subscriptions:
                     try:
+                        # Create notification
+                        Notification.objects.create(
+                            user=subscription.user,
+                            notification_type='content_activated',
+                            title="Nouveau contenu disponible",
+                            message=f"Le contenu '{instance.title}' a été {action} dans le module '{instance.module.title}'.",
+                            related_course=instance.module.course,
+                            related_module=instance.module,
+                            related_content=instance
+                        )
+                        
+                        # Send email
                         html_message = render_to_string('emails/content_activated.html', {
                             'user': subscription.user,
                             'course': instance.module.course,
@@ -139,9 +168,9 @@ def send_content_activation_email(sender, instance, created, **kwargs):
                             html_message=html_message,
                             fail_silently=True
                         )
-                        logger.info(f"Content activation email sent to {subscription.user.email}")
+                        logger.info(f"Content activation email and notification sent to {subscription.user.email}")
                     except Exception as e:
-                        logger.error(f"Failed to send content activation email to {subscription.user.email}: {str(e)}")
+                        logger.error(f"Failed to send content activation to {subscription.user.email}: {str(e)}")
                         
     except Exception as e:
         logger.error(f"Error in content activation signal: {str(e)}")

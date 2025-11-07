@@ -30,6 +30,19 @@ interface SearchResult {
   module_id?: number;
 }
 
+interface Notification {
+  id: number;
+  notification_type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  time_ago: string;
+  related_course_title?: string;
+  related_module_title?: string;
+  related_content_title?: string;
+}
+
 const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
   <button
     onClick={onClick}
@@ -58,7 +71,6 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; 
 const AuthGuard = ({ children }: AuthGuardProps) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,6 +80,11 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchCardRef = useRef<HTMLDivElement>(null);
   const [activeNavItem, setActiveNavItem] = useState('dashboard');
+  
+  // Notification states
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -117,10 +134,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
   const handleSearchResultClick = (result: SearchResult) => {
     console.log('Selected result:', result);
-    // Close search card when result is selected
     setShowSearchCard(false);
 
-    // Custom logic based on result type
     switch (result.type) {
       case 'course':
         navigate(`/cours/${result.id}`);
@@ -144,6 +159,126 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
     }
   };
 
+  // Fetch notifications from backend
+  const fetchNotifications = async () => {
+    try {
+      setLoadingNotifications(true);
+      const response = await api.get('notifications/');
+      setNotifications(response.data.notifications);
+      setUnreadCount(response.data.unread_count);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      setNotifications([]);
+      setUnreadCount(0);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const markAsRead = async (notificationId: number) => {
+    try {
+      await api.post(`notifications/${notificationId}/mark-read/`);
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === notificationId ? { ...notif, is_read: true } : notif
+        )
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await api.post('notifications/mark-all-read/');
+      setNotifications(prev => 
+        prev.map(notif => ({ ...notif, is_read: true }))
+      );
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  // Fetch notifications when notification dropdown opens
+  useEffect(() => {
+    if (isAuthenticated && openNotif) {
+      fetchNotifications();
+    }
+  }, [openNotif, isAuthenticated]);
+
+  // Group notifications by date
+  const groupNotificationsByDate = () => {
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    
+    const groups: { [key: string]: Notification[] } = {
+      'Aujourd\'hui': [],
+      'Hier': [],
+      'Plus ancien': []
+    };
+
+    notifications.forEach(notification => {
+      const notificationDate = new Date(notification.created_at).toDateString();
+      
+      if (notificationDate === today) {
+        groups['Aujourd\'hui'].push(notification);
+      } else if (notificationDate === yesterday) {
+        groups['Hier'].push(notification);
+      } else {
+        groups['Plus ancien'].push(notification);
+      }
+    });
+
+    // Remove empty groups
+    Object.keys(groups).forEach(key => {
+      if (groups[key].length === 0) {
+        delete groups[key];
+      }
+    });
+
+    return groups;
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'course_activated':
+        return '📚';
+      case 'module_activated':
+        return '📖';
+      case 'content_activated':
+        return '📄';
+      case 'qcm_result':
+        return '📝';
+      case 'system':
+        return '📢';
+      case 'message':
+        return '💬';
+      default:
+        return '🔔';
+    }
+  };
+
+  const getNotificationColor = (type: string) => {
+    switch (type) {
+      case 'course_activated':
+        return '#c7d2fe'; // Light blue
+      case 'module_activated':
+        return '#bbf7d0'; // Light green
+      case 'content_activated':
+        return '#fef3c7'; // Light yellow
+      case 'qcm_result':
+        return '#fbcfe8'; // Light pink
+      case 'system':
+        return '#ddd6fe'; // Light purple
+      case 'message':
+        return '#bae6fd'; // Light cyan
+      default:
+        return '#e5e7eb'; // Light gray
+    }
+  };
+
   useEffect(() => {
     const checkAuthentication = async () => {
       try {
@@ -153,11 +288,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
         const auth = res.data.authenticated;
         setIsAuthenticated(auth);
-        console.log('data: ', res.data.user);
         setUser(res.data.user);
         setLoading(false);
-
-        console.log("User privilege:", res.data.user?.privilege, "Current path:", location.pathname);
 
         if (!auth && location.pathname !== '/') {
           navigate('/');
@@ -185,10 +317,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   }, [navigate, location]);
 
   const handleNavigation = (item: string) => {
-    // update active nav item
     setActiveNavItem(item);
-
-    // read privilege from current user state
     const privilege = user?.privilege;
 
     switch (item) {
@@ -220,7 +349,6 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         break;
       case 'favoris':
         if (privilege === 'AP') {
-          console.log('99999999999999999999999999999999444444444444444444444444')
           navigate('/favoris');
         }
         break;
@@ -242,8 +370,13 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
     }
   };
 
+  // Check if user is admin
+  const isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
+
   if (loading) return <div className="text-center p-5">Loading...</div>;
   if (!isAuthenticated) return <>{children}</>;
+
+  const notificationGroups = groupNotificationsByDate();
 
   return (
     <div className="d-flex" style={{ minHeight: '100vh' }}>
@@ -280,8 +413,6 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 className="w-100"
                 autoFocus={true}
               />
-              <div className="text-muted mt-3">
-              </div>
             </div>
           </div>
         </div>
@@ -296,7 +427,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         >
           <div className="container-fluid">
             <div className="d-flex align-items-center w-100">
-              {/* Logo Image - Always visible */}
+              {/* Logo Image */}
               <img
                 src="/logo-colored.png"
                 alt="Logo"
@@ -366,7 +497,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 </div>
               </div>
 
-              {/* Mobile Search Icon - Visible only on small screens */}
+              {/* Mobile Search Icon */}
               <button
                 className="btn btn-outline-light d-md-none ms-auto me-2"
                 onClick={handleSearchIconClick}
@@ -391,7 +522,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 <div className="dropdown me-2">
                   <button
                     type="button"
-                    className="btn btn-outline-light dropdown-toggle"
+                    className="btn btn-outline-light dropdown-toggle position-relative"
                     onClick={handleNotif}
                     aria-expanded={openNotif}
                     aria-label="Notifications"
@@ -407,6 +538,27 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                     }}
                   >
                     🔔
+                    {unreadCount > 0 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: '-5px',
+                          right: '-5px',
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                          borderRadius: '50%',
+                          width: '18px',
+                          height: '18px',
+                          fontSize: '0.7rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
                   </button>
                   {openNotif && (
                     <div className="dropdown-menu show mt-2" style={{
@@ -427,144 +579,164 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                         borderBottom: '1px solid #d1d5db',
                         backgroundColor: '#e8eaf6',
                         borderTopLeftRadius: '12px',
-                        borderTopRightRadius: '12px'
+                        borderTopRightRadius: '12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
                       }}>
                         <h6 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#1f2937' }}>
                           Notifications
                         </h6>
+                        {notifications.length > 0 && unreadCount > 0 && (
+                          <button
+                            onClick={markAllAsRead}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#4338ca',
+                              fontSize: '0.875rem',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              padding: '4px 8px',
+                              borderRadius: '4px'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            Tout marquer comme lu
+                          </button>
+                        )}
                       </div>
                       
                       <div style={{ padding: '0.5rem' }}>
-                        <div style={{
-                          padding: '0.5rem 1rem',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          color: '#6b7280',
-                          textTransform: 'uppercase'
-                        }}>
-                          Aujourd'hui
-                        </div>
-                        
-                        {/* Notification Item */}
-                        <div style={{
-                          display: 'flex',
-                          gap: '0.75rem',
-                          padding: '0.75rem 1rem',
-                          backgroundColor: 'white',
-                          borderRadius: '8px',
-                          marginBottom: '0.5rem',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}>
+                        {loadingNotifications ? (
                           <div style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '8px',
-                            backgroundColor: '#c7d2fe',
-                            flexShrink: 0
-                          }}></div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.875rem', color: '#1f2937', marginBottom: '0.25rem' }}>
-                              <strong>Nouveau module disponible</strong> "titre du module" par [nom formateur]
+                            padding: '2rem',
+                            textAlign: 'center',
+                            color: '#6b7280'
+                          }}>
+                            Chargement des notifications...
+                          </div>
+                        ) : notifications.length === 0 ? (
+                          <div style={{
+                            padding: '3rem 2rem',
+                            textAlign: 'center',
+                            color: '#6b7280'
+                          }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
+                            <div style={{ fontSize: '1rem', fontWeight: '500' }}>
+                              Aucune notification
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                              • Il y a 2 heures
+                            <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                              Vous serez notifié quand de nouveaux contenus seront disponibles
                             </div>
                           </div>
-                        </div>
-
-                        <div style={{
-                          padding: '0.5rem 1rem',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          color: '#6b7280',
-                          textTransform: 'uppercase',
-                          marginTop: '0.5rem'
-                        }}>
-                          11 Octobre, 2025
-                        </div>
-
-                        {/* More Notification Items */}
-                        <div style={{
-                          display: 'flex',
-                          gap: '0.75rem',
-                          padding: '0.75rem 1rem',
-                          backgroundColor: 'white',
-                          borderRadius: '8px',
-                          marginBottom: '0.5rem',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}>
-                          <div style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '8px',
-                            backgroundColor: '#c7d2fe',
-                            flexShrink: 0
-                          }}></div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.875rem', color: '#1f2937', marginBottom: '0.25rem' }}>
-                              <strong>Jean dupont</strong> a terminer la lecture du module [titre du module]
+                        ) : (
+                          Object.entries(notificationGroups).map(([groupName, groupNotifications]) => (
+                            <div key={groupName}>
+                              <div style={{
+                                padding: '0.5rem 1rem',
+                                fontSize: '0.75rem',
+                                fontWeight: '600',
+                                color: '#6b7280',
+                                textTransform: 'uppercase'
+                              }}>
+                                {groupName}
+                              </div>
+                              
+                              {groupNotifications.map((notification) => (
+                                <div 
+                                  key={notification.id}
+                                  style={{
+                                    display: 'flex',
+                                    gap: '0.75rem',
+                                    padding: '0.75rem 1rem',
+                                    backgroundColor: notification.is_read ? 'white' : '#f0f4ff',
+                                    borderRadius: '8px',
+                                    marginBottom: '0.5rem',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.2s',
+                                    borderLeft: notification.is_read ? 'none' : '3px solid #4338ca'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = notification.is_read ? '#f3f4f6' : '#e0e7ff'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = notification.is_read ? 'white' : '#f0f4ff'}
+                                  onClick={() => markAsRead(notification.id)}
+                                >
+                                  <div style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: '8px',
+                                    backgroundColor: getNotificationColor(notification.notification_type),
+                                    flexShrink: 0,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '1.2rem'
+                                  }}>
+                                    {getNotificationIcon(notification.notification_type)}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ 
+                                      fontSize: '0.875rem', 
+                                      color: '#1f2937', 
+                                      marginBottom: '0.25rem',
+                                      fontWeight: notification.is_read ? '400' : '600'
+                                    }}>
+                                      {notification.title}
+                                    </div>
+                                    <div style={{ 
+                                      fontSize: '0.8rem', 
+                                      color: '#6b7280',
+                                      lineHeight: '1.4'
+                                    }}>
+                                      {notification.message}
+                                    </div>
+                                    <div style={{ 
+                                      fontSize: '0.7rem', 
+                                      color: '#9ca3af',
+                                      marginTop: '0.25rem'
+                                    }}>
+                                      • {notification.time_ago}
+                                    </div>
+                                  </div>
+                                  {!notification.is_read && (
+                                    <div style={{
+                                      width: '8px',
+                                      height: '8px',
+                                      borderRadius: '50%',
+                                      backgroundColor: '#4338ca',
+                                      flexShrink: 0,
+                                      marginTop: '4px'
+                                    }}></div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                              • Il y a 2 heures
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{
-                          display: 'flex',
-                          gap: '0.75rem',
-                          padding: '0.75rem 1rem',
-                          backgroundColor: 'white',
-                          borderRadius: '8px',
-                          marginBottom: '0.5rem',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}>
-                          <div style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '8px',
-                            backgroundColor: '#c7d2fe',
-                            flexShrink: 0
-                          }}></div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.875rem', color: '#1f2937', marginBottom: '0.25rem' }}>
-                              <strong>Nouveau module disponible</strong> "titre du module" par [nom formateur]
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                              • Il y a 2 heures
-                            </div>
-                          </div>
-                        </div>
+                          ))
+                        )}
                       </div>
 
-                      <div style={{
-                        padding: '1rem',
-                        borderTop: '1px solid #d1d5db',
-                        backgroundColor: '#e8eaf6',
-                        borderBottomLeftRadius: '12px',
-                        borderBottomRightRadius: '12px',
-                        textAlign: 'center'
-                      }}>
-                        <a href="#" style={{
-                          color: '#4338ca',
-                          fontSize: '0.875rem',
-                          fontWeight: '600',
-                          textDecoration: 'none'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                        onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>
-                          Voir toutes les notifications
-                        </a>
-                      </div>
+                      {notifications.length > 0 && (
+                        <div style={{
+                          padding: '1rem',
+                          borderTop: '1px solid #d1d5db',
+                          backgroundColor: '#e8eaf6',
+                          borderBottomLeftRadius: '12px',
+                          borderBottomRightRadius: '12px',
+                          textAlign: 'center'
+                        }}>
+                          <a href="/notifications" style={{
+                            color: '#4338ca',
+                            fontSize: '0.875rem',
+                            fontWeight: '600',
+                            textDecoration: 'none'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                          onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>
+                            Voir toutes les notifications
+                          </a>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -711,9 +883,18 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
             paddingLeft: '0.5rem',
             paddingRight: '0.5rem'
           }}>
-            <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
+            {/* Only show Dashboard for admin users */}
+            {isAdmin && (
+              <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
+            )}
+            
             <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
-            <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
+            
+            {/* Only show Utilisateurs for admin users */}
+            {isAdmin && (
+              <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
+            )}
+            
             <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
             <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
           </div>

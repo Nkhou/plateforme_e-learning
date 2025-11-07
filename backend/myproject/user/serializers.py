@@ -1754,4 +1754,37 @@ class FavoriteCourseCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Course is already in favorites")
         
         return favorite
+    
+# user/serializers.py - Add these serializers
+from .models import Notification
+
+class NotificationSerializer(serializers.ModelSerializer):
+    time_ago = serializers.ReadOnlyField()
+    related_course_title = serializers.CharField(source='related_course.title_of_course', read_only=True, allow_null=True)
+    related_module_title = serializers.CharField(source='related_module.title', read_only=True, allow_null=True)
+    related_content_title = serializers.CharField(source='related_content.title', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'id',
+            'notification_type',
+            'title',
+            'message',
+            'is_read',
+            'created_at',
+            'time_ago',
+            'related_course',
+            'related_course_title',
+            'related_module',
+            'related_module_title',
+            'related_content',
+            'related_content_title'
+        ]
+        read_only_fields = ['id', 'created_at', 'time_ago']
+
+class NotificationUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['is_read']
 

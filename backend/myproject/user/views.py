@@ -10,7 +10,7 @@ from .serializers import (
     SubscriptionSerializer, QCMAttemptSerializer, 
     QCMCompletionSerializer, PDFContentSerializer, VideoContentSerializer, QCMSerializer,
     QCMOptionCreateSerializer, QCMContentCreateSerializer, PDFContentCreateSerializer,
-    VideoContentCreateSerializer, ModuleWithContentsSerializer, FavoriteCourseSerializer, FavoriteCourseCreateSerializer
+    VideoContentCreateSerializer, ModuleWithContentsSerializer, FavoriteCourseSerializer, FavoriteCourseCreateSerializer, NotificationSerializer
 )
 
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -5701,3 +5701,112 @@ class CourseStatsDebugView(APIView):
             
         except Course.DoesNotExist:
             return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
+
+# user/views.py - Add these views
+from .models import Notification
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get all notifications for the authenticated user"""
+        try:
+            notifications = Notification.objects.filter(
+                user=request.user
+            ).select_related(
+                'related_course',
+                'related_module', 
+                'related_content'
+            ).order_by('-created_at')[:50]  # Last 50 notifications
+            
+            serializer = NotificationSerializer(notifications, many=True)
+            
+            # Get unread count
+            unread_count = Notification.objects.filter(
+                user=request.user,
+                is_read=False
+            ).count()
+            
+            return Response({
+                'notifications': serializer.data,
+                'unread_count': unread_count,
+                'total_count': notifications.count()
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching notifications: {str(e)}")
+            return Response(
+                {'error': 'Failed to fetch notifications'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class NotificationMarkAsReadView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, notification_id):
+        """Mark a specific notification as read"""
+        try:
+            notification = get_object_or_404(
+                Notification, 
+                id=notification_id, 
+                user=request.user
+            )
+            
+            notification.is_read = True
+            notification.save()
+            
+            return Response({
+                'message': 'Notification marked as read',
+                'notification_id': notification.id
+            })
+            
+        except Exception as e:
+            logger.error(f"Error marking notification as read: {str(e)}")
+            return Response(
+                {'error': 'Failed to mark notification as read'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class NotificationMarkAllAsReadView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Mark all notifications as read for the user"""
+        try:
+            updated_count = Notification.objects.filter(
+                user=request.user,
+                is_read=False
+            ).update(is_read=True)
+            
+            return Response({
+                'message': f'{updated_count} notifications marked as read',
+                'updated_count': updated_count
+            })
+            
+        except Exception as e:
+            logger.error(f"Error marking all notifications as read: {str(e)}")
+            return Response(
+                {'error': 'Failed to mark notifications as read'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class NotificationUnreadCountView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get unread notification count"""
+        try:
+            unread_count = Notification.objects.filter(
+                user=request.user,
+                is_read=False
+            ).count()
+            
+            return Response({
+                'unread_count': unread_count
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching unread count: {str(e)}")
+            return Response(
+                {'error': 'Failed to fetch unread count'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

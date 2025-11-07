@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect} from 'react';
 import { fixImageUrl } from '../../utils/urlUtils';
 
 interface CustomImageProps {
-  src: string;
+  src: string | null;
   alt: string;
   className?: string;
   fallback?: string;
@@ -10,8 +10,17 @@ interface CustomImageProps {
 }
 
 const CustomImage = ({ src, alt, className, fallback = '/placeholder-image.jpg' }: CustomImageProps) => {
-  const [imageSrc, setImageSrc] = useState(fixImageUrl(src));
+  const [imageSrc, setImageSrc] = useState(fallback);
   const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    if (src) {
+      setImageSrc(fixImageUrl(src));
+      setHasError(false);
+    } else {
+      setImageSrc(fallback);
+    }
+  }, [src]);
 
   const handleError = () => {
     if (!hasError) {

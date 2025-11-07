@@ -24,7 +24,7 @@ from .views import (
     # Time Tracking Views
     CourseTimeStatsView, TimeTrackingRecordView, FavoriteCourseViewSet
 )
-
+from .views import NotificationListView, NotificationMarkAsReadView, NotificationMarkAllAsReadView, NotificationUnreadCountView
 # Create router for CourseViewSet
 router = DefaultRouter()
 router.register(r'courses/(?P<pk>\d+)/subscribers', CourseSubscribersListViewSet, basename='course-subscribers')
@@ -51,6 +51,10 @@ urlpatterns = [
     path('CSVUpload/', CSVUploadView.as_view(), name='CSVUpload'),
 
     # Course endpoints
+    path('notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('notifications/<int:notification_id>/mark-read/', NotificationMarkAsReadView.as_view(), name='notification-mark-read'),
+    path('notifications/mark-all-read/', NotificationMarkAllAsReadView.as_view(), name='notification-mark-all-read'),
+    path('notifications/unread-count/', NotificationUnreadCountView.as_view(), name='notification-unread-count'),
     path('courses/', views.CourseList.as_view(), name='course-list'),
     path('courses/<int:pk>/', views.CourseDetail.as_view(), name='course-detail'),
     path('courses/my-courses/', views.MyCourses.as_view(), name='my-courses'),
