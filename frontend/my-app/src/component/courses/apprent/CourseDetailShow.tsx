@@ -60,6 +60,7 @@ interface Module {
   order: number;
   status: number;
   contents: Content[];
+  estimated_duration?: number;
 }
 
 interface Course {
@@ -90,6 +91,21 @@ interface Course {
   estimated_duration_display?: string;
 }
 
+interface ModuleDuration {
+  module_id: number;
+  module_title: string;
+  estimated_duration?: number;
+  contents: ContentDuration[];
+}
+
+interface ContentDuration {
+  content_id: number;
+  content_title: string;
+  content_type: string;
+  estimated_duration?: number;
+  min_required_time?: number;
+}
+
 const CourseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -100,6 +116,63 @@ const CourseDetail = () => {
   const [timeSpent, setTimeSpent] = useState(0);
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
   const [selectedQCMOptions, setSelectedQCMOptions] = useState<{[questionId: number]: number[]}>({});
+
+  // Add responsive state
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // Effect to handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Helper function to determine if mobile view
+  const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
+
+  // Enhanced duration calculation with proper typing
+  const calculateTotalDuration = (courseData: Course | null): number => {
+    if (!courseData) return 0;
+    
+    // Use backend value if available and valid
+    if (courseData.estimated_duration && courseData.estimated_duration > 0) {
+      return courseData.estimated_duration;
+    }
+    
+    // Calculate from modules and contents
+    if (courseData.modules) {
+      return courseData.modules.reduce((total: number, module: Module) => {
+        let moduleDuration = module.estimated_duration || 0;
+        
+        // If module duration is 0, calculate from contents
+        if (moduleDuration === 0 && module.contents) {
+          moduleDuration = module.contents.reduce((contentTotal: number, content: Content) => {
+            return contentTotal + (content.estimated_duration || 0);
+          }, 0);
+        }
+        
+        return total + moduleDuration;
+      }, 0);
+    }
+    
+    return 0;
+  };
+
+  const formatDurationDisplay = (minutes: number): string => {
+    if (!minutes || minutes === 0) return '0min';
+    
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    
+    if (hours > 0) {
+      return `${hours}h ${mins > 0 ? `${mins}min` : ''}`.trim();
+    }
+    return `${mins}min`;
+  };
 
   const normalizeQCMContent = (content: Content): Content => {
     const normalizedContent = { ...content };
@@ -170,12 +243,12 @@ const CourseDetail = () => {
   const calculateFrontendStats = () => {
     if (!course || !course.modules) return null;
     
-    const totalContents = course.modules.reduce((total, module) => 
+    const totalContents = course.modules.reduce((total: number, module: Module) => 
       total + (module.contents?.length || 0), 0
     );
     
-    const completedContents = course.modules.reduce((total, module) => 
-      total + (module.contents?.filter(content => 
+    const completedContents = course.modules.reduce((total: number, module: Module) => 
+      total + (module.contents?.filter((content: Content) => 
         content.is_completed || userProgress.completedContents.includes(content.id)
       ).length || 0), 0
     );
@@ -195,14 +268,31 @@ const CourseDetail = () => {
         setLoading(true);
         console.log('🔄 Fetching course data...');
         const response = await api.get(`courses/${id}/`);
-        console.log('✅ Course API Response:', response.data);
+        console.log('✅ Complete Course API Response:', response.data);
         
-        // Log statistics data for debugging
-        console.log('📊 Statistics Data:', {
-          apprenants_count: response.data.apprenants_count,
-          avg_progress: response.data.avg_progress,
-          your_progress: response.data.your_progress,
-          estimated_duration_display: response.data.estimated_duration_display
+        // Log ALL course data to see what's available with proper typing
+        console.log('📋 Full Course Data:', {
+          id: response.data.id,
+          title: response.data.title_of_course,
+          estimated_duration: response.data.estimated_duration,
+          estimated_duration_display: response.data.estimated_duration_display,
+          modules: response.data.modules?.length,
+          contents: response.data.modules?.reduce((total: number, module: Module) => 
+            total + (module.contents?.length || 0), 0),
+          min_required_time: response.data.min_required_time,
+          // Check module durations with proper typing
+          module_durations: response.data.modules?.map((module: Module) => ({
+            module_id: module.id,
+            module_title: module.title,
+            estimated_duration: module.estimated_duration,
+            contents: module.contents?.map((content: Content) => ({
+              content_id: content.id,
+              content_title: content.title,
+              content_type: content.content_type_name,
+              estimated_duration: content.estimated_duration,
+              min_required_time: content.min_required_time
+            }))
+          }))
         });
         
         setCourse(response.data);
@@ -672,7 +762,7 @@ const CourseDetail = () => {
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        <div style={{ color: '#374151', fontSize: '1.5rem' }}>⏳ Chargement...</div>
+        <div style={{ color: '#374151', fontSize: isMobile ? '1.25rem' : '1.5rem' }}>⏳ Chargement...</div>
       </div>
     );
   }
@@ -686,123 +776,192 @@ const CourseDetail = () => {
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        <div style={{ color: '#374151', fontSize: '1.5rem' }}>Formation non trouvée</div>
+        <div style={{ color: '#374151', fontSize: isMobile ? '1.25rem' : '1.5rem' }}>Formation non trouvée</div>
       </div>
     );
   }
 
   const statusBadge = getStatusBadge(course.status);
   const frontendStats = calculateFrontendStats();
+  const totalDuration = calculateTotalDuration(course);
+  const displayDuration = course?.estimated_duration_display || formatDurationDisplay(totalDuration);
 
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ backgroundColor: '#2D2B6B', color: 'white', padding: '1.5rem 2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>{course.title_of_course}</h1>
-          <span style={{
-            backgroundColor: statusBadge.color,
-            color: 'white',
-            padding: '0.25rem 0.75rem',
-            borderRadius: '12px',
-            fontSize: '0.75rem'
+      <div style={{ 
+        backgroundColor: '#2D2B6B', 
+        color: 'white', 
+        padding: isMobile ? '1rem' : '1.5rem 2rem' 
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: '1rem',
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'center'
+        }}>
+          <h1 style={{ 
+            fontSize: isMobile ? '1.5rem' : '1.75rem', 
+            fontWeight: 'bold', 
+            margin: 0,
+            marginBottom: isMobile ? '0.5rem' : '0'
           }}>
-            {statusBadge.text}
-          </span>
-          <button 
-            onClick={resetProgress}
-            style={{
-              padding: '0.25rem 0.75rem',
-              backgroundColor: '#EF4444',
+            {course.title_of_course}
+          </h1>
+          <div style={{
+            display: 'flex',
+            gap: '1rem',
+            alignItems: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <span style={{
+              backgroundColor: statusBadge.color,
               color: 'white',
-              border: 'none',
-              borderRadius: '6px',
+              padding: '0.25rem 0.75rem',
+              borderRadius: '12px',
               fontSize: '0.75rem',
-              cursor: 'pointer'
-            }}
-          >
-            Reset Progress
-          </button>
+              whiteSpace: 'nowrap'
+            }}>
+              {statusBadge.text}
+            </span>
+            <button 
+              onClick={resetProgress}
+              style={{
+                padding: '0.25rem 0.75rem',
+                backgroundColor: '#EF4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Reset Progress
+            </button>
+          </div>
         </div>
-        <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.9 }}>{course.description}</p>
+        <p style={{ 
+          fontSize: isMobile ? '0.8rem' : '0.9rem', 
+          marginTop: '0.5rem', 
+          opacity: 0.9 
+        }}>
+          {course.description}
+        </p>
       </div>
 
       {/* Stats Bar */}
-      <div style={{ backgroundColor: '#2D2B6B', padding: '0 2rem 2rem 2rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2rem', color: 'white' }}>
+      <div style={{ 
+        backgroundColor: '#2D2B6B', 
+        padding: isMobile ? '1rem' : '0 2rem 2rem 2rem' 
+      }}>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', 
+          gap: isMobile ? '1rem' : '2rem', 
+          color: 'white' 
+        }}>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Contenu total</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
-              {course.modules?.reduce((total, module) => total + (module.contents?.length || 0), 0).toString().padStart(2, '0') || '00'}
+            <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>Contenu total</div>
+            <div style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>
+              {course.modules?.reduce((total: number, module: Module) => total + (module.contents?.length || 0), 0).toString().padStart(2, '0') || '00'}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° de modules</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0{course.modules?.length || 0}</div>
+            <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>N° de modules</div>
+            <div style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>0{course.modules?.length || 0}</div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° d'apprenants</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>N° d'apprenants</div>
+            <div style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>
               {course.apprenants_count || 0}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
+            <div style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>
               {Math.round(course.avg_progress || 0)}%
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>Votre progrès</div>
+            <div style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>
               {Math.round(course.your_progress || frontendStats?.yourProgress || 0)}%
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps estimé</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
-              {course.estimated_duration_display || formatDuration(course.estimated_duration) || '0min'}
+            <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>Temps estimé</div>
+            <div style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>
+              {displayDuration}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Debug Info - Remove after testing */}
+      {/* Debug Info - Enhanced */}
       <div style={{ 
         backgroundColor: '#FEF3C7', 
-        padding: '1rem', 
-        margin: '1rem 2rem',
+        padding: isMobile ? '0.75rem' : '1rem', 
+        margin: isMobile ? '0.5rem' : '1rem 2rem',
         borderRadius: '8px',
         border: '1px solid #F59E0B'
       }}>
-        <h4 style={{ margin: '0 0 0.5rem 0', color: '#92400E' }}>Debug Info:</h4>
-        <div style={{ fontSize: '0.75rem', color: '#92400E', fontFamily: 'monospace' }}>
-          <div>apprenants_count: {course.apprenants_count}</div>
-          <div>avg_progress: {course.avg_progress}</div>
-          <div>your_progress: {course.your_progress}</div>
-          <div>estimated_duration: {course.estimated_duration}</div>
-          <div>estimated_duration_display: {course.estimated_duration_display}</div>
+        <h4 style={{ margin: '0 0 0.5rem 0', color: '#92400E', fontSize: isMobile ? '0.9rem' : '1rem' }}>Duration Debug Info:</h4>
+        <div style={{ 
+          fontSize: isMobile ? '0.7rem' : '0.75rem', 
+          color: '#92400E', 
+          fontFamily: 'monospace',
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+          gap: '0.25rem'
+        }}>
+          <div>API estimated_duration: {course?.estimated_duration}</div>
+          <div>API estimated_duration_display: "{course?.estimated_duration_display}"</div>
+          <div>Calculated duration: {calculateTotalDuration(course)}</div>
+          <div>Formatted display: "{formatDurationDisplay(calculateTotalDuration(course))}"</div>
+          <div>Final display: "{displayDuration}"</div>
+          <div>Module count: {course?.modules?.length}</div>
+          <div>Content count: {course?.modules?.reduce((total: number, module: Module) => total + (module.contents?.length || 0), 0)}</div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div style={{ padding: '2rem', display: 'flex', gap: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{ 
+        padding: isMobile ? '1rem' : '2rem', 
+        display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? '1rem' : '2rem', 
+        maxWidth: '1400px', 
+        margin: '0 auto' 
+      }}>
         {/* Left Sidebar */}
-        <div style={{ width: '300px', flexShrink: 0 }}>
+        <div style={{ 
+          width: isMobile ? '100%' : '300px', 
+          flexShrink: 0 
+        }}>
           <div style={{
             backgroundColor: '#E5E7EB',
             borderRadius: '8px',
-            height: '200px',
+            height: isMobile ? '150px' : '200px',
             marginBottom: '1.5rem',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
             {course.image_url ? (
-              <img src={getimageUrl(course.image_url)} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+              <img 
+                src={getimageUrl(course.image_url)} 
+                alt="Course" 
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover', 
+                  borderRadius: '8px' 
+                }} 
+              />
             ) : (
               <div style={{ textAlign: 'center', color: '#9CA3AF' }}>
-                <div style={{ fontSize: '3rem' }}>📚</div>
+                <div style={{ fontSize: isMobile ? '2rem' : '3rem' }}>📚</div>
                 <div style={{ fontSize: '0.875rem' }}>Course Image</div>
               </div>
             )}
@@ -822,77 +981,135 @@ const CourseDetail = () => {
             </div>
           )}
 
-          <p style={{ fontSize: '0.875rem', color: '#4B5563', lineHeight: '1.6', marginBottom: '1rem' }}>
+          <p style={{ 
+            fontSize: '0.875rem', 
+            color: '#4B5563', 
+            lineHeight: '1.6', 
+            marginBottom: '1rem',
+            display: isMobile ? 'none' : 'block'
+          }}>
             {course.description}
           </p>
 
-          <div style={{ marginBottom: '0.5rem' }}>
-            <span>👤 </span>
-            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée par</span>
-          </div>
-          <div style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '1rem' }}>
-            {course.creator?.username || course.creator_username || 'Inconnu'}
-          </div>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'row' : 'column',
+            gap: isMobile ? '2rem' : '0',
+            justifyContent: isMobile ? 'space-between' : 'flex-start'
+          }}>
+            <div>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <span>👤 </span>
+                <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée par</span>
+              </div>
+              <div style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '1rem' }}>
+                {course.creator?.username || course.creator_username || 'Inconnu'}
+              </div>
+            </div>
 
-          <div style={{ marginBottom: '0.5rem' }}>
-            <span>📅 </span>
-            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée le</span>
-          </div>
-          <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>
-            {formatDate(course.created_at)}
+            <div>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <span>📅 </span>
+                <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée le</span>
+              </div>
+              <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>
+                {formatDate(course.created_at)}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Right Content - Modules */}
         <div style={{ flex: 1 }}>
           {course.modules && course.modules.length > 0 ? (
-            course.modules.map((module) => (
+            course.modules.map((module: Module) => (
               <div key={module.id} style={{ marginBottom: '1.5rem' }}>
-                <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1rem 1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: '600', margin: 0 }}>
+                <div style={{ 
+                  backgroundColor: 'white', 
+                  borderRadius: '8px', 
+                  padding: isMobile ? '1rem' : '1rem 1.5rem', 
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)' 
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    marginBottom: '1rem',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: isMobile ? '0.5rem' : '0'
+                  }}>
+                    <h3 style={{ 
+                      fontSize: isMobile ? '0.9rem' : '1rem', 
+                      fontWeight: '600', 
+                      margin: 0 
+                    }}>
                       Module {module.order} • {module.title}
                     </h3>
                   </div>
 
                   {module.contents && module.contents.length > 0 ? (
-                    module.contents.map((content) => (
+                    module.contents.map((content: Content) => (
                       <div
                         key={content.id}
                         onClick={() => handleContentClick(content)}
                         style={{
                           display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '0.75rem',
+                          padding: isMobile ? '0.5rem' : '0.75rem',
                           backgroundColor: '#F9FAFB',
                           borderRadius: '6px',
                           marginBottom: '0.5rem',
                           border: '1px solid #E5E7EB',
                           cursor: 'pointer',
                           transition: 'all 0.2s',
+                          flexDirection: isMobile ? 'column' : 'row',
+                          gap: isMobile ? '0.5rem' : '0'
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#EEF2FF';
-                          e.currentTarget.style.borderColor = '#2D2B6B';
+                          if (!isMobile) {
+                            e.currentTarget.style.backgroundColor = '#EEF2FF';
+                            e.currentTarget.style.borderColor = '#2D2B6B';
+                          }
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#F9FAFB';
-                          e.currentTarget.style.borderColor = '#E5E7EB';
+                          if (!isMobile) {
+                            e.currentTarget.style.backgroundColor = '#F9FAFB';
+                            e.currentTarget.style.borderColor = '#E5E7EB';
+                          }
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '0.75rem', 
+                          flex: 1 
+                        }}>
                           <span>{getContentIcon(content.content_type_name)}</span>
-                          <span style={{ fontSize: '0.875rem', color: '#1F2937' }}>{content.title}</span>
+                          <span style={{ 
+                            fontSize: isMobile ? '0.8rem' : '0.875rem', 
+                            color: '#1F2937' 
+                          }}>
+                            {content.title}
+                          </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '1rem',
+                          alignSelf: isMobile ? 'flex-end' : 'center'
+                        }}>
                           {content.estimated_duration && (
-                            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                            <span style={{ 
+                              fontSize: isMobile ? '0.75rem' : '0.875rem', 
+                              color: '#6B7280' 
+                            }}>
                               {formatDuration(content.estimated_duration)}
                             </span>
                           )}
                           {isContentCompleted(content) && (
-                            <span style={{ fontSize: '0.875rem', color: '#10B981', fontWeight: '500' }}>
+                            <span style={{ 
+                              fontSize: isMobile ? '0.75rem' : '0.875rem', 
+                              color: '#10B981', 
+                              fontWeight: '500' 
+                            }}>
                               ✓ Complété
                             </span>
                           )}
@@ -900,7 +1117,12 @@ const CourseDetail = () => {
                       </div>
                     ))
                   ) : (
-                    <div style={{ padding: '1rem', textAlign: 'center', color: '#6B7280', fontSize: '0.875rem' }}>
+                    <div style={{ 
+                      padding: '1rem', 
+                      textAlign: 'center', 
+                      color: '#6B7280', 
+                      fontSize: '0.875rem' 
+                    }}>
                       Aucun contenu dans ce module
                     </div>
                   )}
@@ -908,10 +1130,24 @@ const CourseDetail = () => {
               </div>
             ))
           ) : (
-            <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📚</div>
-              <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.5rem' }}>Aucun module trouvé</div>
-              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>Cette formation ne contient pas encore de modules.</div>
+            <div style={{ 
+              backgroundColor: 'white', 
+              borderRadius: '8px', 
+              padding: '2rem', 
+              textAlign: 'center', 
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)' 
+            }}>
+              <div style={{ fontSize: isMobile ? '2rem' : '3rem', marginBottom: '1rem' }}>📚</div>
+              <div style={{ 
+                fontSize: isMobile ? '0.9rem' : '1rem', 
+                fontWeight: '500', 
+                marginBottom: '0.5rem' 
+              }}>
+                Aucun module trouvé
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                Cette formation ne contient pas encore de modules.
+              </div>
             </div>
           )}
         </div>
@@ -930,25 +1166,47 @@ const CourseDetail = () => {
           justifyContent: 'center',
           alignItems: 'center',
           zIndex: 1000,
-          padding: '2rem'
+          padding: isMobile ? '0.5rem' : '2rem'
         }}>
           <div style={{
             backgroundColor: 'white',
             borderRadius: '8px',
             width: '100%',
             maxWidth: '900px',
-            maxHeight: '90vh',
+            maxHeight: isMobile ? '95vh' : '90vh',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden'
           }}>
             {/* Header */}
-            <div style={{ padding: '1.5rem', borderBottom: '1px solid #E5E7EB' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type_name)}</span>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>{selectedContent.title}</h3>
+            <div style={{ 
+              padding: isMobile ? '1rem' : '1.5rem', 
+              borderBottom: '1px solid #E5E7EB' 
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                gap: '0.75rem', 
+                marginBottom: '0.5rem',
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'flex-start' : 'center'
+              }}>
+                <span style={{ fontSize: isMobile ? '1.25rem' : '1.5rem' }}>
+                  {getContentIcon(selectedContent.content_type_name)}
+                </span>
+                <h3 style={{ 
+                  margin: 0, 
+                  fontSize: isMobile ? '1rem' : '1.25rem', 
+                  fontWeight: '600',
+                  textAlign: isMobile ? 'center' : 'left'
+                }}>
+                  {selectedContent.title}
+                </h3>
               </div>
-              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+              <div style={{ 
+                fontSize: isMobile ? '0.75rem' : '0.875rem', 
+                color: '#6B7280',
+                textAlign: isMobile ? 'center' : 'left'
+              }}>
                 Module {course.modules.find(m => m.contents.some(c => c.id === selectedContent.id))?.order} • {course.modules.find(m => m.contents.some(c => c.id === selectedContent.id))?.title}
               </div>
             </div>
@@ -957,10 +1215,14 @@ const CourseDetail = () => {
             {selectedContent.min_required_time && (
               <div style={{
                 backgroundColor: '#FEF3C7',
-                padding: '1rem 1.5rem',
+                padding: isMobile ? '0.75rem' : '1rem 1.5rem',
                 borderBottom: '1px solid #E5E7EB'
               }}>
-                <p style={{ margin: 0, fontSize: '0.875rem', color: '#92400E' }}>
+                <p style={{ 
+                  margin: 0, 
+                  fontSize: isMobile ? '0.75rem' : '0.875rem', 
+                  color: '#92400E' 
+                }}>
                   <strong>Temps requis :</strong> Vous devez passer {selectedContent.min_required_time} minutes ou plus dans ce cours avant de pouvoir marquer le contenu comme terminé.
                 </p>
               </div>
@@ -968,35 +1230,71 @@ const CourseDetail = () => {
 
             {/* Content Description */}
             {selectedContent.caption && (
-              <div style={{ padding: '1rem 1.5rem', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>À propos du contenu</h4>
-                <p style={{ margin: 0, fontSize: '0.875', color: '#6B7280', lineHeight: '1.5' }}>{selectedContent.caption}</p>
+              <div style={{ 
+                padding: isMobile ? '0.75rem' : '1rem 1.5rem', 
+                backgroundColor: '#F9FAFB', 
+                borderBottom: '1px solid #E5E7EB' 
+              }}>
+                <h4 style={{ 
+                  fontSize: isMobile ? '0.8rem' : '0.875rem', 
+                  fontWeight: '600', 
+                  marginBottom: '0.5rem' 
+                }}>
+                  À propos du contenu
+                </h4>
+                <p style={{ 
+                  margin: 0, 
+                  fontSize: isMobile ? '0.75rem' : '0.875rem', 
+                  color: '#6B7280', 
+                  lineHeight: '1.5' 
+                }}>
+                  {selectedContent.caption}
+                </p>
               </div>
             )}
 
             {/* Timer Display */}
             <div style={{
-              padding: '0.75rem 1.5rem',
+              padding: isMobile ? '0.5rem 1rem' : '0.75rem 1.5rem',
               backgroundColor: '#EEF2FF',
               borderBottom: '1px solid #E5E7EB',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'space-between',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '0.5rem' : '0'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '1.25rem' }}>⏱️</span>
-                <span style={{ fontSize: '0.875rem', color: '#4338CA', fontWeight: '500' }}>
+                <span style={{ fontSize: isMobile ? '1rem' : '1.25rem' }}>⏱️</span>
+                <span style={{ 
+                  fontSize: isMobile ? '0.75rem' : '0.875rem', 
+                  color: '#4338CA', 
+                  fontWeight: '500' 
+                }}>
                   Temps estimé de lecture : {selectedContent.estimated_duration || 0}min
                 </span>
               </div>
-              <div style={{ fontSize: '1rem', fontWeight: '600', color: '#4338CA' }}>
+              <div style={{ 
+                fontSize: isMobile ? '0.875rem' : '1rem', 
+                fontWeight: '600', 
+                color: '#4338CA' 
+              }}>
                 {formatTime(timeSpent)} / {formatTime((selectedContent.estimated_duration || 0) * 60)}
               </div>
             </div>
 
             {/* Content Area */}
-            <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
-              <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Contenu à lire</h4>
+            <div style={{ 
+              flex: 1, 
+              overflow: 'auto', 
+              padding: isMobile ? '1rem' : '1.5rem' 
+            }}>
+              <h4 style={{ 
+                fontSize: isMobile ? '0.8rem' : '0.875rem', 
+                fontWeight: '600', 
+                marginBottom: '1rem' 
+              }}>
+                Contenu à lire
+              </h4>
 
               {/* Video Content */}
               {selectedContent.content_type_name?.toLowerCase() === 'video' && (
@@ -1007,7 +1305,7 @@ const CourseDetail = () => {
                       style={{
                         width: '100%',
                         height: 'auto',
-                        maxHeight: '500px',
+                        maxHeight: isMobile ? '300px' : '500px',
                         backgroundColor: '#000',
                         borderRadius: '6px'
                       }}
@@ -1019,11 +1317,11 @@ const CourseDetail = () => {
                     <div style={{
                       backgroundColor: '#1F2937',
                       borderRadius: '8px',
-                      padding: '3rem',
+                      padding: isMobile ? '2rem' : '3rem',
                       textAlign: 'center',
                       color: 'white'
                     }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎥</div>
+                      <div style={{ fontSize: isMobile ? '2rem' : '3rem', marginBottom: '1rem' }}>🎥</div>
                       <div>Vidéo non disponible</div>
                     </div>
                   )}
@@ -1033,7 +1331,7 @@ const CourseDetail = () => {
               {/* QCM Content */}
               {selectedContent.content_type_name?.toLowerCase() === 'qcm' && selectedContent.qcm && (
                 <div style={{
-                  padding: '1.5rem',
+                  padding: isMobile ? '1rem' : '1.5rem',
                   backgroundColor: '#F9FAFB',
                   borderRadius: '6px',
                   border: '1px solid #E5E7EB'
@@ -1041,16 +1339,27 @@ const CourseDetail = () => {
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
                     marginBottom: '1.5rem',
                     paddingBottom: '1rem',
-                    borderBottom: '1px solid #E5E7EB'
+                    borderBottom: '1px solid #E5E7EB',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: isMobile ? '0.5rem' : '0'
                   }}>
-                    <h5 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>
+                    <h5 style={{ 
+                      margin: 0, 
+                      fontSize: isMobile ? '0.9rem' : '1rem', 
+                      fontWeight: '600' 
+                    }}>
                       {selectedContent.qcm.title}
                     </h5>
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem', color: '#6B7280' }}>
-                      <span>Score de passage: {selectedContent.qcm.passing_score}%</span>
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: isMobile ? '0.5rem' : '1rem', 
+                      fontSize: isMobile ? '0.75rem' : '0.875rem', 
+                      color: '#6B7280',
+                      flexWrap: 'wrap'
+                    }}>
+                      <span>Score: {selectedContent.qcm.passing_score}%</span>
                       <span>Tentatives: {selectedContent.qcm.max_attempts}</span>
                       {selectedContent.qcm.time_limit && selectedContent.qcm.time_limit > 0 && (
                         <span>Temps: {selectedContent.qcm.time_limit}min</span>
@@ -1061,7 +1370,7 @@ const CourseDetail = () => {
                   {selectedContent.qcm.questions?.map((question, qIndex) => (
                     <div key={question.id || qIndex} style={{
                       marginBottom: '2rem',
-                      padding: '1rem',
+                      padding: isMobile ? '0.75rem' : '1rem',
                       backgroundColor: 'white',
                       borderRadius: '6px',
                       border: '1px solid #E5E7EB'
@@ -1069,10 +1378,11 @@ const CourseDetail = () => {
                       <div style={{
                         fontWeight: '500',
                         marginBottom: '1rem',
-                        fontSize: '1rem',
+                        fontSize: isMobile ? '0.9rem' : '1rem',
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'flex-start'
+                        flexDirection: isMobile ? 'column' : 'row',
+                        gap: isMobile ? '0.5rem' : '0'
                       }}>
                         <span>{qIndex + 1}. {question.question}</span>
                         <span style={{
@@ -1081,7 +1391,8 @@ const CourseDetail = () => {
                           color: '#4338CA',
                           padding: '0.25rem 0.5rem',
                           borderRadius: '12px',
-                          fontWeight: '500'
+                          fontWeight: '500',
+                          whiteSpace: 'nowrap'
                         }}>
                           {question.question_type === 'single' ? 'Choix unique' : 'Choix multiple'}
                           {question.points && ` • ${question.points} pt${question.points > 1 ? 's' : ''}`}
@@ -1095,7 +1406,7 @@ const CourseDetail = () => {
                               display: 'flex',
                               alignItems: 'center',
                               gap: '0.75rem',
-                              padding: '0.75rem',
+                              padding: isMobile ? '0.5rem' : '0.75rem',
                               borderRadius: '4px',
                               cursor: 'pointer',
                               transition: 'all 0.2s',
@@ -1111,7 +1422,7 @@ const CourseDetail = () => {
                               style={{ cursor: 'pointer' }}
                             />
                             <span style={{
-                              fontSize: '0.875rem',
+                              fontSize: isMobile ? '0.8rem' : '0.875rem',
                               color: selectedQCMOptions[question.id]?.includes(option.id) ? '#4338CA' : '#374151'
                             }}>
                               {option.text}
@@ -1127,21 +1438,36 @@ const CourseDetail = () => {
               {/* File Download Section */}
               <div style={{
                 marginTop: '1rem',
-                padding: '1rem',
+                padding: isMobile ? '0.75rem' : '1rem',
                 backgroundColor: '#F3F4F6',
                 borderRadius: '6px',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? '0.75rem' : '0'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>{getContentIcon(selectedContent.content_type_name)}</span>
+                  <span style={{ fontSize: isMobile ? '1.25rem' : '1.5rem' }}>
+                    {getContentIcon(selectedContent.content_type_name)}
+                  </span>
                   <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>{getFileName(selectedContent)}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>{getFileSize(selectedContent)}</div>
+                    <div style={{ 
+                      fontSize: isMobile ? '0.8rem' : '0.875rem', 
+                      fontWeight: '500' 
+                    }}>
+                      {getFileName(selectedContent)}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>
+                      {getFileSize(selectedContent)}
+                    </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  gap: isMobile ? '0.5rem' : '0.75rem',
+                  flexDirection: isMobile ? 'column' : 'row',
+                  alignItems: isMobile ? 'stretch' : 'center'
+                }}>
                   {(selectedContent.pdf_content || selectedContent.video_content) && (
                     <>
                       <a
@@ -1149,25 +1475,31 @@ const CourseDetail = () => {
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
-                          padding: '0.5rem 1rem',
-                          fontSize: '0.875rem',
+                          padding: isMobile ? '0.4rem 0.8rem' : '0.5rem 1rem',
+                          fontSize: isMobile ? '0.75rem' : '0.875rem',
                           color: '#F97316',
                           textDecoration: 'none',
-                          fontWeight: '500'
+                          fontWeight: '500',
+                          textAlign: 'center',
+                          border: isMobile ? '1px solid #F97316' : 'none',
+                          borderRadius: isMobile ? '4px' : '0'
                         }}
                       >
                         Ouvrir dans un nouvel onglet
                       </a>
-                      <span style={{ color: '#E5E7EB' }}>•</span>
+                      {!isMobile && <span style={{ color: '#E5E7EB' }}>•</span>}
                       <a
                         href={getPdfUrl(selectedContent) || getVideoUrl(selectedContent) || '#'}
                         download
                         style={{
-                          padding: '0.5rem 1rem',
-                          fontSize: '0.875rem',
+                          padding: isMobile ? '0.4rem 0.8rem' : '0.5rem 1rem',
+                          fontSize: isMobile ? '0.75rem' : '0.875rem',
                           color: '#F97316',
                           textDecoration: 'none',
-                          fontWeight: '500'
+                          fontWeight: '500',
+                          textAlign: 'center',
+                          border: isMobile ? '1px solid #F97316' : 'none',
+                          borderRadius: isMobile ? '4px' : '0'
                         }}
                       >
                         Télécharger
@@ -1180,23 +1512,25 @@ const CourseDetail = () => {
 
             {/* Footer Actions */}
             <div style={{
-              padding: '1.5rem',
+              padding: isMobile ? '1rem' : '1.5rem',
               borderTop: '1px solid #E5E7EB',
               display: 'flex',
               justifyContent: 'flex-end',
-              gap: '1rem'
+              gap: '1rem',
+              flexDirection: isMobile ? 'column' : 'row'
             }}>
               <button
                 onClick={handleCloseModal}
                 style={{
-                  padding: '0.625rem 1.5rem',
+                  padding: isMobile ? '0.5rem 1rem' : '0.625rem 1.5rem',
                   backgroundColor: '#6B7280',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  fontSize: '0.875rem',
+                  fontSize: isMobile ? '0.8rem' : '0.875rem',
                   fontWeight: '500',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  order: isMobile ? 2 : 1
                 }}
               >
                 Fermer
@@ -1209,7 +1543,7 @@ const CourseDetail = () => {
                     (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                   }
                   style={{
-                    padding: '0.625rem 1.5rem',
+                    padding: isMobile ? '0.5rem 1rem' : '0.625rem 1.5rem',
                     backgroundColor: isContentCompleted(selectedContent)
                       ? '#10B981'
                       : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
@@ -1218,7 +1552,7 @@ const CourseDetail = () => {
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
-                    fontSize: '0.875rem',
+                    fontSize: isMobile ? '0.8rem' : '0.875rem',
                     fontWeight: '500',
                     cursor: isContentCompleted(selectedContent) ||
                       (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
@@ -1226,7 +1560,9 @@ const CourseDetail = () => {
                       : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem'
+                    gap: '0.5rem',
+                    justifyContent: 'center',
+                    order: isMobile ? 1 : 2
                   }}
                 >
                   <span>✓</span>
@@ -1241,7 +1577,7 @@ const CourseDetail = () => {
                     (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
                   }
                   style={{
-                    padding: '0.625rem 1.5rem',
+                    padding: isMobile ? '0.5rem 1rem' : '0.625rem 1.5rem',
                     backgroundColor: isContentCompleted(selectedContent)
                       ? '#10B981'
                       : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
@@ -1250,7 +1586,7 @@ const CourseDetail = () => {
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
-                    fontSize: '0.875rem',
+                    fontSize: isMobile ? '0.8rem' : '0.875rem',
                     fontWeight: '500',
                     cursor: isContentCompleted(selectedContent) ||
                       (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
@@ -1258,7 +1594,9 @@ const CourseDetail = () => {
                       : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem'
+                    gap: '0.5rem',
+                    justifyContent: 'center',
+                    order: isMobile ? 1 : 2
                   }}
                 >
                   <span>✓</span>
