@@ -642,34 +642,74 @@ class Subscription(models.Model):
         
         return self.completed_contents.filter(id=previous_content.id).exists()
 
+    # In your models.py, add these methods to Subscription model
+    
+    def calculate_progress_percentage(self):
+        """Calculate progress based on completed vs total active contents"""
+        try:
+            course = self.course
+            
+            # Get active modules and contents
+            active_modules = Module.objects.filter(course=course, status=1)
+            active_contents = CourseContent.objects.filter(
+                module__in=active_modules,
+                status=1
+            )
+            
+            # Get completed active contents
+            completed_active_contents = self.completed_contents.filter(
+                id__in=active_contents.values_list('id', flat=True)
+            )
+            
+            total_active_contents = active_contents.count()
+            completed_count = completed_active_contents.count()
+            
+            if total_active_contents > 0:
+                progress = (completed_count / total_active_contents) * 100
+                # Update the field
+                self.progress_percentage = round(progress, 2)
+                self.save(update_fields=['progress_percentage'])
+                return self.progress_percentage
+            
+            self.progress_percentage = 0.0
+            self.save(update_fields=['progress_percentage'])
+            return 0.0
+            
+        except Exception as e:
+            print(f"Error calculating progress: {str(e)}")
+            return 0.0
+    
     def update_completion_status(self):
-        """Update the completion status based on active content completion and time requirements"""
-        total_contents = CourseContent.objects.filter(
-            module__course=self.course, 
-            status=1
-        ).count()
-        completed_contents = self.completed_contents.filter(status=1).count()
-        
-        # Calculate progress percentage
-        if total_contents > 0:
-            self.progress_percentage = (completed_contents / total_contents) * 100
-        else:
-            self.progress_percentage = 0
-        
-        # Check if all active contents are completed AND time requirements are met
-        all_contents_completed = completed_contents >= total_contents
-        time_requirements_met = self.check_time_requirements()
-        
-        # Update completion status
-        was_completed = self.is_completed
-        self.is_completed = all_contents_completed and time_requirements_met
-        
-        # Set completed_at timestamp if newly completed
-        if self.is_completed and not was_completed:
-            self.completed_at = timezone.now()
-        
-        self.save()
-        return self.is_completed
+        """Update the is_completed field based on progress and time requirements"""
+        try:
+            # Calculate progress first
+            self.calculate_progress_percentage()
+            
+            # Check if all content is completed and time requirements are met
+            course = self.course
+            
+            # Get active modules and contents
+            active_modules = Module.objects.filter(course=course, status=1)
+            active_contents = CourseContent.objects.filter(
+                module__in=active_modules,
+                status=1
+            )
+            
+            # Get completed active contents
+            completed_active_contents = self.completed_contents.filter(
+                id__in=active_contents.values_list('id', flat=True)
+            )
+            
+            # Check completion criteria
+            all_content_completed = completed_active_contents.count() >= active_contents.count()
+            
+            # For now, set completion based on content only
+            # You can add time requirements later
+            self.is_completed = all_content_completed and self.progress_percentage >= 100
+            self.save(update_fields=['is_completed'])
+            
+        except Exception as e:
+            print(f"Error updating completion status: {str(e)}")
     
     def check_time_requirements(self):
         """Check if user meets time requirements for course completion"""

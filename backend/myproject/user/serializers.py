@@ -574,35 +574,18 @@ class CourseSerializer(serializers.ModelSerializer):
                     course=obj, 
                     is_active=True
                 ).first()
-                
+
                 if subscription:
-                    # Calculate progress based only on active content
-                    course = obj
-                    
-                    # Get active modules and contents
-                    active_modules = Module.objects.filter(course=course, status=1)
-                    active_contents = CourseContent.objects.filter(
-                        module__in=active_modules,
-                        status=1
-                    )
-                    
-                    # Get completed active contents for this subscription
-                    completed_active_contents = subscription.completed_contents.filter(
-                        id__in=active_contents.values_list('id', flat=True)
-                    )
-                    
-                    total_active_contents = active_contents.count()
-                    completed_count = completed_active_contents.count()
-                    
-                    if total_active_contents > 0:
-                        return round((completed_count / total_active_contents) * 100, 2)
-                    return 0.0
-                    
-            except Subscription.DoesNotExist:
-                pass
-        
+                    # Use the subscription's progress_percentage field directly
+                    # This should be maintained by your completion tracking logic
+                    return subscription.progress_percentage
+
+            except Exception as e:
+                print(f"Error getting progress for course {obj.id}: {str(e)}")
+                return 0.0
+
         return 0.0
-    
+
     def get_is_subscribed(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
@@ -619,14 +602,15 @@ class CourseDetailSerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='creator.username', read_only=True)
     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
-    status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
+    status_display = serializers.SerializerMethodField()
     department_display = serializers.CharField(source='get_department_display', read_only=True)
-    estimated_duration = serializers.CharField(source='get_estimated_duration', read_only=True)
-    # my_progress = serializers.CharField(source='get_your_progress', read_only=True)
     
-
-
-    # min_required_time = serializers.CharField(source= get)
+    # Add these statistics fields
+    estimated_duration_info = serializers.SerializerMethodField()
+    avg_progress = serializers.SerializerMethodField()
+    your_progress = serializers.SerializerMethodField()
+    apprenants_count = serializers.SerializerMethodField()
+    course_statistics = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
@@ -634,7 +618,10 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             'id', 'title_of_course', 'description', 'department', 'department_display',
             'status', 'status_display', 'image_url', 'creator_username', 
             'creator_first_name', 'creator_last_name', 'created_at', 'updated_at',
-            'estimated_duration', 'min_required_time', 'modules'
+            'estimated_duration', 'min_required_time', 'modules',
+            # Add these fields
+            'estimated_duration_info', 'avg_progress', 'your_progress', 
+            'apprenants_count', 'course_statistics'
         ]
     
     def get_status_display(self, obj):
@@ -645,6 +632,14 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             2: 'Archivé'
         }
         return status_map.get(obj.status, 'Non défini')
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return f"{settings.BASE_URL}{obj.image.url}" if hasattr(settings, 'BASE_URL') else obj.image.url
+        return None
     
     def get_modules(self, obj):
         modules = obj.modules.all().order_by('order')
@@ -665,23 +660,163 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             context={'request': request, 'subscription': subscription}
         ).data
     
-    def get_image_url(self, obj):
-        if obj.image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.image.url)
-            return f"{settings.BASE_URL}{obj.image.url}" if hasattr(settings, 'BASE_URL') else obj.image.url
-        return None
-    def get_estimated_duration(self, obj):
+    def get_estimated_duration_info(self, obj):
         """Get course duration information"""
-        return {
-            'estimated_duration_minutes': obj.estimated_duration or 0,
-            'estimated_duration_hours': round(obj.estimated_duration / 60, 1) if obj.estimated_duration else 0,
-            'min_required_time_minutes': obj.min_required_time or 0,
-            'min_required_time_hours': round(obj.min_required_time / 60, 1) if obj.min_required_time else 0,
-            'calculated_duration_minutes': obj.calculate_estimated_duration(),
-            'calculated_min_time_minutes': obj.calculate_min_required_time()
-        }
+        try:
+            calculated_duration = obj.calculate_estimated_duration()
+            calculated_min_time = obj.calculate_min_required_time()
+            
+            return {
+                'estimated_duration_minutes': obj.estimated_duration or calculated_duration,
+                'estimated_duration_hours': round((obj.estimated_duration or calculated_duration) / 60, 1),
+                'min_required_time_minutes': obj.min_required_time or calculated_min_time,
+                'min_required_time_hours': round((obj.min_required_time or calculated_min_time) / 60, 1),
+                'calculated_duration_minutes': calculated_duration,
+                'calculated_min_time_minutes': calculated_min_time
+            }
+        except Exception as e:
+            print(f"Error calculating duration for course {obj.id}: {str(e)}")
+            return {
+                'estimated_duration_minutes': 0,
+                'estimated_duration_hours': 0,
+                'min_required_time_minutes': 0,
+                'min_required_time_hours': 0,
+                'calculated_duration_minutes': 0,
+                'calculated_min_time_minutes': 0
+            }
+    
+    def get_avg_progress(self, obj):
+        """Get average progress across all subscribers"""
+        try:
+            active_subscriptions = obj.course_subscriptions.filter(is_active=True)
+            if active_subscriptions.exists():
+                avg_result = active_subscriptions.aggregate(avg_progress=Avg('progress_percentage'))
+                return round(avg_result['avg_progress'] or 0, 2)
+            return 0
+        except Exception as e:
+            print(f"Error calculating avg progress for course {obj.id}: {str(e)}")
+            return 0
+    
+    def get_your_progress(self, obj):
+        """Get current user's progress"""
+        try:
+            request = self.context.get('request')
+            if request and request.user.is_authenticated:
+                subscription = obj.course_subscriptions.filter(
+                    user=request.user, 
+                    is_active=True
+                ).first()
+                return subscription.progress_percentage if subscription else 0
+            return 0
+        except Exception as e:
+            print(f"Error calculating user progress for course {obj.id}: {str(e)}")
+            return 0
+    
+    def get_apprenants_count(self, obj):
+        """Get number of apprenants subscribed to this course"""
+        try:
+            return obj.course_subscriptions.filter(
+                is_active=True, 
+                user__privilege='AP'
+            ).count()
+        except Exception as e:
+            print(f"Error counting apprenants for course {obj.id}: {str(e)}")
+            return 0
+    
+    def get_course_statistics(self, obj):
+        """Get comprehensive course statistics"""
+        try:
+            active_subscriptions = obj.course_subscriptions.filter(is_active=True)
+            total_subscribers = active_subscriptions.count()
+            
+            # Progress statistics
+            if total_subscribers > 0:
+                total_progress = sum(sub.progress_percentage for sub in active_subscriptions)
+                avg_progress = round(total_progress / total_subscribers, 2)
+                
+                # Count subscribers by progress ranges
+                beginner_count = active_subscriptions.filter(progress_percentage__lt=25).count()
+                intermediate_count = active_subscriptions.filter(progress_percentage__range=[25, 75]).count()
+                advanced_count = active_subscriptions.filter(progress_percentage__gt=75).count()
+                completed_count = active_subscriptions.filter(is_completed=True).count()
+            else:
+                avg_progress = 0
+                beginner_count = intermediate_count = advanced_count = completed_count = 0
+            
+            # User type counts
+            apprenants_count = active_subscriptions.filter(user__privilege='AP').count()
+            formateurs_count = active_subscriptions.filter(user__privilege='F').count()
+            admins_count = active_subscriptions.filter(user__privilege='A').count()
+            
+            return {
+                'total_subscribers': total_subscribers,
+                'apprenants_count': apprenants_count,
+                'formateurs_count': formateurs_count,
+                'admins_count': admins_count,
+                'avg_progress': avg_progress,
+                'progress_distribution': {
+                    'beginner': beginner_count,
+                    'intermediate': intermediate_count,
+                    'advanced': advanced_count,
+                    'completed': completed_count
+                },
+                'completion_rate': round((completed_count / total_subscribers * 100), 2) if total_subscribers > 0 else 0
+            }
+            
+        except Exception as e:
+            print(f"Error getting course statistics for course {obj.id}: {str(e)}")
+            return {
+                'total_subscribers': 0,
+                'apprenants_count': 0,
+                'formateurs_count': 0,
+                'admins_count': 0,
+                'avg_progress': 0,
+                'progress_distribution': {
+                    'beginner': 0,
+                    'intermediate': 0,
+                    'advanced': 0,
+                    'completed': 0
+                },
+                'completion_rate': 0
+            }
+
+def get_avg_progress(self, obj):
+    """Get average progress across all subscribers"""
+    try:
+        active_subscriptions = obj.course_subscriptions.filter(is_active=True)
+        if active_subscriptions.exists():
+            avg_result = active_subscriptions.aggregate(avg_progress=Avg('progress_percentage'))
+            return round(avg_result['avg_progress'] or 0, 2)
+        return 0
+    except Exception as e:
+        print(f"Error calculating avg progress for course {obj.id}: {str(e)}")
+        return 0
+
+def get_your_progress(self, obj):
+    """Get current user's progress"""
+    try:
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            subscription = obj.course_subscriptions.filter(
+                user=request.user, 
+                is_active=True
+            ).first()
+            return subscription.progress_percentage if subscription else 0
+        return 0
+    except Exception as e:
+        print(f"Error calculating user progress for course {obj.id}: {str(e)}")
+        return 0
+
+def get_apprenants_count(self, obj):
+    """Get number of apprenants subscribed to this course"""
+    try:
+        return obj.course_subscriptions.filter(
+            is_active=True, 
+            user__privilege='AP'
+        ).count()
+    except Exception as e:
+        print(f"Error counting apprenants for course {obj.id}: {str(e)}")
+        return 0
     
     def get_avg_progress(self, obj):
         """Get average progress across all subscribers"""

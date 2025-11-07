@@ -82,6 +82,12 @@ interface Course {
   estimated_duration?: number;
   min_required_time?: number;
   modules: Module[];
+  
+  // Statistics fields
+  apprenants_count?: number;
+  avg_progress?: number;
+  your_progress?: number;
+  estimated_duration_display?: string;
 }
 
 const CourseDetail = () => {
@@ -103,7 +109,6 @@ const CourseDetail = () => {
 
       // Normalisation des questions
       let questions: QCMQuestion[] = [];
-      console.log('just +++++++++++', qcm);
       if (Array.isArray(qcm.questions) && qcm.questions.length > 0) {
         // Format multi-questions
         questions = qcm.questions.map((q: any, index: number) => ({
@@ -156,24 +161,51 @@ const CourseDetail = () => {
     timeSpent: {}
   });
 
-  // Add this helper function to check if content is completed
+  // Helper function to check if content is completed
   const isContentCompleted = (content: Content) => {
     return content.is_completed || userProgress.completedContents.includes(content.id);
   };
 
-  // Add debug useEffect
-  useEffect(() => {
-    console.log('Current userProgress:', userProgress);
-    console.log('LocalStorage content:', localStorage.getItem(`course_progress_${id}`));
-  }, [userProgress, id]);
+  // Calculate frontend statistics as fallback
+  const calculateFrontendStats = () => {
+    if (!course || !course.modules) return null;
+    
+    const totalContents = course.modules.reduce((total, module) => 
+      total + (module.contents?.length || 0), 0
+    );
+    
+    const completedContents = course.modules.reduce((total, module) => 
+      total + (module.contents?.filter(content => 
+        content.is_completed || userProgress.completedContents.includes(content.id)
+      ).length || 0), 0
+    );
+    
+    const yourProgress = totalContents > 0 ? Math.round((completedContents / totalContents) * 100) : 0;
+    
+    return {
+      yourProgress,
+      totalContents,
+      completedContents
+    };
+  };
 
   useEffect(() => {
     const fetchCourse = async () => {
       try {
         setLoading(true);
+        console.log('🔄 Fetching course data...');
         const response = await api.get(`courses/${id}/`);
+        console.log('✅ Course API Response:', response.data);
+        
+        // Log statistics data for debugging
+        console.log('📊 Statistics Data:', {
+          apprenants_count: response.data.apprenants_count,
+          avg_progress: response.data.avg_progress,
+          your_progress: response.data.your_progress,
+          estimated_duration_display: response.data.estimated_duration_display
+        });
+        
         setCourse(response.data);
-        console.log('---------------------i need it', response.data);
 
         // Normaliser les contenus QCM
         if (response.data.modules) {
@@ -186,7 +218,7 @@ const CourseDetail = () => {
 
         // Load user progress from localStorage
         const savedProgress = localStorage.getItem(`course_progress_${id}`);
-        let userProgressData:any;
+        let userProgressData: any;
         
         if (savedProgress) {
           userProgressData = JSON.parse(savedProgress);
@@ -221,8 +253,12 @@ const CourseDetail = () => {
 
         setUserProgress(userProgressData);
         
-      } catch (error) {
-        console.error('Error fetching course:', error);
+      } catch (error: any) {
+        console.error('❌ Error fetching course:', error);
+        if (error.response) {
+          console.error('📄 Error response data:', error.response.data);
+          console.error('🔢 Error response status:', error.response.status);
+        }
       } finally {
         setLoading(false);
       }
@@ -302,14 +338,10 @@ const CourseDetail = () => {
   const BASE_URL = 'http://localhost:8000';
 
   const getVideoUrl = (content: Content) => {
-    console.log(content)
     const videoFile = content.video_content?.video_file;
     if (videoFile) {
       let url = videoFile;
-
-      // Replace backend domain with localhost if necessary
       url = url.replace('http://backend:8000', BASE_URL);
-      console.log('url', url);
 
       if (!url.startsWith('http')) {
         url = `${BASE_URL}${url}`;
@@ -359,7 +391,7 @@ const CourseDetail = () => {
     setSelectedQCMOptions({});
   };
 
-  // Add this function to reset progress if needed
+  // Function to reset progress if needed
   const resetProgress = () => {
     localStorage.removeItem(`course_progress_${id}`);
     setUserProgress({
@@ -382,12 +414,13 @@ const CourseDetail = () => {
 
       try {
         const contentType = selectedContent.content_type_name?.toLowerCase();
-        const actualTimeSpent = Math.ceil((userProgress.timeSpent[selectedContent.id] || 0) / 60); // Convert seconds to minutes
+        const actualTimeSpent = Math.ceil((userProgress.timeSpent[selectedContent.id] || 0) / 60);
+
+        console.log('Marking as completed with estimated_duration:', actualTimeSpent);
 
         let apiCall;
         
         if (contentType === 'qcm') {
-          // For QCM content, check if it has already been completed
           const isQCMCompleted = userProgress.completedQCMs?.includes(selectedContent.id) || selectedContent.is_completed;
           
           if (!isQCMCompleted) {
@@ -395,7 +428,8 @@ const CourseDetail = () => {
             return;
           }
 
-          apiCall = api.patch(`contents/${selectedContent.id}/complete/`, {
+          apiCall = api.patch(`contents/${selectedContent.id}/`, {
+            is_completed: true,
             estimated_duration: actualTimeSpent
           });
 
@@ -412,28 +446,23 @@ const CourseDetail = () => {
           });
 
         } else {
-          apiCall = api.patch(`contents/${selectedContent.id}/complete/`, {
+          apiCall = api.patch(`contents/${selectedContent.id}/`, {
+            is_completed: true,
             estimated_duration: actualTimeSpent
           });
         }
 
-        await apiCall;
+        const response = await apiCall;
+        console.log('Backend response:', response.data);
 
-        // Update local state FIRST
         const newProgress = {
           ...userProgress,
           completedContents: [...userProgress.completedContents, selectedContent.id]
         };
         
-        console.log('Updating progress with:', newProgress);
-        
         setUserProgress(newProgress);
-        
-        // Save to localStorage IMMEDIATELY
         localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
-        console.log('Saved to localStorage:', localStorage.getItem(`course_progress_${id}`));
 
-        // Update the course data with the new estimated_duration
         setCourse(prev => {
           if (!prev) return prev;
           
@@ -460,9 +489,18 @@ const CourseDetail = () => {
         setShowModal(false);
         setSelectedContent(null);
 
-      } catch (error) {
+        setTimeout(async () => {
+          try {
+            const refreshResponse = await api.get(`courses/${id}/`);
+            setCourse(refreshResponse.data);
+          } catch (error) {
+            console.error('Error refreshing course:', error);
+          }
+        }, 1000);
+
+      } catch (error: any) {
         console.error('Error marking content as completed:', error);
-        alert('Erreur lors de la mise à jour');
+        alert(`Erreur lors de la mise à jour: ${error.response?.data?.message || error.message}`);
       }
     }
   };
@@ -491,10 +529,8 @@ const CourseDetail = () => {
     if (!selectedContent) return;
 
     try {
-      // Create the correct structure for question_answers
       const questionAnswers: { [questionId: number]: number[] } = {};
       
-      // Populate the question_answers object
       Object.keys(selectedQCMOptions).forEach(questionId => {
         const questionIdNum = parseInt(questionId);
         const selectedOptions = selectedQCMOptions[questionIdNum];
@@ -503,7 +539,7 @@ const CourseDetail = () => {
         }
       });
 
-      const actualTimeSpent = Math.ceil(timeSpent / 60); // Convert seconds to minutes
+      const actualTimeSpent = Math.ceil(timeSpent / 60);
 
       console.log('Submitting QCM with data:', {
         content_id: selectedContent.id,
@@ -519,9 +555,7 @@ const CourseDetail = () => {
         estimated_duration: actualTimeSpent
       });
 
-      // Check if user passed the QCM
       if (response.data.is_passed) {
-        // Update local state to mark QCM as completed
         setUserProgress(prev => {
           const newProgress = {
             ...prev,
@@ -532,7 +566,6 @@ const CourseDetail = () => {
           return newProgress;
         });
 
-        // Update the course data with the new estimated_duration
         setCourse(prev => {
           if (!prev) return prev;
           
@@ -559,15 +592,20 @@ const CourseDetail = () => {
         setShowModal(false);
         setSelectedContent(null);
 
-        // Refresh course data
-        const courseResponse = await api.get(`courses/${id}/`);
-        setCourse(courseResponse.data);
+        setTimeout(async () => {
+          try {
+            const courseResponse = await api.get(`courses/${id}/`);
+            setCourse(courseResponse.data);
+          } catch (error) {
+            console.error('Error refreshing course after QCM:', error);
+          }
+        }, 1000);
       } else {
         alert(`QCM échoué. Score: ${response.data.percentage}% (Minimum requis: ${response.data.passing_score}%). Veuillez réessayer.`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting QCM:', error);
-      alert('Erreur lors de la soumission du QCM');
+      alert(`Erreur lors de la soumission du QCM: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -580,8 +618,6 @@ const CourseDetail = () => {
   const getPdfUrl = (content: Content) => {
     if (content.pdf_content?.pdf_file) {
       let pdfPath = content.pdf_content.pdf_file;
-
-      // Replace backend domain with localhost if necessary
       pdfPath = pdfPath.replace('http://backend:8000', BASE_URL);
 
       if (!pdfPath.startsWith('http')) {
@@ -656,6 +692,7 @@ const CourseDetail = () => {
   }
 
   const statusBadge = getStatusBadge(course.status);
+  const frontendStats = calculateFrontendStats();
 
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh' }}>
@@ -672,7 +709,6 @@ const CourseDetail = () => {
           }}>
             {statusBadge.text}
           </span>
-          {/* Temporary reset button - remove after testing */}
           <button 
             onClick={resetProgress}
             style={{
@@ -706,20 +742,46 @@ const CourseDetail = () => {
           </div>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° d'apprenants</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              {course.apprenants_count || 0}
+            </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Avg. du progrès</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
+            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              {Math.round(course.avg_progress || 0)}%
+            </div>
           </div>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              {Math.round(course.your_progress || frontendStats?.yourProgress || 0)}%
+            </div>
           </div>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps estimé</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{formatDuration(course.estimated_duration) || '0min'}</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              {course.estimated_duration_display || formatDuration(course.estimated_duration) || '0min'}
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Debug Info - Remove after testing */}
+      <div style={{ 
+        backgroundColor: '#FEF3C7', 
+        padding: '1rem', 
+        margin: '1rem 2rem',
+        borderRadius: '8px',
+        border: '1px solid #F59E0B'
+      }}>
+        <h4 style={{ margin: '0 0 0.5rem 0', color: '#92400E' }}>Debug Info:</h4>
+        <div style={{ fontSize: '0.75rem', color: '#92400E', fontFamily: 'monospace' }}>
+          <div>apprenants_count: {course.apprenants_count}</div>
+          <div>avg_progress: {course.avg_progress}</div>
+          <div>your_progress: {course.your_progress}</div>
+          <div>estimated_duration: {course.estimated_duration}</div>
+          <div>estimated_duration_display: {course.estimated_duration_display}</div>
         </div>
       </div>
 
@@ -908,7 +970,7 @@ const CourseDetail = () => {
             {selectedContent.caption && (
               <div style={{ padding: '1rem 1.5rem', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
                 <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>À propos du contenu</h4>
-                <p style={{ margin: 0, fontSize: '0.875rem', color: '#6B7280', lineHeight: '1.5' }}>{selectedContent.caption}</p>
+                <p style={{ margin: 0, fontSize: '0.875', color: '#6B7280', lineHeight: '1.5' }}>{selectedContent.caption}</p>
               </div>
             )}
 
@@ -1059,25 +1121,6 @@ const CourseDetail = () => {
                       </div>
                     </div>
                   ))}
-
-                  {/* QCM Submit Button */}
-                  {/* <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
-                    <button
-                      onClick={handleQCMSubmit}
-                      style={{
-                        padding: '0.75rem 2rem',
-                        backgroundColor: '#4338CA',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '1rem',
-                        fontWeight: '600',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Soumettre le QCM
-                    </button>
-                  </div> */}
                 </div>
               )}
 

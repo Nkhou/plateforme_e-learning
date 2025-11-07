@@ -8,7 +8,7 @@ from .views import (
     
     # Admin Views
     AdminDashboardView, UserManagementView, CourseStatusManagementView,
-    SystemAnalyticsView, ContentManagementView, UserDetailView, SystemHealthView,
+    SystemAnalyticsView, ContentManagementView, UserDetailView, SystemHealthView,CourseStatsDebugView,
     
     # Course & Subscription Views
     CourseSubscribersListViewSet, MySubscriptions, 
@@ -140,7 +140,7 @@ urlpatterns = [
     path('courses/<int:course_id>/subscribe/', CourseSubscribeAPIView.as_view(), name='course-subscribe'),
     
 
-
+path('courses/<int:pk>/stats-debug/', CourseStatsDebugView.as_view(), name='course-stats-debug'),
 
 
     # Global search - FIXED (was pointing to FavoriteCourseViewSet instead of GlobalSearchView)

@@ -887,77 +887,29 @@ class CourseDetail(APIView):
         return get_object_or_404(Course, pk=pk)
     
     def get(self, request, pk):
-        course = self.get_object(pk)
-        
-        # Vérifier si l'utilisateur peut voir le cours
-        user = request.user
-        if course.status == 0 and not (user.is_authenticated and 
-                                        (user.privilege in ['F', 'A'] or user == course.creator)):
-            return Response(
-                {'error': 'Ce cours est en brouillon et non accessible'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        serializer = CourseDetailSerializer(course, context={'request': request})
-        return Response(serializer.data)
-    
-    def put(self, request, pk):
-        course = self.get_object(pk)
-        
-        # Vérifier les permissions
-        if course.creator != request.user and request.user.privilege != 'A':
-            return Response(
-                {'error': 'Vous n\'êtes pas autorisé à modifier ce cours'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        serializer = CourseCreateSerializer(course, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+        try:
+            course = self.get_object(pk)
+            
+            # Vérifier si l'utilisateur peut voir le cours
+            user = request.user
+            if course.status == 0 and not (user.is_authenticated and 
+                                            (user.privilege in ['F', 'A'] or user == course.creator)):
+                return Response(
+                    {'error': 'Ce cours est en brouillon et non accessible'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            serializer = CourseDetailSerializer(course, context={'request': request})
             return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def patch(self, request, pk):
-        course = self.get_object(pk)
-        
-        # Vérifier les permissions
-        if course.creator != request.user and request.user.privilege != 'A':
+            
+        except Exception as e:
+            print(f"Error in CourseDetail view: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return Response(
-                {'error': 'Vous n\'êtes pas autorisé à modifier ce cours'},
-                status=status.HTTP_403_FORBIDDEN
+                {'error': f'Internal server error: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-        action = request.data.get('action')
-        
-        if action == 'activate':
-            course.status = 1
-            course.save()
-            return Response({
-                'message': 'Cours activé avec succès',
-                'status': 'active'
-            })
-        elif action == 'archive':
-            course.status = 2
-            course.save()
-            return Response({
-                'message': 'Cours archivé avec succès',
-                'status': 'archived'
-            })
-        elif action == 'draft':
-            course.status = 0
-            course.save()
-            return Response({
-                'message': 'Cours remis en brouillon avec succès',
-                'status': 'draft'
-            })
-        else:
-            # Si pas d'action spécifique, faire un update normal
-            serializer = CourseCreateSerializer(course, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class MyCourses(APIView):
     def get(self, request):
         if not request.user.is_authenticated:
@@ -5171,7 +5123,7 @@ class MarkContentCompletedView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request, pk):
-        """Mark a content as completed"""
+        """Mark a content as completed and update progress"""
         try:
             content = CourseContent.objects.get(id=pk)
             user = request.user
@@ -5183,8 +5135,14 @@ class MarkContentCompletedView(APIView):
                 defaults={'is_active': True}
             )
             
-            # Mark content as completed
-            if subscription.mark_content_completed(content):
+            # Mark content as completed if not already
+            if not subscription.completed_contents.filter(id=content.id).exists():
+                subscription.completed_contents.add(content)
+                
+                # Recalculate progress
+                subscription.calculate_progress_percentage()
+                subscription.update_completion_status()
+                
                 return Response({
                     'success': True,
                     'message': f'Content "{content.title}" marked as completed',
@@ -5194,12 +5152,14 @@ class MarkContentCompletedView(APIView):
             else:
                 return Response({
                     'success': False,
-                    'message': 'Content already completed'
+                    'message': 'Content already completed',
+                    'progress': subscription.progress_percentage
                 }, status=status.HTTP_200_OK)
                 
         except CourseContent.DoesNotExist:
             return Response({'error': 'Content not found'}, status=status.HTTP_404_NOT_FOUND)
-
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 class CheckCourseCompletionView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -5700,3 +5660,44 @@ class FavoriteCourseViewSet(viewsets.ModelViewSet):
                 {'error': 'Favorite not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+class CourseStatsDebugView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Debug endpoint to check course statistics"""
+        try:
+            course = Course.objects.get(id=pk)
+            
+            # Get all active subscriptions
+            active_subscriptions = course.course_subscriptions.filter(is_active=True)
+            
+            # Get user's subscription
+            user_subscription = active_subscriptions.filter(user=request.user).first()
+            
+            # Debug information
+            debug_info = {
+                'course_id': course.id,
+                'course_title': course.title_of_course,
+                'total_active_subscriptions': active_subscriptions.count(),
+                'user_has_subscription': user_subscription is not None,
+                'user_progress': user_subscription.progress_percentage if user_subscription else 0,
+                'user_is_completed': user_subscription.is_completed if user_subscription else False,
+                'subscriptions_debug': []
+            }
+            
+            # Check each subscription
+            for sub in active_subscriptions:
+                debug_info['subscriptions_debug'].append({
+                    'user_id': sub.user.id,
+                    'username': sub.user.username,
+                    'progress': sub.progress_percentage,
+                    'is_completed': sub.is_completed,
+                    'completed_contents_count': sub.completed_contents.count(),
+                    'total_time_spent': sub.total_time_spent
+                })
+            
+            return Response(debug_info, status=status.HTTP_200_OK)
+            
+        except Course.DoesNotExist:
+            return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
