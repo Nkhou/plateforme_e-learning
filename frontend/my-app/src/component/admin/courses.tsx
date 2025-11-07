@@ -25,6 +25,7 @@ interface Course {
   description: string;
   creator_username: string;
   creator_id: number;
+  module_count: number;
   subscribers_count: number;
   created_at: string;
   image_url?: string;
@@ -93,37 +94,44 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   }, []);
 
   // Fetch courses from backend
-  const fetchCourses = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await api.get('courses/');
-      console.log('API Response:', response.data);
-      
-      // Handle different response structures
-      if (Array.isArray(response.data)) {
-        setCourses({
-          courses: response.data,
-          enrollment_stats: { labels: [], data: [] }
-        });
-      } else if (response.data && response.data.courses) {
-        setCourses(response.data);
-      } else {
-        console.warn('Unexpected API response structure:', response.data);
-        setCourses({
-          courses: [],
-          enrollment_stats: { labels: [], data: [] }
-        });
-      }
-    } catch (err: any) {
-      console.error('Error fetching courses:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to fetch courses';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+  // In your fetchCourses function, add logging:
+const fetchCourses = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    const response = await api.get('courses/');
+    console.log('API Response:', response.data);
+    
+    // ADD THIS DEBUG LOG
+    if (response.data && response.data.courses && response.data.courses.length > 0) {
+      console.log('First course data:', response.data.courses[0]);
+      console.log('Available properties:', Object.keys(response.data.courses[0]));
     }
-  };
+    
+    // Handle different response structures
+    if (Array.isArray(response.data)) {
+      setCourses({
+        courses: response.data,
+        enrollment_stats: { labels: [], data: [] }
+      });
+    } else if (response.data && response.data.courses) {
+      setCourses(response.data);
+    } else {
+      console.warn('Unexpected API response structure:', response.data);
+      setCourses({
+        courses: [],
+        enrollment_stats: { labels: [], data: [] }
+      });
+    }
+  } catch (err: any) {
+    console.error('Error fetching courses:', err);
+    const errorMessage = err.response?.data?.error || err.message || 'Failed to fetch courses';
+    setError(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Fetch students for a specific course
   const fetchCourseStudents = async (courseId: number) => {
@@ -1044,7 +1052,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                           </span>
                         </td>
                         <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                          {course.total_modules || 0}
+                          {course.module_count || 0}
                         </td>
                         <td style={{ padding: '0.75rem', color: '#6B7280' }}>
                           {new Date(course.created_at).toLocaleDateString('fr-FR', { 
@@ -1272,7 +1280,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                                 >
                                   👁️ Voir les détails
                                 </button>
-                                <button
+                                {/* <button
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -1322,7 +1330,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
                                   🗑️ Supprimer
-                                </button>
+                                </button> */}
                               </div>
                             )}
                           </div>

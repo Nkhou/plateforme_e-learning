@@ -72,7 +72,8 @@ interface Course {
   status: number;
   department?: string;
   category?: string;
-  subscribers_count?: number;
+  subscriber_count?: number;
+  average_progress?:number;
   creator?: {
     id: number;
     username: string;
@@ -1091,11 +1092,11 @@ const CourseDetail = () => {
           </div>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° d'apprenants</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{course.subscribers_count || 0}</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{course.subscriber_count || 0}</div>
           </div>
           <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{course.average_progress || 0}</div>
           </div>
           {/* <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
@@ -2396,7 +2397,7 @@ const CourseDetail = () => {
                         <div key={qIndex} style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                             <h5 style={{ fontSize: '0.875rem', fontWeight: '600', margin: 0 }}>Question {qIndex + 1}</h5>
-                            {contentForm.questions.length > 1 && (
+                            {/* {contentForm.questions.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() => removeQuestion(qIndex)}
@@ -2410,7 +2411,7 @@ const CourseDetail = () => {
                               >
                                 ✕ Supprimer
                               </button>
-                            )}
+                            )} */}
                           </div>
 
                           <div style={{ marginBottom: '1rem' }}>

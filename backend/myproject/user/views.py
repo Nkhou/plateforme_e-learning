@@ -199,7 +199,7 @@ class CourseStatusManagementView(APIView):
         })
     
     def post(self, request, pk):
-        """Changer le statut d'un cours"""
+        """Changer le statut d'un cours avec action"""
         course = get_object_or_404(Course, pk=pk)
         # Vérifier que l'utilisateur est le créateur du cours ou un admin
         if course.creator != request.user and request.user.privilege != 'A':
@@ -240,6 +240,84 @@ class CourseStatusManagementView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
     
+    # AJOUTEZ CETTE MÉTHODE PATCH
+    def patch(self, request, pk=None):
+        """Mettre à jour les informations d'un cours avec PATCH"""
+        try:
+            if pk is None:
+                return Response(
+                    {'error': 'ID du cours requis'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            course = get_object_or_404(Course, pk=pk)
+            
+            # Vérifier que l'utilisateur est le créateur du cours ou un admin
+            if course.creator != request.user and request.user.privilege != 'A':
+                return Response(
+                    {'error': 'Vous n\'êtes pas autorisé à modifier ce cours'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Récupérer les données
+            title_of_course = request.data.get('title_of_course')
+            description = request.data.get('description')
+            department = request.data.get('department')
+            status_val = request.data.get('status')
+            
+            # Mettre à jour les champs fournis
+            updated_fields = []
+            
+            if title_of_course is not None:
+                course.title_of_course = title_of_course
+                updated_fields.append('titre')
+            
+            if description is not None:
+                course.description = description
+                updated_fields.append('description')
+            
+            if department is not None:
+                course.department = department
+                updated_fields.append('département')
+            
+            if status_val is not None:
+                # Valider le statut
+                if status_val not in [0, 1, 2]:
+                    return Response(
+                        {'error': 'Statut invalide. Utilisez 0 (Brouillon), 1 (Actif), ou 2 (Archivé).'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                course.status = status_val
+                updated_fields.append('statut')
+            
+            if updated_fields:
+                course.save()
+                
+                # Sérialiser la réponse
+                serializer = CourseSerializer(course, context={'request': request})
+                
+                return Response({
+                    'message': f'Cours "{course.title_of_course}" mis à jour avec succès',
+                    'updated_fields': updated_fields,
+                    'course': serializer.data
+                })
+            else:
+                return Response({
+                    'message': 'Aucune modification effectuée',
+                    'course': CourseSerializer(course, context={'request': request}).data
+                })
+                
+        except Course.DoesNotExist:
+            return Response(
+                {'error': 'Cours non trouvé'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Erreur lors de la mise à jour: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     def get_enrollment_stats(self):
         """Get enrollment statistics for the chart"""
         try:
@@ -261,7 +339,6 @@ class CourseStatusManagementView(APIView):
         except Exception as e:
             print(f"Unexpected error: {e}")
             return {'labels': [], 'data': []}
-
 # FIXED: CourseManagementView - Replaced CourseSubscription with Subscription
 class CourseManagementView(APIView):
     permission_classes = [IsAuthenticated]
@@ -688,6 +765,7 @@ class CourseList(APIView):
         # Annotate with subscriber count
         courses = Course.objects.filter(base_query)\
             .select_related('creator')\
+            .prefetch_related('modules')\
             .annotate(
                 subscribers_count=Count(
                     'course_subscriptions', 
@@ -908,6 +986,47 @@ class CourseDetail(APIView):
             traceback.print_exc()
             return Response(
                 {'error': f'Internal server error: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    def patch(self, request, pk):
+        """Update course information with PATCH"""
+        try:
+            course = self.get_object(pk)
+            user = request.user
+            
+            # Check permissions
+            if course.creator != user and user.privilege != 'A':
+                return Response(
+                    {'error': 'You are not authorized to update this course'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Update fields that are provided
+            if 'title_of_course' in request.data:
+                course.title_of_course = request.data['title_of_course']
+            if 'description' in request.data:
+                course.description = request.data['description']
+            if 'department' in request.data:
+                course.department = request.data['department']
+            if 'status' in request.data:
+                course.status = request.data['status']
+            
+            course.save()
+            
+            serializer = CourseSerializer(course, context={'request': request})
+            return Response({
+                'message': 'Course updated successfully',
+                'course': serializer.data
+            })
+            
+        except Course.DoesNotExist:
+            return Response(
+                {'error': 'Course not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Error updating course: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 class MyCourses(APIView):

@@ -112,11 +112,11 @@ const UsersManagement: React.FC = () => {
           console.log('View user details:', userId);
           break;
         
-        case 'delete':
-          if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-            await deleteUser(userId);
-          }
-          break;
+        // case 'delete':
+        //   if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
+        //     await deleteUser(userId);
+        //   }
+        //   break;
         
         default:
           console.log('Action non reconnue:', action);

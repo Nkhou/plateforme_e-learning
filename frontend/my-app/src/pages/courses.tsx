@@ -5,20 +5,22 @@ import api from '../api/api';
 import CourseDetail from "../component/courses/formateur/CourseDetail";
 import CourseImage from '../component/courses/CourseImage';
 import { useNavigate } from 'react-router-dom';
+// import getimageUrl from '../component/courses/apprent/CourseDetailShow'
 
 interface Course {
     id: number;
     title_of_course: string;
     description: string;
     image: string;
-    image_url?: string;
+    image_url: string;
     creator_username: string;
     creator_first_name: string;
     creator_last_name: string;
     created_at?: string;
     updated_at?: string;
-    subscribers_count?: number;
-    total_modules?: number;
+    subscriber_count?: number;
+    // module_count?: number;
+    module_count?:number;
     status?: any;
     department?: string;
 }
@@ -50,8 +52,29 @@ const Cours = () => {
         { value: 'Actif', label: 'Actif', color: '#10B981', numeric: 1 },
         { value: 'Archivé', label: 'Archivé', color: '#6B7280', numeric: 2 }
     ];
-
+    const BASE_URL = 'http://localhost:8000';
     // Close dropdown when clicking outside
+    const getimageUrl = (contentOrPath:  string | undefined): string | undefined => {
+    if (!contentOrPath) return undefined;
+
+    let imagePath: string | undefined;
+
+    if (typeof contentOrPath === 'string') {
+      imagePath = contentOrPath;
+    } else {
+      imagePath = (contentOrPath as any).image_url;
+    }
+
+    if (!imagePath) return undefined;
+
+    let url = imagePath.replace('http://backend:8000', BASE_URL);
+
+    if (!url.startsWith('http')) {
+      url = `${BASE_URL}${url}`;
+    }
+
+    return url;
+  };
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
@@ -202,20 +225,20 @@ const Cours = () => {
         
         try {
             switch (action) {
-                case 'delete':
-                    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) {
-                        return;
-                    }
+                // case 'delete':
+                //     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) {
+                //         return;
+                //     }
                     
-                    const deleteResponse = await api.delete(`courses/${courseId}/`);
+                //     const deleteResponse = await api.delete(`courses/${courseId}/`);
 
-                    if (deleteResponse.status === 200 || deleteResponse.status === 204) {
-                        setMyCourses(prev => prev.filter(course => course.id !== courseId));
-                        alert('Formation supprimée avec succès');
-                    } else {
-                        throw new Error('Failed to delete course');
-                    }
-                    break;
+                //     if (deleteResponse.status === 200 || deleteResponse.status === 204) {
+                //         setMyCourses(prev => prev.filter(course => course.id !== courseId));
+                //         alert('Formation supprimée avec succès');
+                //     } else {
+                //         throw new Error('Failed to delete course');
+                //     }
+                //     break;
 
                 case 'edit':
                     const courseToEdit = myCourses.find(course => course.id === courseId);
@@ -686,8 +709,7 @@ const Cours = () => {
                                                 <td style={{ padding: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
                                                     {course.image_url ? (
                                                         <img
-                                                            src={course.image_url.startsWith('http') ? course.image_url : `${window.location.protocol}//${window.location.hostname}:8000${course.image_url}`}
-                                                            alt={course.title_of_course}
+                                                            src={getimageUrl(course.image_url)}                                                      alt={course.title_of_course}
                                                             style={{
                                                                 width: '50px',
                                                                 height: '50px',
@@ -747,11 +769,11 @@ const Cours = () => {
                                                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#EEF2FF'}
                                                         title="Afficher tous les étudiants"
                                                     >
-                                                        {course.subscribers_count || 0} étudiant{(course.subscribers_count || 0) !== 1 ? 's' : ''}
+                                                        {course.subscriber_count || 0} étudiant{(course.subscriber_count || 0) !== 1 ? 's' : ''}
                                                     </span>
                                                 </td>
                                                 <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                                                    {course.total_modules || 0}
+                                                    {course.module_count || 0}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', color: '#6B7280' }}>
                                                     {course.created_at ? new Date(course.created_at).toLocaleDateString('fr-FR', { 
@@ -979,7 +1001,7 @@ const Cours = () => {
                                                                 >
                                                                     👁️ Voir les détails
                                                                 </button>
-                                                                <button
+                                                                {/* <button
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
@@ -1029,7 +1051,7 @@ const Cours = () => {
                                                                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                                                 >
                                                                     🗑️ Supprimer
-                                                                </button>
+                                                                </button> */}
                                                             </div>
                                                         )}
                                                     </div>

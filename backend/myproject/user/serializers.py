@@ -498,20 +498,24 @@ class CourseSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
     is_subscribed = serializers.SerializerMethodField()
+    module_count = serializers.SerializerMethodField()
     creator_username = serializers.CharField(source='creator.username', read_only=True)
     creator_first_name = serializers.CharField(source='creator.first_name', read_only=True)
     creator_last_name = serializers.CharField(source='creator.last_name', read_only=True)
     is_favorited = serializers.SerializerMethodField()
-    status_display = serializers.SerializerMethodField()  # FIXED: Use SerializerMethodField
+    status_display = serializers.SerializerMethodField()
     department_display = serializers.CharField(source='get_department_display', read_only=True)
     calculated_estimated_duration = serializers.SerializerMethodField()
     calculated_min_required_time = serializers.SerializerMethodField()
+    subscriber_count = serializers.SerializerMethodField()  # FIXED: Changed from subscribers_count to subscriber_count
+    average_progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
         fields = [
             'id', 
             'title_of_course', 
+            'average_progress',
             'description', 
             'image_url', 
             'department', 
@@ -527,10 +531,47 @@ class CourseSerializer(serializers.ModelSerializer):
             'is_favorited',
             'creator_username',
             'creator_first_name',
+            'subscriber_count',  # FIXED: This matches the method name below
+            'module_count',
             'creator_last_name',
             'estimated_duration', 'min_required_time',
             'calculated_estimated_duration', 'calculated_min_required_time'
         ]
+
+    def get_subscriber_count(self, obj):
+        """Get number of active subscribers"""
+        return obj.course_subscriptions.filter(is_active=True).count()
+    
+    def get_module_count(self, obj):
+        """Get number of modules in the course"""
+        return obj.modules.count()
+    def get_average_progress(self, obj):
+        """
+        Calcule le progrès moyen des étudiants inscrits à ce cours
+        """
+        from django.db.models import Avg
+        
+        # Récupérer tous les étudiants inscrits au cours
+        subscribers = obj.subscribers.all()
+        
+        if not subscribers:
+            return 0
+        
+        # Calculer le progrès moyen
+        total_progress = 0
+        valid_subscribers = 0
+        
+        for subscriber in subscribers:
+            progress = self.calculate_user_progress(obj, subscriber)
+            if progress is not None:
+                total_progress += progress
+                valid_subscribers += 1
+        
+        if valid_subscribers == 0:
+            return 0
+            
+        return round(total_progress / valid_subscribers)
+
     
     def get_status_display(self, obj):
         """Convert numeric status to French display string"""
@@ -556,6 +597,7 @@ class CourseSerializer(serializers.ModelSerializer):
     def get_calculated_min_required_time(self, obj):
         """Get calculated min required time considering only active content"""
         return obj.calculate_min_required_time()
+    
     def get_is_favorited(self, obj):
         """Check if course is favorited by current user"""
         request = self.context.get('request')
@@ -565,6 +607,7 @@ class CourseSerializer(serializers.ModelSerializer):
                 course=obj
             ).exists()
         return False
+    
     def get_progress_percentage(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
@@ -576,8 +619,6 @@ class CourseSerializer(serializers.ModelSerializer):
                 ).first()
 
                 if subscription:
-                    # Use the subscription's progress_percentage field directly
-                    # This should be maintained by your completion tracking logic
                     return subscription.progress_percentage
 
             except Exception as e:
@@ -612,6 +653,10 @@ class CourseDetailSerializer(serializers.ModelSerializer):
     apprenants_count = serializers.SerializerMethodField()
     course_statistics = serializers.SerializerMethodField()
 
+    subscriber_count = serializers.SerializerMethodField()  # FIXED: Add this
+    module_count = serializers.SerializerMethodField()
+    average_progress = serializers.SerializerMethodField() 
+
     class Meta:
         model = Course
         fields = [
@@ -621,9 +666,48 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             'estimated_duration', 'min_required_time', 'modules',
             # Add these fields
             'estimated_duration_info', 'avg_progress', 'your_progress', 
-            'apprenants_count', 'course_statistics'
+            'apprenants_count', 'course_statistics','subscriber_count', 'module_count', 'average_progress'
         ]
+    def get_average_progress(self, obj):
+        """
+        Calcule le progrès moyen des étudiants inscrits à ce cours
+        """
+        try:
+            # Récupérer tous les abonnements actifs pour ce cours
+            active_subscriptions = obj.course_subscriptions.filter(is_active=True)
+            
+            if not active_subscriptions.exists():
+                return 0
+            
+            # Calculer la moyenne des progress_percentage
+            total_progress = 0
+            valid_subscribers = 0
+            
+            for subscription in active_subscriptions:
+                progress = subscription.progress_percentage
+                if progress is not None:
+                    total_progress += progress
+                    valid_subscribers += 1
+            
+            if valid_subscribers == 0:
+                return 0
+                
+            average = total_progress / valid_subscribers
+            return round(average)
+            
+        except Exception as e:
+            print(f"Error calculating average progress for course {obj.id}: {str(e)}")
+            return 0
+    def get_subscribers_count(self, obj):
+        """Get number of active subscribers"""
+        return obj.course_subscriptions.filter(is_active=True).count()
+    def get_subscriber_count(self, obj):
+        # Return the actual subscriber count from your model
+        return obj.subscribers.count() if hasattr(obj, 'subscribers') else 0
     
+    def get_module_count(self, obj):
+        """Get number of modules in the course"""
+        return obj.modules.count()
     def get_status_display(self, obj):
         """Convert numeric status to French display string"""
         status_map = {
