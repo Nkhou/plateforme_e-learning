@@ -13,6 +13,7 @@ interface User {
   is_active: boolean;
   course_count: number;
   subscription_count: number;
+  status: number; // 1: Actif, 2: Suspendu
 }
 
 interface UserData {
@@ -23,6 +24,16 @@ interface UserData {
   };
 }
 
+// Interface pour le formulaire d'édition
+interface EditUserForm {
+  id: number;
+  username: string;
+  email: string;
+  full_name: string;
+  privilege: string;
+  status: number;
+}
+
 const UsersManagement: React.FC = () => {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,15 +42,19 @@ const UsersManagement: React.FC = () => {
   const [privilegeFilter, setPrivilegeFilter] = useState('all');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [showSignUp, setShowSignUp] = useState(false);
+  const [refresh, setRefresh] = useState(false);
+  
+  // États pour l'édition
+  const [editingUser, setEditingUser] = useState<EditUserForm | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Fetch users from backend
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const response = await api('/admin/users'); // Replace with your actual API endpoint
-        
-      
+        const response = await api('/admin/users');
         setUserData(response.data);
         setError(null);
       } catch (err) {
@@ -51,7 +66,7 @@ const UsersManagement: React.FC = () => {
     };
 
     fetchUsers();
-  }, []);
+  }, [refresh]);
 
   const getPrivilegeColor = (privilege: string) => {
     switch (privilege.toLowerCase()) {
@@ -71,45 +86,155 @@ const UsersManagement: React.FC = () => {
     }
   };
 
-  const handleUserAction = (userId: number, action: string) => {
-    console.log(`${action} user ${userId}`);
-    setOpenMenuId(null);
-    // Implement user actions (edit, change status, delete, etc.)
+  const getStatusLabel = (status: number) => {
+    return status === 1 ? 'Actif' : 'Suspendu';
   };
+
+  const getStatusColor = (status: number) => {
+    return status === 1 ? '#10B981' : '#6B7280';
+  };
+
+  const handleUserAction = async (userId: number, action: string) => {
+    try {
+      switch (action) {
+        case 'edit':
+          await openEditUser(userId);
+          break;
+        
+        case 'status':
+          // Maintenant on ouvre le formulaire d'édition au lieu de changer directement
+          await openEditUser(userId);
+          break;
+        
+        case 'view':
+          console.log('View user details:', userId);
+          break;
+        
+        // case 'delete':
+        //   if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
+        //     await deleteUser(userId);
+        //   }
+        //   break;
+        
+        default:
+          console.log('Action non reconnue:', action);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+      console.error('Error performing user action:', err);
+    } finally {
+      setOpenMenuId(null);
+    }
+  };
+
+  const openEditUser = async (userId: number) => {
+    try {
+      const user = userData?.users.find(u => u.id === userId);
+      if (!user) {
+        throw new Error('Utilisateur non trouvé');
+      }
+
+      setEditingUser({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        full_name: user.full_name,
+        privilege: user.privilege,
+        status: user.status
+      });
+    } catch (err) {
+      setError('Erreur lors du chargement des données utilisateur');
+      console.error('Error opening edit form:', err);
+    }
+  };
+
+  const handleEditUser = async (formData: EditUserForm) => {
+    try {
+      setEditLoading(true);
+      setEditError(null);
+
+      // Appel API pour mettre à jour l'utilisateur
+      const response = await api.patch(`/admin/users/${formData.id}/update-status/`, {
+        status: formData.status,
+        privilege: formData.privilege
+        // Vous pouvez ajouter d'autres champs si nécessaire
+      });
+
+      if (response.status === 200) {
+        // Mettre à jour les données locales
+        setUserData(prev => {
+          if (!prev) return prev;
+          
+          return {
+            ...prev,
+            users: prev.users.map(u => 
+              u.id === formData.id 
+                ? { 
+                    ...u, 
+                    status: formData.status,
+                    privilege: formData.privilege,
+                    is_active: formData.status === 1
+                  }
+                : u
+            )
+          };
+        });
+
+        setEditingUser(null);
+        setRefresh(prev => !prev);
+      }
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
+      console.error('Error updating user:', err);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // const deleteUser = async (userId: number) => {
+  //   try {
+  //     setLoading(true);
+      
+  //     const response = await api.delete(`/admin/users/${userId}`);
+      
+  //     if (response.status === 200) {
+  //       setUserData(prev => {
+  //         if (!prev) return prev;
+  //         return {
+  //           ...prev,
+  //           users: prev.users.filter(u => u.id !== userId)
+  //         };
+  //       });
+  //     }
+  //   } catch (err) {
+  //     setError('Erreur lors de la suppression de l\'utilisateur');
+  //     console.error('Error deleting user:', err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleNewUser = () => {
     setShowSignUp(true);
   };
 
+  const handleCloseSignUp = () => {
+    setShowSignUp(false);
+    setRefresh(prev => !prev);
+  };
+
   // Loading state
-  if (loading) {
-    return (
-      <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', textAlign: 'center' }}>
-          <p style={{ color: '#6B7280', fontSize: '1rem' }}>Chargement des utilisateurs...</p>
-        </div>
-      </div>
-    );
+  if (loading && !userData) {
+    return <div style={{ padding: '2rem', textAlign: 'center' }}>Chargement...</div>;
   }
 
   // Error state
-  if (error) {
+  if (error && !userData) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{ padding: '2rem' }}>
         <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <p style={{ color: '#DC2626', fontSize: '1rem' }}>Erreur: {error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              marginTop: '1rem',
-              backgroundColor: '#4338CA',
-              color: 'white',
-              border: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-          >
+          <p style={{ color: '#DC2626' }}>Erreur: {error}</p>
+          <button onClick={() => window.location.reload()}>
             Réessayer
           </button>
         </div>
@@ -117,21 +242,14 @@ const UsersManagement: React.FC = () => {
     );
   }
 
-  // No data state
   if (!userData || !userData.users) {
-    return (
-      <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', textAlign: 'center' }}>
-          <p style={{ color: '#6B7280', fontSize: '1rem' }}>Aucune donnée disponible</p>
-        </div>
-      </div>
-    );
+    return <div style={{ padding: '2rem', textAlign: 'center' }}>Aucune donnée disponible</div>;
   }
 
   const filteredUsers = userData.users.filter(user => {
     const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' && user.is_active) ||
-      (statusFilter === 'inactive' && !user.is_active);
+      (statusFilter === 'active' && user.status === 1) ||
+      (statusFilter === 'inactive' && user.status === 2);
 
     const matchesPrivilege = privilegeFilter === 'all' ||
       user.privilege.toLowerCase() === privilegeFilter.toLowerCase();
@@ -141,286 +259,437 @@ const UsersManagement: React.FC = () => {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Formulaire d'édition */}
+      {editingUser && (
+        <EditUserForm
+          user={editingUser}
+          onSave={handleEditUser}
+          onCancel={() => setEditingUser(null)}
+          loading={editLoading}
+          error={editError}
+        />
+      )}
+
       <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        {showSignUp ? <SignUp /> : <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+        {showSignUp ? (
+          <div>
+            <button onClick={handleCloseSignUp}>
+              ← Retour à la liste
+            </button>
+            <SignUp />
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1F2937', margin: 0 }}>
                 {filteredUsers.length} utilisateurs ajoutés
               </h2>
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{
+                    backgroundColor: '#EEF2FF',
+                    border: '1px solid #C7D2FE',
+                    borderRadius: '6px',
+                    padding: '0.5rem 2rem 0.5rem 0.75rem',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#4338CA',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all">Statut &gt; Tous</option>
+                  <option value="active">Actif</option>
+                  <option value="inactive">Suspendu</option>
+                </select>
+
+                <select
+                  value={privilegeFilter}
+                  onChange={(e) => setPrivilegeFilter(e.target.value)}
+                  style={{
+                    backgroundColor: '#EEF2FF',
+                    border: '1px solid #C7D2FE',
+                    borderRadius: '6px',
+                    padding: '0.5rem 2rem 0.5rem 0.75rem',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#4338CA',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all">Privilège &gt; Tous</option>
+                  <option value="A">Admin</option>
+                  <option value="F">Formateur</option>
+                  <option value="Ap">Apprenant</option>
+                </select>
+                
+                <button
+                  style={{
+                    backgroundColor: '#4338CA',
+                    color: 'white',
+                    border: 'none',
+                    padding: '0.625rem 1.25rem',
+                    borderRadius: '6px',
+                    fontSize: '0.9375rem',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                  onClick={handleNewUser}
+                >
+                  + Nouvel utilisateur
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              {/* Status Filter */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{
-                  backgroundColor: '#EEF2FF',
-                  border: '1px solid #C7D2FE',
-                  borderRadius: '6px',
-                  padding: '0.5rem 2rem 0.5rem 0.75rem',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  color: '#4338CA',
-                  cursor: 'pointer',
-                  appearance: 'none',
-                  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 0.5rem center'
-                }}
-              >
-                <option value="all">Statut &gt; Tous</option>
-                <option value="active">Actif</option>
-                <option value="inactive">Inactif</option>
-              </select>
+            {error && (
+              <div style={{
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                padding: '0.75rem',
+                borderRadius: '6px',
+                marginBottom: '1rem'
+              }}>
+                {error}
+                <button onClick={() => setError(null)}>×</button>
+              </div>
+            )}
 
-              {/* Privilege Filter */}
-              <select
-                value={privilegeFilter}
-                onChange={(e) => setPrivilegeFilter(e.target.value)}
-                style={{
-                  backgroundColor: '#EEF2FF',
-                  border: '1px solid #C7D2FE',
-                  borderRadius: '6px',
-                  padding: '0.5rem 2rem 0.5rem 0.75rem',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  color: '#4338CA',
-                  cursor: 'pointer',
-                  appearance: 'none',
-                  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 0.5rem center'
-                }}
-              >
-                <option value="all">Privilège &gt; Tous</option>
-                <option value="A">Admin</option>
-                <option value="F">Formateur</option>
-                <option value="Ap">Apprenant</option>
-              </select>
+            {/* Users Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#E5E7EB' }}>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user, index) => (
+                    <tr
+                      key={user.id}
+                      style={{
+                        borderBottom: '1px solid #E5E7EB',
+                        backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB'
+                      }}
+                    >
+                      <td style={{ padding: '0.75rem', color: '#1F2937' }}>{user.full_name}</td>
+                      <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
+                      <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <span style={{
+                          backgroundColor: getPrivilegeColor(user.privilege),
+                          color: 'white',
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '12px',
+                          fontSize: '0.8125rem',
+                          fontWeight: '500'
+                        }}>
+                          {getPrivilegeLabel(user.privilege)}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
+                        {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
+                      </td>
+                      <td style={{ padding: '0.75rem', color: '#6B7280' }}>
+                        {new Date(user.date_joined).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
+                        {user.subscription_count}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <span style={{
+                          color: getStatusColor(user.status),
+                          fontWeight: '500'
+                        }}>
+                          {getStatusLabel(user.status)}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
+                        <button
+                          onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#6B7280',
+                            fontSize: '1.25rem',
+                            padding: '0.25rem'
+                          }}
+                        >
+                          ⋯
+                        </button>
+                        {openMenuId === user.id && (
+                          <div style={{
+                            position: 'absolute',
+                            right: '0',
+                            top: '100%',
+                            backgroundColor: 'white',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '6px',
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                            zIndex: 1000,
+                            minWidth: '180px'
+                          }}>
+                            <button
+                              onClick={() => handleUserAction(user.id, 'edit')}
+                              style={{
+                                width: '100%',
+                                padding: '0.75rem 1rem',
+                                textAlign: 'left',
+                                border: 'none',
+                                backgroundColor: 'transparent',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                color: '#374151'
+                              }}
+                            >
+                              ✏️ Edit utilisateur
+                            </button>
+                            <button
+                              onClick={() => handleUserAction(user.id, 'status')}
+                              style={{
+                                width: '100%',
+                                padding: '0.75rem 1rem',
+                                textAlign: 'left',
+                                border: 'none',
+                                backgroundColor: 'transparent',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                color: '#374151'
+                              }}
+                            >
+                              🔄 Changer statut
+                            </button>
+                            {/* <hr style={{ margin: '0.25rem 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
+                            <button
+                              onClick={() => handleUserAction(user.id, 'delete')}
+                              style={{
+                                width: '100%',
+                                padding: '0.75rem 1rem',
+                                textAlign: 'left',
+                                border: 'none',
+                                backgroundColor: 'transparent',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                color: '#DC2626'
+                              }}
+                            >
+                              🗑️ Delete
+                            </button> */}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
               <button
                 style={{
-                  backgroundColor: '#4338CA',
+                  backgroundColor: '#8B5A3C',
                   color: 'white',
                   border: 'none',
-                  padding: '0.625rem 1.25rem',
+                  padding: '0.75rem 2rem',
                   borderRadius: '6px',
                   fontSize: '0.9375rem',
                   fontWeight: '500',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  transition: 'background-color 0.2s'
+                  cursor: 'pointer'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3730A3'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
-                onClick={handleNewUser}
               >
-                + Nouvel utilisateur
+                Afficher plus de résultat
               </button>
             </div>
-          </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
-          {/* Users Table */}
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#E5E7EB' }}>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user, index) => (
-                  <tr
-                    key={user.id}
-                    style={{
-                      borderBottom: '1px solid #E5E7EB',
-                      backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB',
-                      transition: 'background-color 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#F9FAFB'}
-                  >
-                    <td style={{ padding: '0.75rem', color: '#1F2937' }}>{user.full_name}</td>
-                    <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
-                    <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
-                    <td style={{ padding: '0.75rem' }}>
-                      <span style={{
-                        backgroundColor: getPrivilegeColor(user.privilege),
-                        color: 'white',
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '12px',
-                        fontSize: '0.8125rem',
-                        fontWeight: '500'
-                      }}>
-                        {getPrivilegeLabel(user.privilege)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                      {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#6B7280' }}>
-                      {new Date(user.date_joined).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                      {user.subscription_count}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
-                      <span style={{
-                        color: user.is_active ? '#10B981' : '#6B7280',
-                        fontWeight: '500'
-                      }}>
-                        {user.is_active ? 'Actif' : 'Inactif'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
-                      <button
-                        onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: '#6B7280',
-                          fontSize: '1.25rem',
-                          padding: '0.25rem'
-                        }}
-                      >
-                        ⋯
-                      </button>
-                      {openMenuId === user.id && (
-                        <div style={{
-                          position: 'absolute',
-                          right: '0',
-                          top: '100%',
-                          backgroundColor: 'white',
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '6px',
-                          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                          zIndex: 1000,
-                          minWidth: '180px',
-                          marginTop: '0.25rem'
-                        }}>
-                          <button
-                            onClick={() => handleUserAction(user.id, 'edit')}
-                            style={{
-                              width: '100%',
-                              padding: '0.75rem 1rem',
-                              textAlign: 'left',
-                              border: 'none',
-                              backgroundColor: 'transparent',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              color: '#374151',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                          >
-                            ✏️ Edit utilisateur
-                          </button>
-                          <button
-                            onClick={() => handleUserAction(user.id, 'status')}
-                            style={{
-                              width: '100%',
-                              padding: '0.75rem 1rem',
-                              textAlign: 'left',
-                              border: 'none',
-                              backgroundColor: 'transparent',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              color: '#374151',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                          >
-                            🔄 Change status
-                          </button>
-                          <button
-                            onClick={() => handleUserAction(user.id, 'view')}
-                            style={{
-                              width: '100%',
-                              padding: '0.75rem 1rem',
-                              textAlign: 'left',
-                              border: 'none',
-                              backgroundColor: 'transparent',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              color: '#374151',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                          >
-                            👁️ View details
-                          </button>
-                          <hr style={{ margin: '0.25rem 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
-                          {/* <button
-                            onClick={() => handleUserAction(user.id, 'delete')}
-                            style={{
-                              width: '100%',
-                              padding: '0.75rem 1rem',
-                              textAlign: 'left',
-                              border: 'none',
-                              backgroundColor: 'transparent',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              color: '#DC2626',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                          >
-                            🗑️ Delete
-                          </button> */}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+// Composant pour le formulaire d'édition
+interface EditUserFormProps {
+  user: EditUserForm;
+  onSave: (user: EditUserForm) => void;
+  onCancel: () => void;
+  loading: boolean;
+  error: string | null;
+}
 
-          {/* Load More Button */}
-          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-            <button
+const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loading, error }) => {
+  const [formData, setFormData] = useState<EditUserForm>(user);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  const handleChange = (field: keyof EditUserForm, value: string | number) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '2rem',
+        width: '90%',
+        maxWidth: '500px',
+        maxHeight: '90vh',
+        overflow: 'auto'
+      }}>
+        <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>
+          Modifier l'utilisateur
+        </h3>
+
+        {error && (
+          <div style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#DC2626',
+            padding: '0.75rem',
+            borderRadius: '6px',
+            marginBottom: '1rem'
+          }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Nom complet
+            </label>
+            <input
+              type="text"
+              value={formData.full_name}
+              onChange={(e) => handleChange('full_name', e.target.value)}
               style={{
-                backgroundColor: '#8B5A3C',
-                color: 'white',
-                border: 'none',
-                padding: '0.75rem 2rem',
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
-                fontSize: '0.9375rem',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s'
+                fontSize: '0.875rem'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#78472A'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#8B5A3C'}
+              disabled
+            />
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Email
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleChange('email', e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                fontSize: '0.875rem'
+              }}
+              disabled
+            />
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Privilège
+            </label>
+            <select
+              value={formData.privilege}
+              onChange={(e) => handleChange('privilege', e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                fontSize: '0.875rem'
+              }}
             >
-              Afficher plus de résultat
+              <option value="A">Admin</option>
+              <option value="F">Formateur</option>
+              <option value="Ap">Apprenant</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Statut
+            </label>
+            <select
+              value={formData.status}
+              onChange={(e) => handleChange('status', parseInt(e.target.value))}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                fontSize: '0.875rem'
+              }}
+            >
+              <option value={1}>Actif</option>
+              <option value={2}>Suspendu</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                padding: '0.5rem 1rem',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                backgroundColor: 'white',
+                color: '#374151',
+                cursor: 'pointer'
+              }}
+              disabled={loading}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              style={{
+                padding: '0.5rem 1rem',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: '#4338CA',
+                color: 'white',
+                cursor: 'pointer'
+              }}
+              disabled={loading}
+            >
+              {loading ? 'Enregistrement...' : 'Enregistrer'}
             </button>
           </div>
-        </>}
+        </form>
       </div>
     </div>
   );

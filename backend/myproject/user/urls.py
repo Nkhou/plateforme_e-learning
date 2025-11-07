@@ -22,7 +22,7 @@ from .views import (
     SubmitQCM, CourseList,
     
     # Time Tracking Views
-    CourseTimeStatsView, TimeTrackingRecordView, FavoriteCourseViewSet
+    CourseTimeStatsView, TimeTrackingRecordView, FavoriteCourseViewSet, UserStatusUpdateView
 )
 from .views import NotificationListView, NotificationMarkAsReadView, NotificationMarkAllAsReadView, NotificationUnreadCountView
 # Create router for CourseViewSet
@@ -45,7 +45,8 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('CheckAuthentification/', CheckAuthentificationView.as_view(), name='CheckAuthentification'),
     path('RegisterwithoutFile/', RegisterwithoutFileView.as_view(), name='RegisterwithoutFile'),
-    
+    # Dans vos urls.py
+path('admin/users/<int:user_id>/update-status/', UserStatusUpdateView.as_view(), name='user-update-status'),
     # Dashboard endpoints
     path('Dashboard/', DashboardView.as_view(), name='Dashboard'),
     path('CSVUpload/', CSVUploadView.as_view(), name='CSVUpload'),

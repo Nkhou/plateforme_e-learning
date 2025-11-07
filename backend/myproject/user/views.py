@@ -5810,3 +5810,63 @@ class NotificationUnreadCountView(APIView):
                 {'error': 'Failed to fetch unread count'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+# Dans votre views.py, ajoutez cette classe
+class UserStatusUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, user_id):
+        """Update user status with USER_STATUS_CHOICES"""
+        try:
+            user = get_object_or_404(CustomUser, id=user_id)
+            
+            # Vérifier les privilèges admin
+            if request.user.privilege != 'A':
+                return Response(
+                    {'error': 'Accès non autorisé. Privilèges admin requis.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            new_status = request.data.get('status')
+            
+            # Valider le statut selon USER_STATUS_CHOICES
+            if new_status not in [1, 2]:  # 1: Actif, 2: Suspendu
+                return Response(
+                    {'error': 'Statut invalide. Utilisez 1 (Actif) ou 2 (Suspendu).'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Sauvegarder l'ancien statut pour le message
+            old_status = user.status
+            old_status_display = "Actif" if old_status == 1 else "Suspendu"
+            
+            # Mettre à jour le statut
+            user.status = new_status
+            user.save()
+            
+            new_status_display = "Actif" if new_status == 1 else "Suspendu"
+            
+            return Response({
+                'message': f'Statut de {user.username} mis à jour: {old_status_display} → {new_status_display}',
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'full_name': f"{user.first_name} {user.last_name}",
+                    'status': user.status,
+                    'status_display': new_status_display,
+                    'is_active': user.status == 1
+                }
+            })
+            
+        except CustomUser.DoesNotExist:
+            return Response(
+                {'error': 'Utilisateur non trouvé'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Erreur lors de la mise à jour: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
