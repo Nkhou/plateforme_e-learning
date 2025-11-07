@@ -5811,13 +5811,12 @@ class NotificationUnreadCountView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
-# Dans votre views.py, ajoutez cette classe
+# Dans votre views.py, modifiez la classe UserStatusUpdateView
 class UserStatusUpdateView(APIView):
     permission_classes = [IsAuthenticated]
     
     def patch(self, request, user_id):
-        """Update user status with USER_STATUS_CHOICES"""
+        """Update user information including status, privilege, and personal details"""
         try:
             user = get_object_or_404(CustomUser, id=user_id)
             
@@ -5828,37 +5827,85 @@ class UserStatusUpdateView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
+            # Récupérer les données
             new_status = request.data.get('status')
+            new_privilege = request.data.get('privilege')
+            first_name = request.data.get('first_name')
+            last_name = request.data.get('last_name')
+            email = request.data.get('email')
             
             # Valider le statut selon USER_STATUS_CHOICES
-            if new_status not in [1, 2]:  # 1: Actif, 2: Suspendu
+            if new_status and new_status not in [1, 2]:  # 1: Actif, 2: Suspendu
                 return Response(
                     {'error': 'Statut invalide. Utilisez 1 (Actif) ou 2 (Suspendu).'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Sauvegarder l'ancien statut pour le message
+            # Valider l'email si fourni
+            if email:
+                # Vérifier si l'email est déjà utilisé par un autre utilisateur
+                if CustomUser.objects.filter(email=email).exclude(id=user_id).exists():
+                    return Response(
+                        {'error': 'Cet email est déjà utilisé par un autre utilisateur.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Sauvegarder les anciennes valeurs pour le message
             old_status = user.status
             old_status_display = "Actif" if old_status == 1 else "Suspendu"
+            old_privilege = user.privilege
+            old_privilege_display = user.get_privilege_display()
             
-            # Mettre à jour le statut
-            user.status = new_status
+            # Mettre à jour les champs
+            if new_status is not None:
+                user.status = new_status
+            
+            if new_privilege:
+                user.privilege = new_privilege
+            
+            if first_name:
+                user.first_name = first_name
+            
+            if last_name:
+                user.last_name = last_name
+            
+            if email:
+                user.email = email
+            
             user.save()
             
-            new_status_display = "Actif" if new_status == 1 else "Suspendu"
+            # Préparer la réponse
+            new_status_display = "Actif" if user.status == 1 else "Suspendu"
+            new_privilege_display = user.get_privilege_display()
             
-            return Response({
-                'message': f'Statut de {user.username} mis à jour: {old_status_display} → {new_status_display}',
+            response_data = {
+                'message': f'Utilisateur {user.username} mis à jour avec succès',
                 'user': {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
                     'full_name': f"{user.first_name} {user.last_name}",
+                    'privilege': user.privilege,
+                    'privilege_display': new_privilege_display,
                     'status': user.status,
                     'status_display': new_status_display,
                     'is_active': user.status == 1
                 }
-            })
+            }
+            
+            # Ajouter les détails des changements si nécessaire
+            changes = []
+            if old_status != user.status:
+                changes.append(f"Statut: {old_status_display} → {new_status_display}")
+            if old_privilege != user.privilege:
+                changes.append(f"Privilège: {old_privilege_display} → {new_privilege_display}")
+            
+            if changes:
+                response_data['changes'] = changes
+            
+            return Response(response_data)
             
         except CustomUser.DoesNotExist:
             return Response(

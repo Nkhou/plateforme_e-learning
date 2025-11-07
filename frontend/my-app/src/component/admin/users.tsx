@@ -6,6 +6,8 @@ interface User {
   id: number;
   username: string;
   email: string;
+  first_name: string;
+  last_name: string;
   full_name: string;
   privilege: string;
   date_joined: string;
@@ -29,7 +31,8 @@ interface EditUserForm {
   id: number;
   username: string;
   email: string;
-  full_name: string;
+  first_name: string;
+  last_name: string;
   privilege: string;
   status: number;
 }
@@ -102,7 +105,6 @@ const UsersManagement: React.FC = () => {
           break;
         
         case 'status':
-          // Maintenant on ouvre le formulaire d'édition au lieu de changer directement
           await openEditUser(userId);
           break;
         
@@ -110,11 +112,11 @@ const UsersManagement: React.FC = () => {
           console.log('View user details:', userId);
           break;
         
-        // case 'delete':
-        //   if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-        //     await deleteUser(userId);
-        //   }
-        //   break;
+        case 'delete':
+          if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
+            await deleteUser(userId);
+          }
+          break;
         
         default:
           console.log('Action non reconnue:', action);
@@ -134,11 +136,25 @@ const UsersManagement: React.FC = () => {
         throw new Error('Utilisateur non trouvé');
       }
 
+      // Extraire first_name et last_name du full_name si nécessaire
+      let first_name = user.first_name;
+      let last_name = user.last_name;
+      
+      // Si les champs first_name et last_name ne sont pas disponibles, essayer de les extraire du full_name
+      if ((!first_name || !last_name) && user.full_name) {
+        const nameParts = user.full_name.split(' ');
+        if (nameParts.length >= 2) {
+          first_name = nameParts[0] || '';
+          last_name = nameParts.slice(1).join(' ') || '';
+        }
+      }
+
       setEditingUser({
         id: user.id,
         username: user.username,
         email: user.email,
-        full_name: user.full_name,
+        first_name: first_name || '',
+        last_name: last_name || '',
         privilege: user.privilege,
         status: user.status
       });
@@ -156,8 +172,10 @@ const UsersManagement: React.FC = () => {
       // Appel API pour mettre à jour l'utilisateur
       const response = await api.patch(`/admin/users/${formData.id}/update-status/`, {
         status: formData.status,
-        privilege: formData.privilege
-        // Vous pouvez ajouter d'autres champs si nécessaire
+        privilege: formData.privilege,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email
       });
 
       if (response.status === 200) {
@@ -173,6 +191,10 @@ const UsersManagement: React.FC = () => {
                     ...u, 
                     status: formData.status,
                     privilege: formData.privilege,
+                    first_name: formData.first_name,
+                    last_name: formData.last_name,
+                    full_name: `${formData.first_name} ${formData.last_name}`,
+                    email: formData.email,
                     is_active: formData.status === 1
                   }
                 : u
@@ -183,36 +205,40 @@ const UsersManagement: React.FC = () => {
         setEditingUser(null);
         setRefresh(prev => !prev);
       }
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
+    } catch (err: any) {
+      if (err.response && err.response.data && err.response.data.error) {
+        setEditError(err.response.data.error);
+      } else {
+        setEditError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
+      }
       console.error('Error updating user:', err);
     } finally {
       setEditLoading(false);
     }
   };
 
-  // const deleteUser = async (userId: number) => {
-  //   try {
-  //     setLoading(true);
+  const deleteUser = async (userId: number) => {
+    try {
+      setLoading(true);
       
-  //     const response = await api.delete(`/admin/users/${userId}`);
+      const response = await api.delete(`/admin/users/${userId}`);
       
-  //     if (response.status === 200) {
-  //       setUserData(prev => {
-  //         if (!prev) return prev;
-  //         return {
-  //           ...prev,
-  //           users: prev.users.filter(u => u.id !== userId)
-  //         };
-  //       });
-  //     }
-  //   } catch (err) {
-  //     setError('Erreur lors de la suppression de l\'utilisateur');
-  //     console.error('Error deleting user:', err);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+      if (response.status === 200) {
+        setUserData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            users: prev.users.filter(u => u.id !== userId)
+          };
+        });
+      }
+    } catch (err) {
+      setError('Erreur lors de la suppression de l\'utilisateur');
+      console.error('Error deleting user:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleNewUser = () => {
     setShowSignUp(true);
@@ -453,7 +479,7 @@ const UsersManagement: React.FC = () => {
                                 color: '#374151'
                               }}
                             >
-                              ✏️ Edit utilisateur
+                              ✏️ Modifier utilisateur
                             </button>
                             <button
                               onClick={() => handleUserAction(user.id, 'status')}
@@ -484,7 +510,7 @@ const UsersManagement: React.FC = () => {
                                 color: '#DC2626'
                               }}
                             >
-                              🗑️ Delete
+                              🗑️ Supprimer
                             </button> */}
                           </div>
                         )}
@@ -581,12 +607,12 @@ const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loa
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-              Nom complet
+              Prénom *
             </label>
             <input
               type="text"
-              value={formData.full_name}
-              onChange={(e) => handleChange('full_name', e.target.value)}
+              value={formData.first_name}
+              onChange={(e) => handleChange('first_name', e.target.value)}
               style={{
                 width: '100%',
                 padding: '0.5rem',
@@ -594,13 +620,32 @@ const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loa
                 borderRadius: '6px',
                 fontSize: '0.875rem'
               }}
-              disabled
+              required
             />
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-              Email
+              Nom *
+            </label>
+            <input
+              type="text"
+              value={formData.last_name}
+              onChange={(e) => handleChange('last_name', e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                fontSize: '0.875rem'
+              }}
+              required
+            />
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Email *
             </label>
             <input
               type="email"
@@ -613,8 +658,31 @@ const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loa
                 borderRadius: '6px',
                 fontSize: '0.875rem'
               }}
+              required
+            />
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Username
+            </label>
+            <input
+              type="text"
+              value={formData.username}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                fontSize: '0.875rem',
+                backgroundColor: '#F3F4F6',
+                color: '#6B7280'
+              }}
               disabled
             />
+            <small style={{ color: '#6B7280', fontSize: '0.75rem' }}>
+              Le username ne peut pas être modifié
+            </small>
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
