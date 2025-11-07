@@ -541,36 +541,65 @@ class CourseSerializer(serializers.ModelSerializer):
     def get_subscriber_count(self, obj):
         """Get number of active subscribers"""
         return obj.course_subscriptions.filter(is_active=True).count()
-    
-    def get_module_count(self, obj):
-        """Get number of modules in the course"""
-        return obj.modules.count()
     def get_average_progress(self, obj):
         """
         Calcule le progrès moyen des étudiants inscrits à ce cours
         """
-        from django.db.models import Avg
-        
-        # Récupérer tous les étudiants inscrits au cours
-        subscribers = obj.subscribers.all()
-        
-        if not subscribers:
-            return 0
-        
-        # Calculer le progrès moyen
-        total_progress = 0
-        valid_subscribers = 0
-        
-        for subscriber in subscribers:
-            progress = self.calculate_user_progress(obj, subscriber)
-            if progress is not None:
-                total_progress += progress
-                valid_subscribers += 1
-        
-        if valid_subscribers == 0:
-            return 0
+        try:
+            # Récupérer tous les abonnements actifs pour ce cours
+            active_subscriptions = obj.course_subscriptions.filter(is_active=True)
             
-        return round(total_progress / valid_subscribers)
+            if not active_subscriptions.exists():
+                return 0
+            
+            # Calculer la moyenne des progress_percentage
+            total_progress = 0
+            valid_subscribers = 0
+            
+            for subscription in active_subscriptions:
+                progress = subscription.progress_percentage
+                if progress is not None:
+                    total_progress += progress
+                    valid_subscribers += 1
+            
+            if valid_subscribers == 0:
+                return 0
+                
+            average = total_progress / valid_subscribers
+            return round(average)
+            
+        except Exception as e:
+            print(f"Error calculating average progress for course {obj.id}: {str(e)}")
+            return 0
+    def get_module_count(self, obj):
+        """Get number of modules in the course"""
+        return obj.modules.count()
+    # def get_average_progress(self, obj):
+    #     """
+    #     Calcule le progrès moyen des étudiants inscrits à ce cours
+    #     """
+    #     from django.db.models import Avg
+        
+    #     # Récupérer tous les étudiants inscrits au cours
+    #     subscribers = obj.subscribers.all()
+        
+    #     if not subscribers:
+    #         return 0
+        
+    #     # Calculer le progrès moyen
+    #     total_progress = 0
+    #     valid_subscribers = 0
+        
+    #     for subscriber in subscribers:
+    #         progress = self.calculate_user_progress(obj, subscriber)
+    #         if progress is not None:
+    #             total_progress += progress
+    #             valid_subscribers += 1
+        
+    #     if valid_subscribers == 0:
+    #         return 0
+            
+    #     return round(total_progress / valid_subscribers)
 
     
     def get_status_display(self, obj):
@@ -698,6 +727,7 @@ class CourseDetailSerializer(serializers.ModelSerializer):
         except Exception as e:
             print(f"Error calculating average progress for course {obj.id}: {str(e)}")
             return 0
+    
     def get_subscribers_count(self, obj):
         """Get number of active subscribers"""
         return obj.course_subscriptions.filter(is_active=True).count()

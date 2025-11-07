@@ -1019,7 +1019,7 @@ const CourseDetail = () => {
             }}>
               {statusBadge.text}
             </span>
-            <button 
+            {/* <button 
               onClick={resetProgress}
               style={{
                 padding: '0.25rem 0.75rem',
@@ -1033,7 +1033,7 @@ const CourseDetail = () => {
               }}
             >
               Reset Progress
-            </button>
+            </button> */}
           </div>
         </div>
         <p style={{ 
@@ -1085,10 +1085,10 @@ const CourseDetail = () => {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>Temps estimé</div>
+            {/* <div style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', opacity: 0.8 }}>Temps estimé</div>
             <div style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' }}>
               {displayDuration}
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
