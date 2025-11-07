@@ -1097,14 +1097,14 @@ const CourseDetail = () => {
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
             <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0%</div>
           </div>
-          <div>
+          {/* <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
             <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{progressPercentage}%</div>
-          </div>
-          <div>
+          </div> */}
+          {/* <div>
             <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps passé</div>
             <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{formatTime(totalTimeSpent)}</div>
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -1357,20 +1357,20 @@ const CourseDetail = () => {
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             padding: '0.75rem',
-                            backgroundColor: isCompleted ? '#F0F9FF' : '#F9FAFB',
+                            // backgroundColor: isCompleted ? '#F0F9FF' : '#F9FAFB',
                             borderRadius: '6px',
                             marginBottom: '0.5rem',
-                            border: `1px solid ${isCompleted ? '#0EA5E9' : '#E5E7EB'}`,
+                            // border: `1px solid ${isCompleted ? '#0EA5E9' : '#E5E7EB'}`,
                             cursor: 'pointer',
                             transition: 'all 0.2s',
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = isCompleted ? '#E0F2FE' : '#EEF2FF';
+                            e.currentTarget.style.backgroundColor =  '#EEF2FF';
                             e.currentTarget.style.borderColor = '#2D2B6B';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = isCompleted ? '#F0F9FF' : '#F9FAFB';
-                            e.currentTarget.style.borderColor = isCompleted ? '#0EA5E9' : '#E5E7EB';
+                            e.currentTarget.style.backgroundColor =  '#F9FAFB';
+                            e.currentTarget.style.borderColor = '#E5E7EB';
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
@@ -1378,11 +1378,11 @@ const CourseDetail = () => {
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: '0.875rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 {content.title}
-                                {isCompleted && (
+                                {/* {isCompleted && (
                                   <span style={{ color: '#10B981', fontSize: '0.75rem' }}>✓</span>
-                                )}
+                                )} */}
                               </div>
-                              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                              {/* <div style={{ fontSize: '0.75rem', color: '#9CA3AF', display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                 <span>{getContentTypeDisplay(content.content_type_name)}</span>
                                 {content.estimated_duration && (
                                   <span>⏱️ {formatDuration(content.estimated_duration)}</span>
@@ -1390,7 +1390,7 @@ const CourseDetail = () => {
                                 {contentTimeSpent > 0 && (
                                   <span>🕒 {formatTime(contentTimeSpent)}</span>
                                 )}
-                              </div>
+                              </div> */}
                             </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -1885,13 +1885,13 @@ const CourseDetail = () => {
               alignItems: 'center',
               gap: '1rem'
             }}>
-              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+              {/* <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
                 {userProgress.completedContents.includes(selectedContent.id) ? (
                   <span style={{ color: '#10B981', fontWeight: '500' }}>✓ Contenu terminé</span>
                 ) : (
                   <span>Temps passé: {formatTime(userProgress.timeSpent[selectedContent.id] || 0)}</span>
                 )}
-              </div>
+              </div> */}
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button
                   onClick={handleCloseModal}
@@ -1908,7 +1908,7 @@ const CourseDetail = () => {
                 >
                   Fermer
                 </button>
-                <button
+                {/* <button
                   onClick={handleMarkAsCompleted}
                   disabled={
                     userProgress.completedContents.includes(selectedContent.id) ||
@@ -1937,7 +1937,7 @@ const CourseDetail = () => {
                 >
                   <span>✓</span>
                   {userProgress.completedContents.includes(selectedContent.id) ? 'Terminé' : 'Marquer comme terminé'}
-                </button>
+                </button> */}
               </div>
             </div>
           </div>
