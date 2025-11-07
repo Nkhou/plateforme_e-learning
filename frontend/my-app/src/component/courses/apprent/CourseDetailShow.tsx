@@ -2,6 +2,189 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../api/api';
 
+// 1️⃣ Add Notification Types and Components at the top
+export type NotificationType = "success" | "info" | "warning" | "error";
+
+type NotificationItem = {
+  id: number;
+  type: NotificationType;
+  title: string;
+  message: string;
+  duration: number;
+};
+
+type NotificationProps = {
+  type: NotificationType;
+  title: string;
+  message: string;
+  onClose: () => void;
+  duration?: number;
+};
+
+type NotificationContainerProps = {
+  notifications: NotificationItem[];
+  removeNotification: (id: number) => void;
+};
+
+// ✅ Notification component (copy exactly from your code)
+const Notification: React.FC<NotificationProps> = ({
+  type = "success",
+  title,
+  message,
+  onClose,
+  duration = 5000,
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    if (duration > 0) {
+      const timer = setTimeout(() => handleClose(), duration);
+      return () => clearTimeout(timer);
+    }
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setIsVisible(false);
+      onClose();
+    }, 300);
+  };
+
+  if (!isVisible) return null;
+
+  const styles: Record<
+    NotificationType,
+    { titleColor: string; backgroundColor: string; borderColor: string }
+  > = {
+    success: {
+      titleColor: "#10B981",
+      backgroundColor: "#1F2937",
+      borderColor: "#10B981",
+    },
+    info: {
+      titleColor: "#3B82F6",
+      backgroundColor: "#1F2937",
+      borderColor: "#3B82F6",
+    },
+    warning: {
+      titleColor: "#F59E0B",
+      backgroundColor: "#1F2937",
+      borderColor: "#F59E0B",
+    },
+    error: {
+      titleColor: "#EF4444",
+      backgroundColor: "#1F2937",
+      borderColor: "#EF4444",
+    },
+  };
+
+  const currentStyle = styles[type];
+
+  return (
+    <div
+      style={{
+        backgroundColor: currentStyle.backgroundColor,
+        borderRadius: "12px",
+        padding: "20px 24px",
+        marginBottom: "16px",
+        width: "460px",
+        maxWidth: "90vw",
+        boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+        borderLeft: `4px solid ${currentStyle.borderColor}`,
+        animation: isExiting
+          ? "slideOut 0.3s ease-out forwards"
+          : "slideIn 0.3s ease-out",
+        position: "relative",
+      }}
+    >
+      <div style={{ marginBottom: "8px" }}>
+        <span
+          style={{
+            color: currentStyle.titleColor,
+            fontSize: "14px",
+            fontWeight: 600,
+            letterSpacing: "0.5px",
+          }}
+        >
+          {title}
+        </span>
+        <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+          •
+        </span>
+        <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+          {type === "success" && "Données enregistrées"}
+          {type === "info" && "Quelques informations à vous communiquer"}
+          {type === "warning" && "Attention à ce que vous avez fait"}
+          {type === "error" && "Informations non enregistrées, réessayer"}
+        </span>
+      </div>
+
+      <p
+        style={{
+          color: "#D1D5DB",
+          fontSize: "13px",
+          lineHeight: "1.6",
+          margin: "0 0 16px 0",
+        }}
+      >
+        {message}
+      </p>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={handleClose}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#F97316",
+            fontSize: "13px",
+            fontWeight: 500,
+            cursor: "pointer",
+            padding: "4px 8px",
+            transition: "opacity 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          Ok, fermer
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ✅ Notification Container (copy exactly from your code)
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+  notifications,
+  removeNotification,
+}) => (
+  <div
+    style={{
+      position: "fixed",
+      bottom: "24px",
+      left: "24px",
+      zIndex: 9999,
+      display: "flex",
+      flexDirection: "column-reverse",
+      gap: "0",
+    }}
+  >
+    {notifications.map((n) => (
+      <Notification
+        key={n.id}
+        type={n.type}
+        title={n.title}
+        message={n.message}
+        duration={n.duration}
+        onClose={() => removeNotification(n.id)}
+      />
+    ))}
+  </div>
+);
+
+// ... (all your existing interfaces remain the same)
 interface VideoContent {
   video_file: string;
   duration?: number;
@@ -91,21 +274,6 @@ interface Course {
   estimated_duration_display?: string;
 }
 
-interface ModuleDuration {
-  module_id: number;
-  module_title: string;
-  estimated_duration?: number;
-  contents: ContentDuration[];
-}
-
-interface ContentDuration {
-  content_id: number;
-  content_title: string;
-  content_type: string;
-  estimated_duration?: number;
-  min_required_time?: number;
-}
-
 const CourseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -116,6 +284,9 @@ const CourseDetail = () => {
   const [timeSpent, setTimeSpent] = useState(0);
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
   const [selectedQCMOptions, setSelectedQCMOptions] = useState<{[questionId: number]: number[]}>({});
+
+  // 2️⃣ Add Notification State
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Add responsive state
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -133,6 +304,23 @@ const CourseDetail = () => {
   // Helper function to determine if mobile view
   const isMobile = windowWidth < 768;
   const isTablet = windowWidth >= 768 && windowWidth < 1024;
+
+  // 3️⃣ Add Notification Functions
+  const addNotification = (
+    type: NotificationType,
+    title: string,
+    message: string,
+    duration: number = 5000
+  ) => {
+    const id = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id, type, title, message, duration },
+    ]);
+  };
+
+  const removeNotification = (id: number) =>
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
 
   // Enhanced duration calculation with proper typing
   const calculateTotalDuration = (courseData: Course | null): number => {
@@ -180,10 +368,8 @@ const CourseDetail = () => {
     if (content.content_type_name?.toLowerCase() === 'qcm' && content.qcm) {
       const qcm = content.qcm;
 
-      // Normalisation des questions
       let questions: QCMQuestion[] = [];
       if (Array.isArray(qcm.questions) && qcm.questions.length > 0) {
-        // Format multi-questions
         questions = qcm.questions.map((q: any, index: number) => ({
           id: q.id || index + 1,
           question: q.question || '',
@@ -197,7 +383,6 @@ const CourseDetail = () => {
           order: q.order || index + 1
         }));
       } else {
-        // Si pas de questions ou format invalide, créer une question par défaut
         questions = [{
           id: 1,
           question: content.title || 'Question',
@@ -270,31 +455,6 @@ const CourseDetail = () => {
         const response = await api.get(`courses/${id}/`);
         console.log('✅ Complete Course API Response:', response.data);
         
-        // Log ALL course data to see what's available with proper typing
-        console.log('📋 Full Course Data:', {
-          id: response.data.id,
-          title: response.data.title_of_course,
-          estimated_duration: response.data.estimated_duration,
-          estimated_duration_display: response.data.estimated_duration_display,
-          modules: response.data.modules?.length,
-          contents: response.data.modules?.reduce((total: number, module: Module) => 
-            total + (module.contents?.length || 0), 0),
-          min_required_time: response.data.min_required_time,
-          // Check module durations with proper typing
-          module_durations: response.data.modules?.map((module: Module) => ({
-            module_id: module.id,
-            module_title: module.title,
-            estimated_duration: module.estimated_duration,
-            contents: module.contents?.map((content: Content) => ({
-              content_id: content.id,
-              content_title: content.title,
-              content_type: content.content_type_name,
-              estimated_duration: content.estimated_duration,
-              min_required_time: content.min_required_time
-            }))
-          }))
-        });
-        
         setCourse(response.data);
 
         // Normaliser les contenus QCM
@@ -345,10 +505,11 @@ const CourseDetail = () => {
         
       } catch (error: any) {
         console.error('❌ Error fetching course:', error);
-        if (error.response) {
-          console.error('📄 Error response data:', error.response.data);
-          console.error('🔢 Error response status:', error.response.status);
-        }
+        addNotification(
+          "error",
+          "Erreur",
+          "Impossible de charger les détails du cours. Veuillez réessayer."
+        );
       } finally {
         setLoading(false);
       }
@@ -489,7 +650,11 @@ const CourseDetail = () => {
       completedQCMs: [],
       timeSpent: {}
     });
-    alert('Progression réinitialisée');
+    addNotification(
+      "success",
+      "Progression réinitialisée",
+      "Votre progression a été réinitialisée avec succès."
+    );
   };
 
   const handleMarkAsCompleted = async () => {
@@ -498,7 +663,11 @@ const CourseDetail = () => {
         (userProgress.timeSpent[selectedContent.id] || 0) >= (selectedContent.min_required_time * 60);
 
       if (!hasMetTimeRequirement) {
-        alert(`Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`);
+        addNotification(
+          "warning",
+          "Temps requis",
+          `Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`
+        );
         return;
       }
 
@@ -514,7 +683,11 @@ const CourseDetail = () => {
           const isQCMCompleted = userProgress.completedQCMs?.includes(selectedContent.id) || selectedContent.is_completed;
           
           if (!isQCMCompleted) {
-            alert('Vous devez d\'abord compléter et soumettre le QCM avant de marquer ce contenu comme terminé.');
+            addNotification(
+              "warning",
+              "QCM requis",
+              "Vous devez d'abord compléter et soumettre le QCM avant de marquer ce contenu comme terminé."
+            );
             return;
           }
 
@@ -575,7 +748,12 @@ const CourseDetail = () => {
           };
         });
 
-        alert('Contenu marqué comme terminé et durée mise à jour');
+        addNotification(
+          "success",
+          "Contenu terminé",
+          "Le contenu a été marqué comme terminé et la durée a été mise à jour."
+        );
+        
         setShowModal(false);
         setSelectedContent(null);
 
@@ -590,7 +768,11 @@ const CourseDetail = () => {
 
       } catch (error: any) {
         console.error('Error marking content as completed:', error);
-        alert(`Erreur lors de la mise à jour: ${error.response?.data?.message || error.message}`);
+        addNotification(
+          "error",
+          "Erreur",
+          `Erreur lors de la mise à jour: ${error.response?.data?.message || error.message}`
+        );
       }
     }
   };
@@ -678,7 +860,12 @@ const CourseDetail = () => {
           };
         });
 
-        alert('QCM réussi! Contenu marqué comme terminé.');
+        addNotification(
+          "success",
+          "QCM réussi!",
+          "Le QCM a été réussi et le contenu a été marqué comme terminé."
+        );
+        
         setShowModal(false);
         setSelectedContent(null);
 
@@ -691,11 +878,19 @@ const CourseDetail = () => {
           }
         }, 1000);
       } else {
-        alert(`QCM échoué. Score: ${response.data.percentage}% (Minimum requis: ${response.data.passing_score}%). Veuillez réessayer.`);
+        addNotification(
+          "warning",
+          "QCM échoué",
+          `Score: ${response.data.percentage}% (Minimum requis: ${response.data.passing_score}%). Veuillez réessayer.`
+        );
       }
     } catch (error: any) {
       console.error('Error submitting QCM:', error);
-      alert(`Erreur lors de la soumission du QCM: ${error.response?.data?.message || error.message}`);
+      addNotification(
+        "error",
+        "Erreur QCM",
+        `Erreur lors de la soumission du QCM: ${error.response?.data?.message || error.message}`
+      );
     }
   };
 
@@ -895,33 +1090,6 @@ const CourseDetail = () => {
               {displayDuration}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Debug Info - Enhanced */}
-      <div style={{ 
-        backgroundColor: '#FEF3C7', 
-        padding: isMobile ? '0.75rem' : '1rem', 
-        margin: isMobile ? '0.5rem' : '1rem 2rem',
-        borderRadius: '8px',
-        border: '1px solid #F59E0B'
-      }}>
-        <h4 style={{ margin: '0 0 0.5rem 0', color: '#92400E', fontSize: isMobile ? '0.9rem' : '1rem' }}>Duration Debug Info:</h4>
-        <div style={{ 
-          fontSize: isMobile ? '0.7rem' : '0.75rem', 
-          color: '#92400E', 
-          fontFamily: 'monospace',
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-          gap: '0.25rem'
-        }}>
-          <div>API estimated_duration: {course?.estimated_duration}</div>
-          <div>API estimated_duration_display: "{course?.estimated_duration_display}"</div>
-          <div>Calculated duration: {calculateTotalDuration(course)}</div>
-          <div>Formatted display: "{formatDurationDisplay(calculateTotalDuration(course))}"</div>
-          <div>Final display: "{displayDuration}"</div>
-          <div>Module count: {course?.modules?.length}</div>
-          <div>Content count: {course?.modules?.reduce((total: number, module: Module) => total + (module.contents?.length || 0), 0)}</div>
         </div>
       </div>
 
@@ -1607,6 +1775,12 @@ const CourseDetail = () => {
           </div>
         </div>
       )}
+
+      {/* 4️⃣ Add Notification Container at the end */}
+      <NotificationContainer
+        notifications={notifications}
+        removeNotification={removeNotification}
+      />
     </div>
   );
 };

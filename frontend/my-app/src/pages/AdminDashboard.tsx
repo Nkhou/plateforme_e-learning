@@ -189,7 +189,14 @@ const StatCardsSection: React.FC<{ stats: any }> = ({ stats }) => {
   const trends = stats?.overview?.trends || {};
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div style={{ 
+      display: 'grid', 
+      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+      gap: '1rem', 
+      maxWidth: '1400px', 
+      margin: '0 auto',
+      padding: '0 1rem'
+    }}>
       <StatCard
         title="N° des utilisateurs"
         value={stats?.overview?.total_users?.toLocaleString() || '0'}
@@ -249,28 +256,48 @@ const StatCard: React.FC<{
   trendLabel: string;
   trendUp: boolean;
 }> = ({ title, value, subtitle, trend, trendLabel, trendUp }) => (
-  <div style={{ lineHeight: '1.5' }}>
-    <div style={{ fontSize: '0.875rem', marginBottom: '0.5rem', opacity: 0.9, fontWeight: '400' }}>
+  <div style={{ 
+    lineHeight: '1.5',
+    padding: '0.5rem'
+  }}>
+    <div style={{ 
+      fontSize: '0.875rem', 
+      marginBottom: '0.5rem', 
+      opacity: 0.9, 
+      fontWeight: '400',
+      wordWrap: 'break-word'
+    }}>
       {title}
     </div>
-    <div style={{ fontSize: '2.25rem', fontWeight: 'bold', marginBottom: '0.25rem', letterSpacing: '-0.02em' }}>
+    <div style={{ 
+      fontSize: 'clamp(1.5rem, 4vw, 2.25rem)', 
+      fontWeight: 'bold', 
+      marginBottom: '0.25rem', 
+      letterSpacing: '-0.02em',
+      lineHeight: '1.2'
+    }}>
       {value}
     </div>
     {subtitle && (
-      <div style={{ fontSize: '0.875rem', opacity: 0.8, marginBottom: '0.5rem' }}>
+      <div style={{ 
+        fontSize: '0.875rem', 
+        opacity: 0.8, 
+        marginBottom: '0.5rem' 
+      }}>
         {subtitle}
       </div>
     )}
     <div style={{
-      fontSize: '0.875rem',
+      fontSize: '0.75rem',
       marginTop: '0.5rem',
       color: trendUp ? '#86EFAC' : '#FCA5A5',
       fontWeight: '500',
       display: 'flex',
       alignItems: 'center',
-      gap: '0.25rem'
+      gap: '0.25rem',
+      flexWrap: 'wrap'
     }}>
-      <span style={{ fontSize: '1rem' }}>
+      <span style={{ fontSize: '0.875rem' }}>
         {trendUp ? '▲' : '▼'}
       </span>
       <span>{trend} {trendLabel}</span>
@@ -280,10 +307,27 @@ const StatCard: React.FC<{
 
 // ChartCard Component
 const ChartCard: React.FC<{ title: string; subtitle: string; children: React.ReactNode }> = ({ title, subtitle, children }) => (
-  <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-    <div style={{ marginBottom: '1.25rem' }}>
-      <h3 style={{ fontSize: '1.0625rem', fontWeight: '600', color: '#1F2937', margin: '0 0 0.375rem 0' }}>{title}</h3>
-      <p style={{ fontSize: '0.875rem', color: '#6B7280', margin: 0 }}>{subtitle}</p>
+  <div style={{ 
+    backgroundColor: 'white', 
+    borderRadius: '8px', 
+    padding: '1rem', 
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    width: '100%',
+    boxSizing: 'border-box'
+  }}>
+    <div style={{ marginBottom: '1rem' }}>
+      <h3 style={{ 
+        fontSize: 'clamp(0.9rem, 2vw, 1.0625rem)', 
+        fontWeight: '600', 
+        color: '#1F2937', 
+        margin: '0 0 0.375rem 0',
+        lineHeight: '1.3'
+      }}>{title}</h3>
+      <p style={{ 
+        fontSize: '0.75rem', 
+        color: '#6B7280', 
+        margin: 0 
+      }}>{subtitle}</p>
     </div>
     {children}
   </div>
@@ -300,16 +344,22 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; 
       backgroundColor: active ? '#4338CA' : 'transparent',
       color: active ? 'white' : '#A0AEC0',
       border: 'none',
-      padding: '0.625rem 1rem',
+      padding: '0.5rem 0.75rem',
       borderRadius: '6px',
       cursor: 'pointer',
-      fontSize: '0.9375rem',
+      fontSize: 'clamp(0.8rem, 2vw, 0.9375rem)',
       fontWeight: '500',
-      transition: 'all 0.2s ease'
+      transition: 'all 0.2s ease',
+      whiteSpace: 'nowrap'
     }}
   >
-    <span style={{ fontSize: '1.125rem' }}>{icon}</span>
-    {label}
+    <span style={{ fontSize: '1rem' }}>{icon}</span>
+    <span style={{ 
+      display: 'inline-block',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    }}>{label}</span>
   </button>
 );
 
@@ -398,26 +448,26 @@ const AdminDashboard: React.FC = () => {
   }
 
   const userRegistrationData = {
-    labels: stats?.user_registration_chart?.labels || [],
-    datasets: [{
-      label: 'Nouveaux utilisateurs',
-      data: stats?.user_registration_chart?.data || [],
-      backgroundColor: '#818CF8',
-      borderRadius: 4,
-      barThickness: 40,
-    }]
-  };
+  labels: stats?.user_registration_chart?.labels || [],
+  datasets: [{
+    label: 'Nouveaux utilisateurs',
+    data: stats?.user_registration_chart?.data || [],
+    backgroundColor: '#818CF8',
+    borderRadius: 4,
+    barThickness: 'flex' as const, // Add 'as const' to fix the type issue
+  }]
+};
 
   const dauData = stats?.dau_weekly ? {
-    labels: stats.dau_weekly.labels,
-    datasets: [{
-      label: 'DAU',
-      data: stats.dau_weekly.data,
-      backgroundColor: '#818CF8',
-      borderRadius: 4,
-      barThickness: 40,
-    }]
-  } : null;
+  labels: stats.dau_weekly.labels,
+  datasets: [{
+    label: 'DAU',
+    data: stats.dau_weekly.data,
+    backgroundColor: '#818CF8',
+    borderRadius: 4,
+    barThickness: 'flex' as const, // Add 'as const' to fix the type issue
+  }]
+} : null;
 
   const userDistributionData = {
     labels: stats?.user_distribution?.map(d => getSafeString(d.privilege)) || [],
@@ -471,7 +521,13 @@ const AdminDashboard: React.FC = () => {
     plugins: {
       legend: {
         position: 'bottom' as const,
-        labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 13 }, color: '#4B5563' }
+        labels: { 
+          padding: 20, 
+          usePointStyle: true, 
+          pointStyle: 'circle', 
+          font: { size: 13 }, 
+          color: '#4B5563' 
+        }
       },
       tooltip: {
         backgroundColor: '#1F2937',
@@ -509,28 +565,41 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%' }}>
-      {/* Top Navigation Bar */}
-      {/* <nav style={{ backgroundColor: '#12114a', padding: '0.75rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', maxWidth: '1400px', margin: '0 auto' }}>
-          <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
-          <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
-          <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
-          <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
-          <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
-        </div>
-      </nav> */}
-
+    <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
       {/* Breadcrumb and Title Header */}
-      <div style={{ backgroundColor: '#212068', color: 'white', padding: '1.25rem 2rem' }}>
-        <div style={{ fontSize: '0.875rem', marginBottom: '0.5rem', opacity: 0.9 }}>
+      <div style={{ 
+        backgroundColor: '#212068', 
+        color: 'white', 
+        padding: '1rem clamp(1rem, 3vw, 2rem)'
+      }}>
+        <div style={{ 
+          fontSize: '0.75rem', 
+          marginBottom: '0.5rem', 
+          opacity: 0.9,
+          wordWrap: 'break-word'
+        }}>
           Main {'>'} <span style={{ color: '#FCD34D', fontWeight: '500' }}>{getBreadcrumb()}</span>
         </div>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0, letterSpacing: '-0.025em' }}>
+        <h1 style={{ 
+          fontSize: 'clamp(1.25rem, 4vw, 1.75rem)', 
+          fontWeight: 'bold', 
+          margin: 0, 
+          letterSpacing: '-0.025em',
+          lineHeight: '1.2'
+        }}>
           {getPageTitle()}
         </h1>
         {activeNavItem !== 'dashboard' && (
-          <p style={{ fontSize: '0.9375rem', marginTop: '0.5rem', marginBottom: 0, opacity: 0.9 }}>
+          <p style={{ 
+            fontSize: '0.875rem', 
+            marginTop: '0.5rem', 
+            marginBottom: 0, 
+            opacity: 0.9,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden'
+          }}>
             Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
           </p>
         )}
@@ -539,12 +608,27 @@ const AdminDashboard: React.FC = () => {
       {/* Dashboard Content */}
       {activeNavItem === 'dashboard' && stats && (
         <>
-          <div style={{ backgroundColor: '#212068', padding: '2rem', color: 'white' }}>
+          <div style={{ 
+            backgroundColor: '#212068', 
+            padding: '1.5rem 1rem',
+            color: 'white' 
+          }}>
             <StatCardsSection stats={stats} />
           </div>
 
-          <div style={{ backgroundColor: 'white', padding: '0 2rem', borderBottom: '1px solid #E5E7EB' }}>
-            <div style={{ display: 'flex', gap: '2.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+          <div style={{ 
+            backgroundColor: 'white', 
+            padding: '0 clamp(1rem, 3vw, 2rem)', 
+            borderBottom: '1px solid #E5E7EB',
+            overflowX: 'auto'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              gap: 'clamp(1rem, 3vw, 2.5rem)', 
+              maxWidth: '1400px', 
+              margin: '0 auto',
+              minWidth: 'min-content'
+            }}>
               {['overview', 'analytics', 'system'].map((tab) => (
                 <button
                   key={tab}
@@ -552,13 +636,15 @@ const AdminDashboard: React.FC = () => {
                   style={{
                     background: 'none',
                     border: 'none',
-                    padding: '1.25rem 0',
-                    fontSize: '0.95rem',
+                    padding: '1rem 0',
+                    fontSize: 'clamp(0.85rem, 2vw, 0.95rem)',
                     fontWeight: activeTab === tab ? '600' : '500',
                     color: activeTab === tab ? '#4338CA' : '#6B7280',
                     borderBottom: activeTab === tab ? '3px solid #4338CA' : '3px solid transparent',
                     cursor: 'pointer',
-                    textTransform: 'capitalize'
+                    textTransform: 'capitalize',
+                    whiteSpace: 'nowrap',
+                    minWidth: 'max-content'
                   }}
                 >
                   {tab === 'overview' ? 'Overview' : tab === 'analytics' ? 'Analytics' : 'System'}
@@ -567,12 +653,22 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', paddingBottom: '4rem' }}>
+          <div style={{ 
+            padding: '1.5rem clamp(1rem, 3vw, 2rem)', 
+            maxWidth: '1400px', 
+            margin: '0 auto', 
+            paddingBottom: '3rem' 
+          }}>
             {activeTab === 'overview' && (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', 
+                  gap: '1rem', 
+                  marginBottom: '1.5rem' 
+                }}>
                   <ChartCard title="Nouveaux utilisateurs (Derniers 30 jours)" subtitle="Bar chart">
-                    <div style={{ height: '300px', position: 'relative' }}>
+                    <div style={{ height: 'clamp(250px, 40vw, 300px)', position: 'relative' }}>
                       {stats.user_registration_chart && stats.user_registration_chart.data.length > 0 ? (
                         <Bar data={userRegistrationData} options={chartOptions} />
                       ) : (
@@ -584,7 +680,7 @@ const AdminDashboard: React.FC = () => {
                   </ChartCard>
                   {dauData ? (
                     <ChartCard title="DAU / semaine" subtitle="Bar chart">
-                      <div style={{ height: '300px', position: 'relative' }}>
+                      <div style={{ height: 'clamp(250px, 40vw, 300px)', position: 'relative' }}>
                         {stats.dau_weekly && stats.dau_weekly.data.length > 0 ? (
                           <Bar data={dauData} options={chartOptions} />
                         ) : (
@@ -596,13 +692,17 @@ const AdminDashboard: React.FC = () => {
                     </ChartCard>
                   ) : (
                     <ChartCard title="DAU / semaine" subtitle="Bar chart">
-                      <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No DAU data available</div>
+                      <div style={{ height: 'clamp(250px, 40vw, 300px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No DAU data available</div>
                     </ChartCard>
                   )}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', 
+                  gap: '1rem' 
+                }}>
                   <ChartCard title="Distribution par rôle du compte" subtitle="Doughnut chart">
-                    <div style={{ height: '300px', position: 'relative' }}>
+                    <div style={{ height: 'clamp(250px, 40vw, 300px)', position: 'relative' }}>
                       {stats.user_distribution && stats.user_distribution.length > 0 ? (
                         <Doughnut data={userDistributionData} options={doughnutOptions} />
                       ) : (
@@ -614,7 +714,7 @@ const AdminDashboard: React.FC = () => {
                   </ChartCard>
                   {accountStatusData ? (
                     <ChartCard title="Distribution par statut du compte" subtitle="Pie chart">
-                      <div style={{ height: '300px', position: 'relative' }}>
+                      <div style={{ height: 'clamp(250px, 40vw, 300px)', position: 'relative' }}>
                         {stats.account_status && stats.account_status.length > 0 ? (
                           <Pie data={accountStatusData} options={doughnutOptions} />
                         ) : (
@@ -626,7 +726,7 @@ const AdminDashboard: React.FC = () => {
                     </ChartCard>
                   ) : (
                     <ChartCard title="Distribution par statut du compte" subtitle="Pie chart">
-                      <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No account status data available</div>
+                      <div style={{ height: 'clamp(250px, 40vw, 300px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>No account status data available</div>
                     </ChartCard>
                   )}
                 </div>
@@ -637,10 +737,15 @@ const AdminDashboard: React.FC = () => {
                 {analytics ? (
                   <>
                     {/* Charts Grid - Top Row */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', 
+                      gap: '1rem', 
+                      marginBottom: '1.5rem' 
+                    }}>
                       {/* Progress Distribution Chart */}
                       <ChartCard title="Progress distribution" subtitle="Doughnut / Pie chart">
-                        <div style={{ height: '300px', position: 'relative' }}>
+                        <div style={{ height: 'clamp(250px, 40vw, 300px)', position: 'relative' }}>
                           {analytics.progress_distribution && analytics.progress_distribution.length > 0 ? (
                             <Doughnut
                               data={{
@@ -666,9 +771,8 @@ const AdminDashboard: React.FC = () => {
                       </ChartCard>
 
                       {/* Statistics by Content Type */}
-                      {/* Statistics by Content Type */}
                       <ChartCard title="Statistiques par type de contenu" subtitle="Doughnut / Pie chart">
-                        <div style={{ height: '300px', position: 'relative' }}>
+                        <div style={{ height: 'clamp(250px, 40vw, 300px)', position: 'relative' }}>
                           {analytics.content_type_statistics && analytics.content_type_statistics.length > 0 ? (
                             <Doughnut
                               data={{
@@ -695,11 +799,22 @@ const AdminDashboard: React.FC = () => {
                     </div>
 
                     {/* Formations Statistics Table */}
-                    <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                      <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#1F2937', marginBottom: '1.5rem' }}>
+                    <div style={{ 
+                      backgroundColor: 'white', 
+                      borderRadius: '8px', 
+                      padding: '1rem', 
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      overflowX: 'auto'
+                    }}>
+                      <h3 style={{ 
+                        fontSize: 'clamp(1rem, 2vw, 1.125rem)', 
+                        fontWeight: '600', 
+                        color: '#1F2937', 
+                        marginBottom: '1rem' 
+                      }}>
                         Statistiques de formations
                       </h3>
-                      <div style={{ overflowX: 'auto' }}>
+                      <div style={{ minWidth: '600px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                           <thead>
                             <tr style={{ backgroundColor: '#E5E7EB' }}>
@@ -709,7 +824,6 @@ const AdminDashboard: React.FC = () => {
                               <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Completed</th>
                               <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Completion rate</th>
                               <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Avg. Score</th>
-                              {/* <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th> */}
                             </tr>
                           </thead>
                           <tbody>
@@ -739,9 +853,6 @@ const AdminDashboard: React.FC = () => {
                                   <td style={{ padding: '0.75rem', color: '#1F2937' }}>
                                     {getSafeNumber(course.average_score || course.avg_score, 76.3)}%
                                   </td>
-                                  {/* <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: '1.25rem' }}>⋯</button>
-                                  </td> */}
                                 </tr>
                               ))
                             ) : (
@@ -758,9 +869,6 @@ const AdminDashboard: React.FC = () => {
                                       </span>
                                     </td>
                                     <td style={{ padding: '0.75rem', color: '#1F2937' }}>76.3%</td>
-                                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: '1.25rem' }}>⋯</button>
-                                    </td>
                                   </tr>
                                 ))}
                               </>
@@ -771,7 +879,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   </>
                 ) : (
-                  <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                  <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                     <h3 style={{ color: '#4B5563', marginBottom: '0.5rem' }}>Analytics Dashboard</h3>
                     <p style={{ color: '#9CA3AF' }}>Loading analytics data...</p>
                   </div>
@@ -783,7 +891,7 @@ const AdminDashboard: React.FC = () => {
                 {systemHealth ? (
                   <SystemHealth systemHealth={systemHealth} />
                 ) : (
-                  <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                  <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                     <h3 style={{ color: '#4B5563', marginBottom: '0.5rem' }}>System Health</h3>
                     <p style={{ color: '#9CA3AF' }}>Loading system health data...</p>
                   </div>
@@ -805,7 +913,7 @@ const AdminDashboard: React.FC = () => {
 
       {/* Messages Section */}
       {activeNavItem === 'messages' && (
-        <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{ padding: '1.5rem clamp(1rem, 3vw, 2rem)', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center' }}>
             <h3 style={{ color: '#4B5563', marginBottom: '0.5rem' }}>Messages</h3>
             <p style={{ color: '#9CA3AF' }}>Content coming soon...</p>
@@ -815,7 +923,7 @@ const AdminDashboard: React.FC = () => {
 
       {/* Favoris Section */}
       {activeNavItem === 'favoris' && (
-        <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{ padding: '1.5rem clamp(1rem, 3vw, 2rem)', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center' }}>
             <h3 style={{ color: '#4B5563', marginBottom: '0.5rem' }}>Favoris</h3>
             <p style={{ color: '#9CA3AF' }}>Content coming soon...</p>
