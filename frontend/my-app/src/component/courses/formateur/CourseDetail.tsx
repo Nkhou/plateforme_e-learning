@@ -73,7 +73,7 @@ interface Course {
   department?: string;
   category?: string;
   subscriber_count?: number;
-  average_progress?:number;
+  average_progress?: number;
   creator?: {
     id: number;
     username: string;
@@ -107,6 +107,9 @@ const CourseDetail = () => {
   const [selectedContentType, setSelectedContentType] = useState<string | null>(null);
   const [showContentMenu, setShowContentMenu] = useState<number | null>(null);
 
+  // Enhanced responsive state
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [activeModule, setActiveModule] = useState<number | null>(null);
 
   // Enhanced form states with QCM support
   const [moduleForm, setModuleForm] = useState({
@@ -146,24 +149,7 @@ const CourseDetail = () => {
     startTime: null,
     currentContent: null
   });
-  // Add module status change handler
-  const handleChangeModuleStatus = async (module: Module, newStatus: number) => {
-    if (!id) return;
 
-    try {
-      await api.patch(`courses/${id}/modules/${module.id}/`, {
-        status: newStatus
-      });
-
-      const response = await api.get(`courses/${id}/`);
-      setCourse(response.data);
-
-      alert('Statut du module mis à jour avec succès!');
-    } catch (error) {
-      console.error('Failed to update module status:', error);
-      alert('Échec de mise à jour du statut du module.');
-    }
-  };
   // User progress state
   const [userProgress, setUserProgress] = useState<{
     completedContents: number[];
@@ -181,6 +167,94 @@ const CourseDetail = () => {
   const editContentModalRef = useRef<HTMLDivElement>(null);
   const contentViewerModalRef = useRef<HTMLDivElement>(null);
 
+  // Track window size for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Helper functions for responsive design
+  const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
+  const isDesktop = windowWidth >= 1024;
+
+  // Responsive typography using clamp()
+  const getResponsiveFontSize = (minSize: number, maxSize: number, minWidth = 320, maxWidth = 1920) => {
+    const minWidthPx = `${minWidth}px`;
+    const maxWidthPx = `${maxWidth}px`;
+    const minSizeRem = `${minSize / 16}rem`;
+    const maxSizeRem = `${maxSize / 16}rem`;
+    
+    return `clamp(${minSizeRem}, ${minSizeRem} + (${maxSize - minSize}) * ((100vw - ${minWidthPx}) / (${maxWidth - minWidth})), ${maxSizeRem})`;
+  };
+
+  // Responsive spacing
+  const getResponsiveSpacing = (mobile: number, tablet: number, desktop: number) => {
+    if (isMobile) return `${mobile / 16}rem`;
+    if (isTablet) return `${tablet / 16}rem`;
+    return `${desktop / 16}rem`;
+  };
+
+  // Responsive grid columns
+  const getResponsiveGrid = (mobile: number, tablet: number, desktop: number) => {
+    if (isMobile) return `repeat(${mobile}, 1fr)`;
+    if (isTablet) return `repeat(${tablet}, 1fr)`;
+    return `repeat(${desktop}, 1fr)`;
+  };
+
+  // Enhanced responsive styles
+  const responsiveStyles = {
+    // Typography
+    heading1: {
+      fontSize: getResponsiveFontSize(24, 32),
+      fontWeight: 'bold' as const,
+      lineHeight: 1.2
+    },
+    heading2: {
+      fontSize: getResponsiveFontSize(20, 24),
+      fontWeight: '600' as const,
+      lineHeight: 1.3
+    },
+    heading3: {
+      fontSize: getResponsiveFontSize(18, 20),
+      fontWeight: '600' as const,
+      lineHeight: 1.4
+    },
+    body: {
+      fontSize: getResponsiveFontSize(14, 16),
+      lineHeight: 1.5
+    },
+    small: {
+      fontSize: getResponsiveFontSize(12, 14),
+      lineHeight: 1.4
+    },
+    
+    // Spacing
+    containerPadding: getResponsiveSpacing(16, 24, 32),
+    sectionGap: getResponsiveSpacing(24, 32, 48),
+    elementGap: getResponsiveSpacing(12, 16, 24),
+    smallGap: getResponsiveSpacing(8, 12, 16),
+    
+    // Layout
+    sidebarWidth: isMobile ? '100%' : isTablet ? '280px' : '320px',
+    mainContentMaxWidth: isMobile ? '100%' : isTablet ? 'calc(100% - 300px)' : 'calc(100% - 340px)',
+    statsGrid: getResponsiveGrid(2, 3, 6),
+    modalWidth: isMobile ? '95%' : isTablet ? '90%' : '600px',
+    
+    // Interactive elements
+    buttonPadding: isMobile ? '0.5rem 1rem' : '0.625rem 1.25rem',
+    inputPadding: isMobile ? '0.75rem' : '0.5rem',
+    
+    // Cards and containers
+    borderRadius: isMobile ? '6px' : '8px',
+    cardPadding: isMobile ? '1rem' : '1.5rem',
+    shadow: '0 2px 8px rgba(0,0,0,0.1)'
+  };
+
   // Fonction de normalisation améliorée pour QCM
   const normalizeQCMContent = (content: Content): Content => {
     const normalizedContent = { ...content };
@@ -190,7 +264,6 @@ const CourseDetail = () => {
 
       // Normalisation des questions
       let questions: QCMQuestion[] = [];
-      console.log('just +++++++++++', qcm);
       if (Array.isArray(qcm.questions) && qcm.questions.length > 0) {
         // Format multi-questions
         questions = qcm.questions.map((q: any, index: number) => ({
@@ -234,7 +307,6 @@ const CourseDetail = () => {
   };
 
   // Enhanced click outside handler
-  // Enhanced click outside handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (contentMenuRef.current && !contentMenuRef.current.contains(event.target as Node)) {
@@ -268,6 +340,7 @@ const CourseDetail = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showNewModuleModal, showEditModuleModal, showNewContentModal, showEditContentModal, showModal]);
+
   // Reset content form helper
   const resetContentForm = () => {
     setContentForm({
@@ -298,7 +371,6 @@ const CourseDetail = () => {
         setLoading(true);
         const response = await api.get(`courses/${id}/`);
         setCourse(response.data);
-        console.log('---------------------i need it', response.data);
 
         // Normaliser les contenus QCM
         if (response.data.modules) {
@@ -403,7 +475,7 @@ const CourseDetail = () => {
       case 'pdf':
         return '📄';
       case 'qcm':
-        return <img src="/cerveau.png" alt="QCM" width={20} height={20} />;
+        return '✏️';
       default:
         return '📌';
     }
@@ -488,6 +560,30 @@ const CourseDetail = () => {
     setSelectedContent(null);
   };
 
+  // Enhanced mobile navigation
+  const toggleModule = (moduleId: number) => {
+    setActiveModule(activeModule === moduleId ? null : moduleId);
+  };
+
+  // Add module status change handler
+  const handleChangeModuleStatus = async (module: Module, newStatus: number) => {
+    if (!id) return;
+
+    try {
+      await api.patch(`courses/${id}/modules/${module.id}/`, {
+        status: newStatus
+      });
+
+      const response = await api.get(`courses/${id}/`);
+      setCourse(response.data);
+
+      alert('Statut du module mis à jour avec succès!');
+    } catch (error) {
+      console.error('Failed to update module status:', error);
+      alert('Échec de mise à jour du statut du module.');
+    }
+  };
+
   // Enhanced module creation with time tracking
   const handleCreateModule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -559,23 +655,15 @@ const CourseDetail = () => {
     }
   };
 
-  // Enhanced content editing with QCM support - CORRECTED VERSION
+  // Enhanced content editing with QCM support
   const handleEditContent = (content: Content) => {
-    console.log('=== EDITING CONTENT ===');
-    console.log('Raw content:', content);
-
     const normalizedContent = normalizeQCMContent(content);
-    console.log('Normalized content:', normalizedContent);
-
     setEditingContent(normalizedContent);
 
     const contentType = normalizedContent.content_type_name?.toLowerCase();
-    console.log('Content Type:', contentType);
 
     if (contentType === 'qcm' && normalizedContent.qcm) {
       const qcm = normalizedContent.qcm;
-      console.log('QCM Data:', qcm);
-      console.log('QCM Questions:', qcm.questions);
 
       // Ensure questions array exists and has valid data
       const questions = qcm.questions && qcm.questions.length > 0
@@ -601,8 +689,6 @@ const CourseDetail = () => {
           ]
         }];
 
-      console.log('Mapped Questions:', questions);
-
       // Préparer le formulaire QCM avec toutes les données
       const formData = {
         title: normalizedContent.title,
@@ -617,7 +703,6 @@ const CourseDetail = () => {
         min_required_time: normalizedContent.min_required_time
       };
 
-      console.log('Setting Content Form:', formData);
       setContentForm(formData);
     } else {
       // Pour PDF et vidéo
@@ -926,14 +1011,12 @@ const CourseDetail = () => {
   const BASE_URL = 'http://localhost:8000';
 
   const getVideoUrl = (content: Content) => {
-    console.log(content)
     const videoFile = content.video_content?.video_file;
     if (videoFile) {
       let url = videoFile;
 
       // Replace backend domain with localhost if necessary
       url = url.replace('http://backend:8000', BASE_URL);
-      console.log('url', url);
 
       if (!url.startsWith('http')) {
         url = `${BASE_URL}${url}`;
@@ -945,7 +1028,6 @@ const CourseDetail = () => {
   };
 
   const getimageUrl = (contentOrPath: Content | string | undefined): string | undefined => {
-    // Accept either a Content object or a direct string path (e.g. course.image_url)
     if (!contentOrPath) return undefined;
 
     let imagePath: string | undefined;
@@ -953,7 +1035,6 @@ const CourseDetail = () => {
     if (typeof contentOrPath === 'string') {
       imagePath = contentOrPath;
     } else {
-      // Try common fields that might contain an image/video path on a Content object
       imagePath = contentOrPath.video_content?.video_file
         || (contentOrPath as any).video_file
         || contentOrPath.pdf_content?.pdf_file
@@ -975,7 +1056,6 @@ const CourseDetail = () => {
     if (content.pdf_content?.pdf_file) {
       let pdfPath = content.pdf_content.pdf_file;
 
-      // Replace backend domain with localhost if necessary
       pdfPath = pdfPath.replace('http://backend:8000', BASE_URL);
 
       if (!pdfPath.startsWith('http')) {
@@ -999,7 +1079,6 @@ const CourseDetail = () => {
   };
 
   const getFileSize = (content: Content): string => {
-    // This would typically come from your API
     if (content.content_type_name?.toLowerCase() === 'pdf') {
       return '~2MB';
     } else if (content.content_type_name?.toLowerCase() === 'video') {
@@ -1037,7 +1116,13 @@ const CourseDetail = () => {
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        <div style={{ color: '#374151', fontSize: '1.5rem' }}>⏳ Chargement...</div>
+        <div style={{ 
+          color: '#374151', 
+          fontSize: responsiveStyles.heading2.fontSize,
+          fontWeight: responsiveStyles.heading2.fontWeight
+        }}>
+          ⏳ Chargement...
+        </div>
       </div>
     );
   }
@@ -1051,7 +1136,13 @@ const CourseDetail = () => {
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        <div style={{ color: '#374151', fontSize: '1.5rem' }}>Formation non trouvée</div>
+        <div style={{ 
+          color: '#374151', 
+          fontSize: responsiveStyles.heading2.fontSize,
+          fontWeight: responsiveStyles.heading2.fontWeight
+        }}>
+          Formation non trouvée
+        </div>
       </div>
     );
   }
@@ -1059,75 +1150,207 @@ const CourseDetail = () => {
   const statusBadge = getStatusBadge(course.status);
 
   return (
-    <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh' }}>
-      {/* Header */}
-      <div style={{ backgroundColor: '#2D2B6B', color: 'white', padding: '1.5rem 2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>{course.title_of_course}</h1>
+    <div style={{ 
+      backgroundColor: '#F3F4F6', 
+      minHeight: '100vh',
+      fontSize: responsiveStyles.body.fontSize,
+      lineHeight: responsiveStyles.body.lineHeight
+    }}>
+      {/* Enhanced Responsive Header */}
+      <div style={{ 
+        backgroundColor: '#2D2B6B', 
+        color: 'white', 
+        padding: responsiveStyles.containerPadding
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'center', 
+          gap: responsiveStyles.smallGap,
+          marginBottom: responsiveStyles.smallGap
+        }}>
+          <h1 style={{ 
+            ...responsiveStyles.heading1,
+            margin: 0,
+            flex: 1
+          }}>
+            {course.title_of_course}
+          </h1>
           <span style={{
             backgroundColor: statusBadge.color,
             color: 'white',
             padding: '0.25rem 0.75rem',
             borderRadius: '12px',
-            fontSize: '0.75rem'
+            fontSize: responsiveStyles.small.fontSize,
+            alignSelf: isMobile ? 'flex-start' : 'center'
           }}>
             {statusBadge.text}
           </span>
         </div>
-        <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.9 }}>{course.description}</p>
+        <p style={{ 
+          fontSize: responsiveStyles.body.fontSize,
+          margin: 0,
+          opacity: 0.9,
+          lineHeight: responsiveStyles.body.lineHeight
+        }}>
+          {course.description}
+        </p>
       </div>
 
-      {/* Enhanced Stats Bar */}
-      <div style={{ backgroundColor: '#2D2B6B', padding: '0 2rem 2rem 2rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2rem', color: 'white' }}>
+      {/* Enhanced Responsive Stats Bar */}
+      <div style={{ 
+        backgroundColor: '#2D2B6B', 
+        padding: `0 ${responsiveStyles.containerPadding} ${responsiveStyles.containerPadding}`
+      }}>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: responsiveStyles.statsGrid,
+          gap: responsiveStyles.elementGap, 
+          color: 'white'
+        }}>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Contenu total</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ 
+              fontSize: responsiveStyles.small.fontSize, 
+              opacity: 0.8,
+              marginBottom: '0.25rem'
+            }}>
+              Contenu total
+            </div>
+            <div style={{ 
+              fontSize: responsiveStyles.heading1.fontSize, 
+              fontWeight: responsiveStyles.heading1.fontWeight
+            }}>
               {totalContents.toString().padStart(2, '0')}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° de modules</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>0{course.modules?.length || 0}</div>
+            <div style={{ 
+              fontSize: responsiveStyles.small.fontSize, 
+              opacity: 0.8,
+              marginBottom: '0.25rem'
+            }}>
+              N° de modules
+            </div>
+            <div style={{ 
+              fontSize: responsiveStyles.heading1.fontSize, 
+              fontWeight: responsiveStyles.heading1.fontWeight
+            }}>
+              0{course.modules?.length || 0}
+            </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>N° d'apprenants</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{course.subscriber_count || 0}</div>
+            <div style={{ 
+              fontSize: responsiveStyles.small.fontSize, 
+              opacity: 0.8,
+              marginBottom: '0.25rem'
+            }}>
+              N° d'apprenants
+            </div>
+            <div style={{ 
+              fontSize: responsiveStyles.heading1.fontSize, 
+              fontWeight: responsiveStyles.heading1.fontWeight
+            }}>
+              {course.subscriber_count || 0}
+            </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Progrès moyen</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{course.average_progress || 0}</div>
+            <div style={{ 
+              fontSize: responsiveStyles.small.fontSize, 
+              opacity: 0.8,
+              marginBottom: '0.25rem'
+            }}>
+              Progrès moyen
+            </div>
+            <div style={{ 
+              fontSize: responsiveStyles.heading1.fontSize, 
+              fontWeight: responsiveStyles.heading1.fontWeight
+            }}>
+              {course.average_progress || 0}%
+            </div>
           </div>
-          {/* <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Votre progrès</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{progressPercentage}%</div>
-          </div> */}
-          {/* <div>
-            <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>Temps passé</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{formatTime(totalTimeSpent)}</div>
-          </div> */}
+          {!isMobile && (
+            <>
+              <div>
+                <div style={{ 
+                  fontSize: responsiveStyles.small.fontSize, 
+                  opacity: 0.8,
+                  marginBottom: '0.25rem'
+                }}>
+                  Votre progrès
+                </div>
+                <div style={{ 
+                  fontSize: responsiveStyles.heading1.fontSize, 
+                  fontWeight: responsiveStyles.heading1.fontWeight
+                }}>
+                  {progressPercentage}%
+                </div>
+              </div>
+              <div>
+                <div style={{ 
+                  fontSize: responsiveStyles.small.fontSize, 
+                  opacity: 0.8,
+                  marginBottom: '0.25rem'
+                }}>
+                  Temps passé
+                </div>
+                <div style={{ 
+                  fontSize: responsiveStyles.heading1.fontSize, 
+                  fontWeight: responsiveStyles.heading1.fontWeight
+                }}>
+                  {formatTime(totalTimeSpent)}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Main Content */}
-      <div style={{ padding: '2rem', display: 'flex', gap: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-        {/* Left Sidebar */}
-        <div style={{ width: '300px', flexShrink: 0 }}>
+      {/* Enhanced Responsive Main Content */}
+      <div style={{ 
+        padding: responsiveStyles.containerPadding,
+        display: isMobile ? 'block' : 'flex',
+        gap: responsiveStyles.sectionGap,
+        maxWidth: '1400px',
+        margin: '0 auto'
+      }}>
+        {/* Enhanced Responsive Sidebar */}
+        <div style={{ 
+          width: responsiveStyles.sidebarWidth,
+          flexShrink: 0,
+          marginBottom: isMobile ? responsiveStyles.sectionGap : 0
+        }}>
           <div style={{
             backgroundColor: '#E5E7EB',
-            borderRadius: '8px',
-            height: '200px',
-            marginBottom: '1.5rem',
+            borderRadius: responsiveStyles.borderRadius,
+            height: isMobile ? '150px' : '200px',
+            marginBottom: responsiveStyles.elementGap,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            overflow: 'hidden'
           }}>
             {course.image_url ? (
-              <img src={getimageUrl(course.image_url)} alt="Course" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+              <img 
+                src={getimageUrl(course.image_url)} 
+                alt="Course" 
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover', 
+                  borderRadius: responsiveStyles.borderRadius 
+                }} 
+              />
             ) : (
               <div style={{ textAlign: 'center', color: '#9CA3AF' }}>
-                <div style={{ fontSize: '3rem' }}>📚</div>
-                <div style={{ fontSize: '0.875rem' }}>Course Image</div>
+                <div style={{ 
+                  fontSize: isMobile ? '2rem' : '3rem',
+                  marginBottom: '0.5rem'
+                }}>
+                  📚
+                </div>
+                <div style={{ fontSize: responsiveStyles.small.fontSize }}>
+                  Course Image
+                </div>
               </div>
             )}
           </div>
@@ -1138,49 +1361,99 @@ const CourseDetail = () => {
               color: '#9A3412',
               padding: '0.5rem 1rem',
               borderRadius: '20px',
-              fontSize: '0.875rem',
+              fontSize: responsiveStyles.small.fontSize,
               display: 'inline-block',
-              marginBottom: '1rem'
+              marginBottom: responsiveStyles.elementGap
             }}>
               {course.department || course.category}
             </div>
           )}
 
-          <p style={{ fontSize: '0.875rem', color: '#4B5563', lineHeight: '1.6', marginBottom: '1rem' }}>
+          <p style={{ 
+            fontSize: responsiveStyles.body.fontSize, 
+            color: '#4B5563', 
+            lineHeight: responsiveStyles.body.lineHeight, 
+            marginBottom: responsiveStyles.elementGap
+          }}>
             {course.description}
           </p>
 
-          <div style={{ marginBottom: '0.5rem' }}>
-            <span>👤 </span>
-            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée par</span>
-          </div>
-          <div style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '1rem' }}>
-            {course.creator?.username || course.creator_username || 'Inconnu'}
-          </div>
+          <div style={{ 
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr',
+            gap: responsiveStyles.elementGap
+          }}>
+            <div>
+              <div style={{ marginBottom: '0.25rem' }}>
+                <span>👤 </span>
+                <span style={{ 
+                  fontSize: responsiveStyles.small.fontSize, 
+                  color: '#6B7280' 
+                }}>
+                  Créée par
+                </span>
+              </div>
+              <div style={{ 
+                fontSize: responsiveStyles.body.fontSize, 
+                fontWeight: '500'
+              }}>
+                {course.creator?.username || course.creator_username || 'Inconnu'}
+              </div>
+            </div>
 
-          <div style={{ marginBottom: '0.5rem' }}>
-            <span>📅 </span>
-            <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>Créée le</span>
-          </div>
-          <div style={{ fontSize: '0.875rem', fontWeight: '500' }}>
-            {formatDate(course.created_at)}
+            <div>
+              <div style={{ marginBottom: '0.25rem' }}>
+                <span>📅 </span>
+                <span style={{ 
+                  fontSize: responsiveStyles.small.fontSize, 
+                  color: '#6B7280' 
+                }}>
+                  Créée le
+                </span>
+              </div>
+              <div style={{ 
+                fontSize: responsiveStyles.body.fontSize, 
+                fontWeight: '500'
+              }}>
+                {formatDate(course.created_at)}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Right Content - Modules */}
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
+        {/* Enhanced Responsive Right Content - Modules */}
+        <div style={{ 
+          flex: 1,
+          minWidth: 0
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: 'space-between',
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: responsiveStyles.smallGap,
+            marginBottom: responsiveStyles.elementGap
+          }}>
+            {!isMobile && (
+              <h2 style={{
+                ...responsiveStyles.heading2,
+                margin: 0
+              }}>
+                Modules de formation
+              </h2>
+            )}
             <button
               onClick={() => setShowNewModuleModal(true)}
               style={{
                 backgroundColor: '#2D2B6B',
                 color: 'white',
                 border: 'none',
-                padding: '0.625rem 1.25rem',
-                borderRadius: '6px',
+                padding: responsiveStyles.buttonPadding,
+                borderRadius: responsiveStyles.borderRadius,
                 cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500'
+                fontSize: responsiveStyles.body.fontSize,
+                fontWeight: '500',
+                width: isMobile ? '100%' : 'auto'
               }}
             >
               ➕ Nouveau module
@@ -1189,11 +1462,46 @@ const CourseDetail = () => {
 
           {course.modules && course.modules.length > 0 ? (
             course.modules.map((module) => (
-              <div key={module.id} style={{ marginBottom: '1.5rem' }}>
-                <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1rem 1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: '200', margin: 0 }}>
+              <div key={module.id} style={{ marginBottom: responsiveStyles.elementGap }}>
+                <div style={{ 
+                  backgroundColor: 'white', 
+                  borderRadius: responsiveStyles.borderRadius, 
+                  padding: responsiveStyles.cardPadding, 
+                  boxShadow: responsiveStyles.shadow 
+                }}>
+                  {/* Enhanced Module Header with Mobile Accordion */}
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: isMobile ? 'column' : 'row',
+                    justifyContent: 'space-between', 
+                    alignItems: isMobile ? 'flex-start' : 'flex-start',
+                    gap: responsiveStyles.smallGap,
+                    marginBottom: isMobile && activeModule !== module.id ? 0 : responsiveStyles.elementGap,
+                    cursor: isMobile ? 'pointer' : 'auto'
+                  }}
+                  onClick={() => isMobile && toggleModule(module.id)}
+                  >
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: responsiveStyles.smallGap, 
+                      flexWrap: 'wrap',
+                      flex: 1
+                    }}>
+                      {isMobile && (
+                        <span style={{
+                          transform: activeModule === module.id ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                          fontSize: '0.875rem'
+                        }}>
+                          ▼
+                        </span>
+                      )}
+                      <h3 style={{ 
+                        fontSize: responsiveStyles.heading3.fontSize,
+                        fontWeight: responsiveStyles.heading3.fontWeight,
+                        margin: 0
+                      }}>
                         Module {module.order} • {module.title}
                       </h3>
                       <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -1203,7 +1511,7 @@ const CourseDetail = () => {
                             color: 'white',
                             padding: '0.15rem 0.5rem',
                             borderRadius: '8px',
-                            fontSize: '0.7rem',
+                            fontSize: responsiveStyles.small.fontSize,
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
@@ -1211,7 +1519,6 @@ const CourseDetail = () => {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            // Toggle module status dropdown
                             const current = document.getElementById(`module-status-dropdown-${module.id}`);
                             if (current) {
                               current.style.display = current.style.display === 'block' ? 'none' : 'block';
@@ -1316,15 +1623,25 @@ const CourseDetail = () => {
                         </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    
+                    {/* Module Actions - Hidden on mobile when collapsed */}
+                    <div style={{ 
+                      display: isMobile && activeModule !== module.id ? 'none' : 'flex', 
+                      gap: responsiveStyles.smallGap, 
+                      alignItems: 'center',
+                      flexWrap: 'wrap'
+                    }}>
                       <button
-                        onClick={() => handleEditModule(module)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditModule(module);
+                        }}
                         style={{
                           color: '#F97316',
                           cursor: 'pointer',
                           background: 'none',
                           border: 'none',
-                          fontSize: '0.875rem',
+                          fontSize: responsiveStyles.body.fontSize,
                           fontWeight: '500',
                           padding: 0
                         }}
@@ -1332,255 +1649,333 @@ const CourseDetail = () => {
                         Modifier
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setSelectedModule(module.id);
                           setShowNewContentModal(true);
                         }}
-                        style={{ color: '#2D2B6B', cursor: 'pointer', background: 'none', border: 'none', fontSize: '0.875rem', fontWeight: '500', padding: 0 }}
+                        style={{ 
+                          color: '#2D2B6B', 
+                          cursor: 'pointer', 
+                          background: 'none', 
+                          border: 'none', 
+                          fontSize: responsiveStyles.body.fontSize, 
+                          fontWeight: '500', 
+                          padding: 0 
+                        }}
                       >
                         + nouveau contenu
                       </button>
                     </div>
                   </div>
 
-                  {module.contents && module.contents.length > 0 ? (
-                    module.contents.map((content) => {
-                      const isCompleted = userProgress.completedContents.includes(content.id);
-                      const contentTimeSpent = userProgress.timeSpent[content.id] || 0;
-                      const hasMetTimeRequirement = !content.min_required_time || contentTimeSpent >= (content.min_required_time * 60);
+                  {/* Module Contents - Collapsible on Mobile */}
+                  <div style={{
+                    display: isMobile && activeModule !== module.id ? 'none' : 'block'
+                  }}>
+                    {module.contents && module.contents.length > 0 ? (
+                      module.contents.map((content) => {
+                        const isCompleted = userProgress.completedContents.includes(content.id);
+                        const contentTimeSpent = userProgress.timeSpent[content.id] || 0;
+                        const hasMetTimeRequirement = !content.min_required_time || contentTimeSpent >= (content.min_required_time * 60);
 
-                      return (
-                        <div
-                          key={content.id}
-                          onClick={() => handleContentClick(content)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '0.75rem',
-                            // backgroundColor: isCompleted ? '#F0F9FF' : '#F9FAFB',
-                            borderRadius: '6px',
-                            marginBottom: '0.5rem',
-                            // border: `1px solid ${isCompleted ? '#0EA5E9' : '#E5E7EB'}`,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =  '#EEF2FF';
-                            e.currentTarget.style.borderColor = '#2D2B6B';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =  '#F9FAFB';
-                            e.currentTarget.style.borderColor = '#E5E7EB';
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                            <span style={{ fontSize: '1.2rem' }}>{getContentIcon(content.content_type_name || '')}</span>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '0.875rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                {content.title}
-                                {/* {isCompleted && (
-                                  <span style={{ color: '#10B981', fontSize: '0.75rem' }}>✓</span>
-                                )} */}
+                        return (
+                          <div
+                            key={content.id}
+                            onClick={() => handleContentClick(content)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '0.75rem',
+                              borderRadius: '6px',
+                              marginBottom: '0.5rem',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              backgroundColor: '#F9FAFB',
+                              border: `1px solid #E5E7EB`,
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isMobile) {
+                                e.currentTarget.style.backgroundColor = '#EEF2FF';
+                                e.currentTarget.style.borderColor = '#2D2B6B';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isMobile) {
+                                e.currentTarget.style.backgroundColor = '#F9FAFB';
+                                e.currentTarget.style.borderColor = '#E5E7EB';
+                              }
+                            }}
+                          >
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '0.75rem', 
+                              flex: 1,
+                              minWidth: 0
+                            }}>
+                              <span style={{ 
+                                fontSize: isMobile ? '1rem' : '1.2rem',
+                                flexShrink: 0
+                              }}>
+                                {getContentIcon(content.content_type_name || '')}
+                              </span>
+                              <div style={{ 
+                                flex: 1,
+                                minWidth: 0,
+                                overflow: 'hidden'
+                              }}>
+                                <div style={{ 
+                                  fontSize: responsiveStyles.body.fontSize, 
+                                  marginBottom: '0.25rem', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '0.5rem',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {content.title}
+                                </div>
+                                <div style={{ 
+                                  fontSize: responsiveStyles.small.fontSize, 
+                                  color: '#9CA3AF', 
+                                  display: isMobile ? 'none' : 'flex',
+                                  gap: '1rem', 
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap'
+                                }}>
+                                  <span>{getContentTypeDisplay(content.content_type_name)}</span>
+                                  {content.estimated_duration && (
+                                    <span>⏱️ {formatDuration(content.estimated_duration)}</span>
+                                  )}
+                                  {contentTimeSpent > 0 && (
+                                    <span>🕒 {formatTime(contentTimeSpent)}</span>
+                                  )}
+                                </div>
                               </div>
-                              {/* <div style={{ fontSize: '0.75rem', color: '#9CA3AF', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <span>{getContentTypeDisplay(content.content_type_name)}</span>
-                                {content.estimated_duration && (
-                                  <span>⏱️ {formatDuration(content.estimated_duration)}</span>
-                                )}
-                                {contentTimeSpent > 0 && (
-                                  <span>🕒 {formatTime(contentTimeSpent)}</span>
-                                )}
-                              </div> */}
                             </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <div style={{ position: 'relative' }}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setShowContentMenu(showContentMenu === content.id ? null : content.id);
-                                }}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  color: '#6B7280',
-                                  fontSize: '1.25rem',
-                                  padding: '0.25rem 0.5rem',
-                                  borderRadius: '4px'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                              >
-                                ⋯
-                              </button>
-
-                              {showContentMenu === content.id && (
-                                <div
-                                  ref={contentMenuRef}
-                                  style={{
-                                    position: 'absolute',
-                                    right: 0,
-                                    top: '100%',
-                                    backgroundColor: 'white',
-                                    border: '1px solid #E5E7EB',
-                                    borderRadius: '6px',
-                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                                    minWidth: '180px',
-                                    zIndex: 10,
-                                    marginTop: '0.25rem'
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: responsiveStyles.smallGap
+                            }}>
+                              {/* Content menu button */}
+                              <div style={{ position: 'relative' }}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowContentMenu(showContentMenu === content.id ? null : content.id);
                                   }}
-                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: '#6B7280',
+                                    fontSize: isMobile ? '1rem' : '1.25rem',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px'
+                                  }}
+                                  onMouseEnter={(e) => !isMobile && (e.currentTarget.style.backgroundColor = '#F3F4F6')}
+                                  onMouseLeave={(e) => !isMobile && (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleContentClick(content);
-                                      setShowContentMenu(null);
-                                    }}
+                                  ⋯
+                                </button>
+
+                                {showContentMenu === content.id && (
+                                  <div
+                                    ref={contentMenuRef}
                                     style={{
-                                      width: '100%',
-                                      padding: '0.75rem 1rem',
-                                      textAlign: 'left',
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      fontSize: '0.875rem',
-                                      color: '#374151',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem'
+                                      position: 'absolute',
+                                      right: 0,
+                                      top: '100%',
+                                      backgroundColor: 'white',
+                                      border: '1px solid #E5E7EB',
+                                      borderRadius: '6px',
+                                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                      minWidth: isMobile ? '160px' : '180px',
+                                      zIndex: 10,
+                                      marginTop: '0.25rem'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                    onClick={(e) => e.stopPropagation()}
                                   >
-                                    👁️ Voir le contenu
-                                  </button>
-
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEditContent(content);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.75rem 1rem',
-                                      textAlign: 'left',
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      fontSize: '0.875rem',
-                                      color: '#374151',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                                  >
-                                    ✏️ Modifier
-                                  </button>
-
-                                  <div style={{ borderTop: '1px solid #E5E7EB', margin: '0.25rem 0' }} />
-
-                                  <div style={{ padding: '0.5rem 1rem' }}>
-                                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6B7280', marginBottom: '0.5rem' }}>
-                                      Changer le statut
-                                    </div>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleChangeContentStatus(content, 0);
+                                        handleContentClick(content);
+                                        setShowContentMenu(null);
                                       }}
                                       style={{
                                         width: '100%',
-                                        padding: '0.5rem 0.75rem',
+                                        padding: '0.75rem 1rem',
                                         textAlign: 'left',
                                         background: 'none',
                                         border: 'none',
                                         cursor: 'pointer',
                                         fontSize: '0.875rem',
-                                        color: '#F59E0B',
+                                        color: '#374151',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '0.5rem',
-                                        borderRadius: '4px'
-                                      }}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      📝 Brouillon
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleChangeContentStatus(content, 1);
-                                      }}
-                                      style={{
-                                        width: '100%',
-                                        padding: '0.5rem 0.75rem',
-                                        textAlign: 'left',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '0.875rem',
-                                        color: '#10B981',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                        borderRadius: '4px'
-                                      }}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D1FAE5'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      ✓ Actif
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleChangeContentStatus(content, 2);
-                                      }}
-                                      style={{
-                                        width: '100%',
-                                        padding: '0.5rem 0.75rem',
-                                        textAlign: 'left',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '0.875rem',
-                                        color: '#6B7280',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                        borderRadius: '4px'
+                                        gap: '0.5rem'
                                       }}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
                                     >
-                                      📦 Archivé
+                                      👁️ Voir le contenu
                                     </button>
+
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEditContent(content);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.75rem 1rem',
+                                        textAlign: 'left',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        color: '#374151',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                    >
+                                      ✏️ Modifier
+                                    </button>
+
+                                    <div style={{ borderTop: '1px solid #E5E7EB', margin: '0.25rem 0' }} />
+
+                                    <div style={{ padding: '0.5rem 1rem' }}>
+                                      <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6B7280', marginBottom: '0.5rem' }}>
+                                        Changer le statut
+                                      </div>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleChangeContentStatus(content, 0);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.5rem 0.75rem',
+                                          textAlign: 'left',
+                                          background: 'none',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          fontSize: '0.875rem',
+                                          color: '#F59E0B',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          borderRadius: '4px'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        📝 Brouillon
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleChangeContentStatus(content, 1);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.5rem 0.75rem',
+                                          textAlign: 'left',
+                                          background: 'none',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          fontSize: '0.875rem',
+                                          color: '#10B981',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          borderRadius: '4px'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D1FAE5'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        ✓ Actif
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleChangeContentStatus(content, 2);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.5rem 0.75rem',
+                                          textAlign: 'left',
+                                          background: 'none',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          fontSize: '0.875rem',
+                                          color: '#6B7280',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          borderRadius: '4px'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        📦 Archivé
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div style={{ padding: '1rem', textAlign: 'center', color: '#6B7280', fontSize: '0.875rem' }}>
-                      Aucun contenu dans ce module
-                    </div>
-                  )}
+                        );
+                      })
+                    ) : (
+                      <div style={{ 
+                        padding: '1rem', 
+                        textAlign: 'center', 
+                        color: '#6B7280', 
+                        fontSize: responsiveStyles.body.fontSize
+                      }}>
+                        Aucun contenu dans ce module
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
           ) : (
-            <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📚</div>
-              <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.5rem' }}>Aucun module trouvé</div>
-              <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>Cette formation ne contient pas encore de modules.</div>
+            <div style={{ 
+              backgroundColor: 'white', 
+              borderRadius: responsiveStyles.borderRadius, 
+              padding: responsiveStyles.cardPadding, 
+              textAlign: 'center', 
+              boxShadow: responsiveStyles.shadow 
+            }}>
+              <div style={{ 
+                fontSize: isMobile ? '2rem' : '3rem', 
+                marginBottom: '1rem' 
+              }}>
+                📚
+              </div>
+              <div style={{ 
+                fontSize: responsiveStyles.heading3.fontSize, 
+                fontWeight: responsiveStyles.heading3.fontWeight, 
+                marginBottom: '0.5rem' 
+              }}>
+                Aucun module trouvé
+              </div>
+              <div style={{ 
+                fontSize: responsiveStyles.body.fontSize, 
+                color: '#6B7280' 
+              }}>
+                Cette formation ne contient pas encore de modules.
+              </div>
             </div>
           )}
         </div>
@@ -1599,16 +1994,16 @@ const CourseDetail = () => {
           justifyContent: 'center',
           alignItems: 'center',
           zIndex: 1000,
-          padding: '2rem'
+          padding: isMobile ? '1rem' : '2rem'
         }}>
           <div
             ref={contentViewerModalRef}
             style={{
               backgroundColor: 'white',
-              borderRadius: '8px',
+              borderRadius: responsiveStyles.borderRadius,
               width: '100%',
-              maxWidth: '900px',
-              maxHeight: '90vh',
+              maxWidth: isMobile ? '100%' : '900px',
+              maxHeight: isMobile ? '100%' : '90vh',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden'
@@ -1656,35 +2051,6 @@ const CourseDetail = () => {
             {/* Content Area */}
             <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
               <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '1rem' }}>Contenu à lire</h4>
-
-              {/* PDF Content */}
-              {/* {selectedContent.content_type_name?.toLowerCase() === 'pdf' && (
-                <div>
-                  {getPdfUrl(selectedContent) ? (
-                    <iframe
-                      src={getPdfUrl(selectedContent)!}
-                      style={{
-                        width: '100%',
-                        height: '500px',
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '6px',
-                        backgroundColor: '#000'
-                      }}
-                      title={selectedContent.title}
-                    />
-                  ) : (
-                    <div style={{
-                      backgroundColor: '#F3F4F6',
-                      borderRadius: '8px',
-                      padding: '3rem',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
-                      <div style={{ color: '#6B7280' }}>Document PDF non disponible</div>
-                    </div>
-                  )}
-                </div>
-              )} */}
 
               {/* Video Content */}
               {selectedContent.content_type_name?.toLowerCase() === 'video' && (
@@ -1886,13 +2252,6 @@ const CourseDetail = () => {
               alignItems: 'center',
               gap: '1rem'
             }}>
-              {/* <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
-                {userProgress.completedContents.includes(selectedContent.id) ? (
-                  <span style={{ color: '#10B981', fontWeight: '500' }}>✓ Contenu terminé</span>
-                ) : (
-                  <span>Temps passé: {formatTime(userProgress.timeSpent[selectedContent.id] || 0)}</span>
-                )}
-              </div> */}
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button
                   onClick={handleCloseModal}
@@ -1909,36 +2268,6 @@ const CourseDetail = () => {
                 >
                   Fermer
                 </button>
-                {/* <button
-                  onClick={handleMarkAsCompleted}
-                  disabled={
-                    userProgress.completedContents.includes(selectedContent.id) ||
-                    (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
-                  }
-                  style={{
-                    padding: '0.625rem 1.5rem',
-                    backgroundColor: userProgress.completedContents.includes(selectedContent.id)
-                      ? '#10B981'
-                      : (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
-                        ? '#9CA3AF'
-                        : '#4338CA',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '0.875rem',
-                    fontWeight: '500',
-                    cursor: userProgress.completedContents.includes(selectedContent.id) ||
-                      (!!selectedContent.min_required_time && (userProgress.timeSpent[selectedContent.id] || 0) < (selectedContent.min_required_time * 60))
-                      ? 'not-allowed'
-                      : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}
-                >
-                  <span>✓</span>
-                  {userProgress.completedContents.includes(selectedContent.id) ? 'Terminé' : 'Marquer comme terminé'}
-                </button> */}
               </div>
             </div>
           </div>
@@ -1963,16 +2292,27 @@ const CourseDetail = () => {
             ref={newModuleModalRef}
             style={{
               backgroundColor: 'white',
-              padding: '2rem',
-              borderRadius: '8px',
-              width: '90%',
+              padding: responsiveStyles.cardPadding,
+              borderRadius: responsiveStyles.borderRadius,
+              width: responsiveStyles.modalWidth,
               maxWidth: '500px'
             }}
           >
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Créer un nouveau module</h3>
+            <h3 style={{ 
+              marginBottom: '1.5rem', 
+              fontSize: responsiveStyles.heading2.fontSize,
+              fontWeight: responsiveStyles.heading2.fontWeight
+            }}>
+              Créer un nouveau module
+            </h3>
             <form onSubmit={handleCreateModule}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
                   Titre du module *
                 </label>
                 <input
@@ -1982,16 +2322,21 @@ const CourseDetail = () => {
                   required
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
+                    padding: responsiveStyles.inputPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
-                    fontSize: '0.875rem',
+                    fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box'
                   }}
                 />
               </div>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
                   Description
                 </label>
                 <textarea
@@ -2000,17 +2345,22 @@ const CourseDetail = () => {
                   rows={3}
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
+                    padding: responsiveStyles.inputPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
-                    fontSize: '0.875rem',
+                    fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box',
                     resize: 'vertical'
                   }}
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: '1rem', 
+                justifyContent: 'flex-end'
+              }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2018,12 +2368,14 @@ const CourseDetail = () => {
                     setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
                   }}
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: responsiveStyles.buttonPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
                     background: '#6D6F71',
+                    color: 'white',
                     cursor: 'pointer',
-                    fontSize: '0.875rem'
+                    fontSize: responsiveStyles.body.fontSize,
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   Annuler
@@ -2031,14 +2383,15 @@ const CourseDetail = () => {
                 <button
                   type="submit"
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: responsiveStyles.buttonPadding,
                     backgroundColor: '#2D2B6B',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    fontWeight: '500'
+                    fontSize: responsiveStyles.body.fontSize,
+                    fontWeight: '500',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   Créer
@@ -2067,16 +2420,27 @@ const CourseDetail = () => {
             ref={editModuleModalRef}
             style={{
               backgroundColor: 'white',
-              padding: '2rem',
-              borderRadius: '8px',
-              width: '90%',
+              padding: responsiveStyles.cardPadding,
+              borderRadius: responsiveStyles.borderRadius,
+              width: responsiveStyles.modalWidth,
               maxWidth: '500px'
             }}
           >
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Modifier le module</h3>
+            <h3 style={{ 
+              marginBottom: '1.5rem', 
+              fontSize: responsiveStyles.heading2.fontSize,
+              fontWeight: responsiveStyles.heading2.fontWeight
+            }}>
+              Modifier le module
+            </h3>
             <form onSubmit={handleUpdateModule}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
                   Titre du module *
                 </label>
                 <input
@@ -2086,16 +2450,21 @@ const CourseDetail = () => {
                   required
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #6D6F71',
+                    padding: responsiveStyles.inputPadding,
+                    border: '1px solid #D1D5DB',
                     borderRadius: '4px',
-                    fontSize: '0.875rem',
+                    fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box'
                   }}
                 />
               </div>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
                   Description
                 </label>
                 <textarea
@@ -2104,17 +2473,22 @@ const CourseDetail = () => {
                   rows={3}
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
+                    padding: responsiveStyles.inputPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
-                    fontSize: '0.875rem',
+                    fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box',
                     resize: 'vertical'
                   }}
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: '1rem', 
+                justifyContent: 'flex-end'
+              }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2123,12 +2497,14 @@ const CourseDetail = () => {
                     setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
                   }}
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: responsiveStyles.buttonPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
                     background: '#6D6F71',
+                    color: 'white',
                     cursor: 'pointer',
-                    fontSize: '0.875rem'
+                    fontSize: responsiveStyles.body.fontSize,
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   Annuler
@@ -2136,14 +2512,15 @@ const CourseDetail = () => {
                 <button
                   type="submit"
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: responsiveStyles.buttonPadding,
                     backgroundColor: '#F97316',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    fontWeight: '500'
+                    fontSize: responsiveStyles.body.fontSize,
+                    fontWeight: '500',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   Enregistrer
@@ -2172,23 +2549,39 @@ const CourseDetail = () => {
             ref={newContentModalRef}
             style={{
               backgroundColor: 'white',
-              padding: '2rem',
-              borderRadius: '8px',
-              width: '90%',
+              padding: responsiveStyles.cardPadding,
+              borderRadius: responsiveStyles.borderRadius,
+              width: responsiveStyles.modalWidth,
               maxWidth: '600px',
               maxHeight: '90vh',
               overflowY: 'auto'
             }}
           >
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Créer un nouveau contenu</h3>
+            <h3 style={{ 
+              marginBottom: '1.5rem', 
+              fontSize: responsiveStyles.heading2.fontSize,
+              fontWeight: responsiveStyles.heading2.fontWeight
+            }}>
+              Créer un nouveau contenu
+            </h3>
             <form onSubmit={handleCreateContent}>
               {!selectedContentType ? (
-                <div className="text-center">
-                  <h6 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Choisir le type de contenu</h6>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <h6 style={{ 
+                    marginBottom: '1rem', 
+                    fontSize: responsiveStyles.heading3.fontSize 
+                  }}>
+                    Choisir le type de contenu
+                  </h6>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    gap: '1rem', 
+                    marginTop: '1rem', 
+                    flexWrap: 'wrap' 
+                  }}>
                     <button
                       type="button"
-                      className="btn btn-outline-primary"
                       onClick={() => setSelectedContentType('pdf')}
                       style={{
                         padding: '1rem 1.5rem',
@@ -2209,7 +2602,6 @@ const CourseDetail = () => {
                     </button>
                     <button
                       type="button"
-                      className="btn btn-outline-primary"
                       onClick={() => setSelectedContentType('video')}
                       style={{
                         padding: '1rem 1.5rem',
@@ -2230,7 +2622,6 @@ const CourseDetail = () => {
                     </button>
                     <button
                       type="button"
-                      className="btn btn-outline-primary"
                       onClick={() => setSelectedContentType('qcm')}
                       style={{
                         padding: '1rem 1.5rem',
@@ -2254,12 +2645,27 @@ const CourseDetail = () => {
               ) : (
                 <div>
                   <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontSize: responsiveStyles.body.fontSize, 
+                      fontWeight: '500' 
+                    }}>
                       Type de contenu *
                     </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', backgroundColor: '#F9FAFB', borderRadius: '4px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem', 
+                      padding: '0.5rem', 
+                      backgroundColor: '#F9FAFB', 
+                      borderRadius: '4px' 
+                    }}>
                       <span style={{ fontSize: '1.25rem' }}>{getContentIcon(selectedContentType)}</span>
-                      <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>
+                      <span style={{ 
+                        fontSize: responsiveStyles.body.fontSize, 
+                        fontWeight: '500' 
+                      }}>
                         {selectedContentType === 'pdf' && 'Document PDF'}
                         {selectedContentType === 'video' && 'Vidéo'}
                         {selectedContentType === 'qcm' && 'Quiz QCM'}
@@ -2273,7 +2679,7 @@ const CourseDetail = () => {
                           border: 'none',
                           color: '#6B7280',
                           cursor: 'pointer',
-                          fontSize: '0.875rem'
+                          fontSize: responsiveStyles.body.fontSize
                         }}
                       >
                         Changer
@@ -2282,7 +2688,12 @@ const CourseDetail = () => {
                   </div>
 
                   <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontSize: responsiveStyles.body.fontSize, 
+                      fontWeight: '500' 
+                    }}>
                       Module *
                     </label>
                     <select
@@ -2291,10 +2702,10 @@ const CourseDetail = () => {
                       required
                       style={{
                         width: '100%',
-                        padding: '0.5rem',
+                        padding: responsiveStyles.inputPadding,
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px',
-                        fontSize: '0.875rem',
+                        fontSize: responsiveStyles.body.fontSize,
                         boxSizing: 'border-box'
                       }}
                     >
@@ -2308,7 +2719,12 @@ const CourseDetail = () => {
                   </div>
 
                   <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontSize: responsiveStyles.body.fontSize, 
+                      fontWeight: '500' 
+                    }}>
                       Titre du contenu *
                     </label>
                     <input
@@ -2318,17 +2734,22 @@ const CourseDetail = () => {
                       required
                       style={{
                         width: '100%',
-                        padding: '0.5rem',
+                        padding: responsiveStyles.inputPadding,
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px',
-                        fontSize: '0.875rem',
+                        fontSize: responsiveStyles.body.fontSize,
                         boxSizing: 'border-box'
                       }}
                     />
                   </div>
 
                   <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontSize: responsiveStyles.body.fontSize, 
+                      fontWeight: '500' 
+                    }}>
                       Description
                     </label>
                     <textarea
@@ -2337,10 +2758,10 @@ const CourseDetail = () => {
                       rows={3}
                       style={{
                         width: '100%',
-                        padding: '0.5rem',
+                        padding: responsiveStyles.inputPadding,
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px',
-                        fontSize: '0.875rem',
+                        fontSize: responsiveStyles.body.fontSize,
                         boxSizing: 'border-box',
                         resize: 'vertical'
                       }}
@@ -2350,7 +2771,12 @@ const CourseDetail = () => {
                   {/* File Upload for PDF and Video */}
                   {(selectedContentType === 'pdf' || selectedContentType === 'video') && (
                     <div style={{ marginBottom: '1.5rem' }}>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                      <label style={{ 
+                        display: 'block', 
+                        marginBottom: '0.5rem', 
+                        fontSize: responsiveStyles.body.fontSize, 
+                        fontWeight: '500' 
+                      }}>
                         Fichier {selectedContentType === 'pdf' ? 'PDF' : 'Vidéo'} *
                       </label>
                       <input
@@ -2360,10 +2786,10 @@ const CourseDetail = () => {
                         required
                         style={{
                           width: '100%',
-                          padding: '0.5rem',
+                          padding: responsiveStyles.inputPadding,
                           border: '1px solid #D1D5DB',
                           borderRadius: '4px',
-                          fontSize: '0.875rem',
+                          fontSize: responsiveStyles.body.fontSize,
                           boxSizing: 'border-box'
                         }}
                       />
@@ -2372,10 +2798,19 @@ const CourseDetail = () => {
 
                   {/* Enhanced QCM Form */}
                   {selectedContentType === 'qcm' && (
-                    <>
                     <div style={{ marginBottom: '1.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h4 style={{ fontSize: '0.875rem', fontWeight: '600' }}>Configuration du QCM</h4>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        marginBottom: '1rem' 
+                      }}>
+                        <h4 style={{ 
+                          fontSize: responsiveStyles.heading3.fontSize, 
+                          fontWeight: responsiveStyles.heading3.fontWeight 
+                        }}>
+                          Configuration du QCM
+                        </h4>
                         <button
                           type="button"
                           onClick={addQuestion}
@@ -2386,7 +2821,7 @@ const CourseDetail = () => {
                             border: 'none',
                             borderRadius: '4px',
                             cursor: 'pointer',
-                            fontSize: '0.75rem'
+                            fontSize: responsiveStyles.small.fontSize
                           }}
                         >
                           + Ajouter une question
@@ -2394,10 +2829,26 @@ const CourseDetail = () => {
                       </div>
 
                       {contentForm.questions.map((question, qIndex) => (
-                        <div key={qIndex} style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h5 style={{ fontSize: '0.875rem', fontWeight: '600', margin: 0 }}>Question {qIndex + 1}</h5>
-                            {/* {contentForm.questions.length > 1 && (
+                        <div key={qIndex} style={{ 
+                          marginBottom: '1.5rem', 
+                          padding: '1rem', 
+                          border: '1px solid #E5E7EB', 
+                          borderRadius: '6px' 
+                        }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            marginBottom: '1rem' 
+                          }}>
+                            <h5 style={{ 
+                              fontSize: responsiveStyles.body.fontSize, 
+                              fontWeight: '600', 
+                              margin: 0 
+                            }}>
+                              Question {qIndex + 1}
+                            </h5>
+                            {contentForm.questions.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() => removeQuestion(qIndex)}
@@ -2406,16 +2857,21 @@ const CourseDetail = () => {
                                   border: 'none',
                                   color: '#EF4444',
                                   cursor: 'pointer',
-                                  fontSize: '0.875rem'
+                                  fontSize: responsiveStyles.body.fontSize
                                 }}
                               >
                                 ✕ Supprimer
                               </button>
-                            )} */}
+                            )}
                           </div>
 
                           <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                            <label style={{ 
+                              display: 'block', 
+                              marginBottom: '0.5rem', 
+                              fontSize: responsiveStyles.body.fontSize, 
+                              fontWeight: '500' 
+                            }}>
                               Question *
                             </label>
                             <input
@@ -2425,17 +2881,22 @@ const CourseDetail = () => {
                               required
                               style={{
                                 width: '100%',
-                                padding: '0.5rem',
+                                padding: responsiveStyles.inputPadding,
                                 border: '1px solid #D1D5DB',
                                 borderRadius: '4px',
-                                fontSize: '0.875rem',
+                                fontSize: responsiveStyles.body.fontSize,
                                 boxSizing: 'border-box'
                               }}
                             />
                           </div>
 
                           <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                            <label style={{ 
+                              display: 'block', 
+                              marginBottom: '0.5rem', 
+                              fontSize: responsiveStyles.body.fontSize, 
+                              fontWeight: '500' 
+                            }}>
                               Type de question
                             </label>
                             <select
@@ -2443,10 +2904,10 @@ const CourseDetail = () => {
                               onChange={(e) => handleQuestionChange(qIndex, 'question_type', e.target.value)}
                               style={{
                                 width: '100%',
-                                padding: '0.5rem',
+                                padding: responsiveStyles.inputPadding,
                                 border: '1px solid #D1D5DB',
                                 borderRadius: '4px',
-                                fontSize: '0.875rem',
+                                fontSize: responsiveStyles.body.fontSize,
                                 boxSizing: 'border-box'
                               }}
                             >
@@ -2456,8 +2917,18 @@ const CourseDetail = () => {
                           </div>
 
                           <div style={{ marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                              <label style={{ fontSize: '0.875rem', fontWeight: '500' }}>Options *</label>
+                            <div style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center', 
+                              marginBottom: '0.5rem' 
+                            }}>
+                              <label style={{ 
+                                fontSize: responsiveStyles.body.fontSize, 
+                                fontWeight: '500' 
+                              }}>
+                                Options *
+                              </label>
                               <button
                                 type="button"
                                 onClick={() => addOption(qIndex)}
@@ -2468,7 +2939,7 @@ const CourseDetail = () => {
                                   border: 'none',
                                   borderRadius: '4px',
                                   cursor: 'pointer',
-                                  fontSize: '0.75rem'
+                                  fontSize: responsiveStyles.small.fontSize
                                 }}
                               >
                                 + Ajouter une option
@@ -2476,21 +2947,24 @@ const CourseDetail = () => {
                             </div>
 
                             {question.options.map((option, oIndex) => (
-                              <div key={oIndex} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                              <div key={oIndex} style={{ 
+                                display: 'flex', 
+                                gap: '0.5rem', 
+                                marginBottom: '0.5rem', 
+                                alignItems: 'center' 
+                              }}>
                                 <input
                                   type={question.question_type === 'single' ? 'radio' : 'checkbox'}
                                   name={`correct-${qIndex}`}
                                   checked={option.is_correct}
                                   onChange={(e) => {
                                     if (question.question_type === 'single') {
-                                      // For single choice, set all others to false
                                       const newOptions = question.options.map((opt, idx) => ({
                                         ...opt,
                                         is_correct: idx === oIndex
                                       }));
                                       handleQuestionChange(qIndex, 'options', newOptions);
                                     } else {
-                                      // For multiple choice, toggle this one
                                       handleOptionChange(qIndex, oIndex, 'is_correct', e.target.checked);
                                     }
                                   }}
@@ -2504,10 +2978,10 @@ const CourseDetail = () => {
                                   required
                                   style={{
                                     flex: 1,
-                                    padding: '0.5rem',
+                                    padding: responsiveStyles.inputPadding,
                                     border: '1px solid #D1D5DB',
                                     borderRadius: '4px',
-                                    fontSize: '0.875rem',
+                                    fontSize: responsiveStyles.body.fontSize,
                                     boxSizing: 'border-box'
                                   }}
                                 />
@@ -2531,24 +3005,18 @@ const CourseDetail = () => {
                           </div>
 
                           {/* QCM Settings */}
-                          
-                      
-                        </div>
-
-                        
-                      ))}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        
-                         
-                          </div>
-                          <div style={{ marginBottom: '1.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h4 style={{ fontSize: '0.875rem', fontWeight: '600' }}>Configuration du QCM</h4>
-                                </div>
-                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
+                            gap: '1rem' 
+                          }}>
                             <div>
-                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                              <label style={{ 
+                                display: 'block', 
+                                marginBottom: '0.5rem', 
+                                fontSize: responsiveStyles.body.fontSize, 
+                                fontWeight: '500' 
+                              }}>
                                 Points
                               </label>
                               <input
@@ -2558,16 +3026,21 @@ const CourseDetail = () => {
                                 min="1"
                                 style={{
                                   width: '100%',
-                                  padding: '0.5rem',
+                                  padding: responsiveStyles.inputPadding,
                                   border: '1px solid #D1D5DB',
                                   borderRadius: '4px',
-                                  fontSize: '0.875rem',
+                                  fontSize: responsiveStyles.body.fontSize,
                                   boxSizing: 'border-box'
                                 }}
                               />
                             </div>
                             <div>
-                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                              <label style={{ 
+                                display: 'block', 
+                                marginBottom: '0.5rem', 
+                                fontSize: responsiveStyles.body.fontSize, 
+                                fontWeight: '500' 
+                              }}>
                                 Score de passage (%)
                               </label>
                               <input
@@ -2578,16 +3051,21 @@ const CourseDetail = () => {
                                 max="100"
                                 style={{
                                   width: '100%',
-                                  padding: '0.5rem',
+                                  padding: responsiveStyles.inputPadding,
                                   border: '1px solid #D1D5DB',
                                   borderRadius: '4px',
-                                  fontSize: '0.875rem',
+                                  fontSize: responsiveStyles.body.fontSize,
                                   boxSizing: 'border-box'
                                 }}
                               />
                             </div>
                             <div>
-                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                              <label style={{ 
+                                display: 'block', 
+                                marginBottom: '0.5rem', 
+                                fontSize: responsiveStyles.body.fontSize, 
+                                fontWeight: '500' 
+                              }}>
                                 Tentatives max
                               </label>
                               <input
@@ -2597,16 +3075,21 @@ const CourseDetail = () => {
                                 min="1"
                                 style={{
                                   width: '100%',
-                                  padding: '0.5rem',
+                                  padding: responsiveStyles.inputPadding,
                                   border: '1px solid #D1D5DB',
                                   borderRadius: '4px',
-                                  fontSize: '0.875rem',
+                                  fontSize: responsiveStyles.body.fontSize,
                                   boxSizing: 'border-box'
                                 }}
                               />
                             </div>
                             <div>
-                              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                              <label style={{ 
+                                display: 'block', 
+                                marginBottom: '0.5rem', 
+                                fontSize: responsiveStyles.body.fontSize, 
+                                fontWeight: '500' 
+                              }}>
                                 Limite de temps (min)
                               </label>
                               <input
@@ -2616,21 +3099,26 @@ const CourseDetail = () => {
                                 min="0"
                                 style={{
                                   width: '100%',
-                                  padding: '0.5rem',
+                                  padding: responsiveStyles.inputPadding,
                                   border: '1px solid #D1D5DB',
                                   borderRadius: '4px',
-                                  fontSize: '0.875rem',
+                                  fontSize: responsiveStyles.body.fontSize,
                                   boxSizing: 'border-box'
                                 }}
                               />
                             </div>
-                         
                           </div>
-                          </div>
-                    </>
+                        </div>
+                      ))}
+                    </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: '1rem', 
+                    justifyContent: 'flex-end'
+                  }}>
                     <button
                       type="button"
                       onClick={() => {
@@ -2640,12 +3128,14 @@ const CourseDetail = () => {
                         resetContentForm();
                       }}
                       style={{
-                        padding: '0.5rem 1rem',
+                        padding: responsiveStyles.buttonPadding,
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px',
                         background: '#6D6F71',
+                        color: 'white',
                         cursor: 'pointer',
-                        fontSize: '0.875rem'
+                        fontSize: responsiveStyles.body.fontSize,
+                        width: isMobile ? '100%' : 'auto'
                       }}
                     >
                       Annuler
@@ -2653,14 +3143,15 @@ const CourseDetail = () => {
                     <button
                       type="submit"
                       style={{
-                        padding: '0.5rem 1rem',
+                        padding: responsiveStyles.buttonPadding,
                         backgroundColor: '#2D2B6B',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
                         cursor: 'pointer',
-                        fontSize: '0.875rem',
-                        fontWeight: '500'
+                        fontSize: responsiveStyles.body.fontSize,
+                        fontWeight: '500',
+                        width: isMobile ? '100%' : 'auto'
                       }}
                     >
                       Créer
@@ -2691,18 +3182,29 @@ const CourseDetail = () => {
             ref={editContentModalRef}
             style={{
               backgroundColor: 'white',
-              padding: '2rem',
-              borderRadius: '8px',
-              width: '90%',
+              padding: responsiveStyles.cardPadding,
+              borderRadius: responsiveStyles.borderRadius,
+              width: responsiveStyles.modalWidth,
               maxHeight: '90vh',
               overflowY: 'auto',
               maxWidth: '600px'
             }}
           >
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>Modifier le contenu</h3>
+            <h3 style={{ 
+              marginBottom: '1.5rem', 
+              fontSize: responsiveStyles.heading2.fontSize,
+              fontWeight: responsiveStyles.heading2.fontWeight
+            }}>
+              Modifier le contenu
+            </h3>
             <form onSubmit={handleUpdateContent}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
                   Titre du contenu *
                 </label>
                 <input
@@ -2712,16 +3214,21 @@ const CourseDetail = () => {
                   required
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
+                    padding: responsiveStyles.inputPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
-                    fontSize: '0.875rem',
+                    fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box'
                   }}
                 />
               </div>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
                   Description
                 </label>
                 <textarea
@@ -2730,10 +3237,10 @@ const CourseDetail = () => {
                   rows={3}
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
+                    padding: responsiveStyles.inputPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
-                    fontSize: '0.875rem',
+                    fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box',
                     resize: 'vertical'
                   }}
@@ -2743,7 +3250,12 @@ const CourseDetail = () => {
               {/* File Upload for PDF and Video */}
               {(selectedContentType === 'pdf' || selectedContentType === 'video') && (
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '0.5rem', 
+                    fontSize: responsiveStyles.body.fontSize, 
+                    fontWeight: '500' 
+                  }}>
                     Fichier {selectedContentType === 'pdf' ? 'PDF' : 'Vidéo'} *
                   </label>
                   <input
@@ -2752,14 +3264,18 @@ const CourseDetail = () => {
                     onChange={handleFileChange}
                     style={{
                       width: '100%',
-                      padding: '0.5rem',
+                      padding: responsiveStyles.inputPadding,
                       border: '1px solid #D1D5DB',
                       borderRadius: '4px',
-                      fontSize: '0.875rem',
+                      fontSize: responsiveStyles.body.fontSize,
                       boxSizing: 'border-box'
                     }}
                   />
-                  <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '0.25rem' }}>
+                  <div style={{ 
+                    fontSize: responsiveStyles.small.fontSize, 
+                    color: '#6B7280', 
+                    marginTop: '0.25rem' 
+                  }}>
                     Laissez vide pour conserver le fichier actuel
                   </div>
                 </div>
@@ -2768,8 +3284,18 @@ const CourseDetail = () => {
               {/* Enhanced QCM Form */}
               {selectedContentType === 'qcm' && (
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h4 style={{ fontSize: '0.875rem', fontWeight: '600' }}>Configuration du QCM</h4>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginBottom: '1rem' 
+                  }}>
+                    <h4 style={{ 
+                      fontSize: responsiveStyles.heading3.fontSize, 
+                      fontWeight: responsiveStyles.heading3.fontWeight 
+                    }}>
+                      Configuration du QCM
+                    </h4>
                     <button
                       type="button"
                       onClick={addQuestion}
@@ -2780,7 +3306,7 @@ const CourseDetail = () => {
                         border: 'none',
                         borderRadius: '4px',
                         cursor: 'pointer',
-                        fontSize: '0.75rem'
+                        fontSize: responsiveStyles.small.fontSize
                       }}
                     >
                       + Ajouter une question
@@ -2788,9 +3314,25 @@ const CourseDetail = () => {
                   </div>
 
                   {contentForm.questions.map((question, qIndex) => (
-                    <div key={qIndex} style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h5 style={{ fontSize: '0.875rem', fontWeight: '600', margin: 0 }}>Question {qIndex + 1}</h5>
+                    <div key={qIndex} style={{ 
+                      marginBottom: '1.5rem', 
+                      padding: '1rem', 
+                      border: '1px solid #E5E7EB', 
+                      borderRadius: '6px' 
+                    }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        marginBottom: '1rem' 
+                      }}>
+                        <h5 style={{ 
+                          fontSize: responsiveStyles.body.fontSize, 
+                          fontWeight: '600', 
+                          margin: 0 
+                        }}>
+                          Question {qIndex + 1}
+                        </h5>
                         {contentForm.questions.length > 1 && (
                           <button
                             type="button"
@@ -2800,7 +3342,7 @@ const CourseDetail = () => {
                               border: 'none',
                               color: '#EF4444',
                               cursor: 'pointer',
-                              fontSize: '0.875rem'
+                              fontSize: responsiveStyles.body.fontSize
                             }}
                           >
                             ✕ Supprimer
@@ -2809,7 +3351,12 @@ const CourseDetail = () => {
                       </div>
 
                       <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                        <label style={{ 
+                          display: 'block', 
+                          marginBottom: '0.5rem', 
+                          fontSize: responsiveStyles.body.fontSize, 
+                          fontWeight: '500' 
+                        }}>
                           Question *
                         </label>
                         <input
@@ -2819,17 +3366,22 @@ const CourseDetail = () => {
                           required
                           style={{
                             width: '100%',
-                            padding: '0.5rem',
+                            padding: responsiveStyles.inputPadding,
                             border: '1px solid #D1D5DB',
                             borderRadius: '4px',
-                            fontSize: '0.875rem',
+                            fontSize: responsiveStyles.body.fontSize,
                             boxSizing: 'border-box'
                           }}
                         />
                       </div>
 
                       <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                        <label style={{ 
+                          display: 'block', 
+                          marginBottom: '0.5rem', 
+                          fontSize: responsiveStyles.body.fontSize, 
+                          fontWeight: '500' 
+                        }}>
                           Type de question
                         </label>
                         <select
@@ -2837,10 +3389,10 @@ const CourseDetail = () => {
                           onChange={(e) => handleQuestionChange(qIndex, 'question_type', e.target.value)}
                           style={{
                             width: '100%',
-                            padding: '0.5rem',
+                            padding: responsiveStyles.inputPadding,
                             border: '1px solid #D1D5DB',
                             borderRadius: '4px',
-                            fontSize: '0.875rem',
+                            fontSize: responsiveStyles.body.fontSize,
                             boxSizing: 'border-box'
                           }}
                         >
@@ -2850,8 +3402,18 @@ const CourseDetail = () => {
                       </div>
 
                       <div style={{ marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                          <label style={{ fontSize: '0.875rem', fontWeight: '500' }}>Options *</label>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          marginBottom: '0.5rem' 
+                        }}>
+                          <label style={{ 
+                            fontSize: responsiveStyles.body.fontSize, 
+                            fontWeight: '500' 
+                          }}>
+                            Options *
+                          </label>
                           <button
                             type="button"
                             onClick={() => addOption(qIndex)}
@@ -2862,7 +3424,7 @@ const CourseDetail = () => {
                               border: 'none',
                               borderRadius: '4px',
                               cursor: 'pointer',
-                              fontSize: '0.75rem'
+                              fontSize: responsiveStyles.small.fontSize
                             }}
                           >
                             + Ajouter une option
@@ -2870,21 +3432,24 @@ const CourseDetail = () => {
                         </div>
 
                         {question.options.map((option, oIndex) => (
-                          <div key={oIndex} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                          <div key={oIndex} style={{ 
+                            display: 'flex', 
+                            gap: '0.5rem', 
+                            marginBottom: '0.5rem', 
+                            alignItems: 'center' 
+                          }}>
                             <input
                               type={question.question_type === 'single' ? 'radio' : 'checkbox'}
                               name={`correct-${qIndex}`}
                               checked={option.is_correct}
                               onChange={(e) => {
                                 if (question.question_type === 'single') {
-                                  // For single choice, set all others to false
                                   const newOptions = question.options.map((opt, idx) => ({
                                     ...opt,
                                     is_correct: idx === oIndex
                                   }));
                                   handleQuestionChange(qIndex, 'options', newOptions);
                                 } else {
-                                  // For multiple choice, toggle this one
                                   handleOptionChange(qIndex, oIndex, 'is_correct', e.target.checked);
                                 }
                               }}
@@ -2898,10 +3463,10 @@ const CourseDetail = () => {
                               required
                               style={{
                                 flex: 1,
-                                padding: '0.5rem',
+                                padding: responsiveStyles.inputPadding,
                                 border: '1px solid #D1D5DB',
                                 borderRadius: '4px',
-                                fontSize: '0.875rem',
+                                fontSize: responsiveStyles.body.fontSize,
                                 boxSizing: 'border-box'
                               }}
                             />
@@ -2925,9 +3490,18 @@ const CourseDetail = () => {
                       </div>
 
                       {/* QCM Settings */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
+                        gap: '1rem' 
+                      }}>
                         <div>
-                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                          <label style={{ 
+                            display: 'block', 
+                            marginBottom: '0.5rem', 
+                            fontSize: responsiveStyles.body.fontSize, 
+                            fontWeight: '500' 
+                          }}>
                             Points
                           </label>
                           <input
@@ -2937,16 +3511,21 @@ const CourseDetail = () => {
                             min="1"
                             style={{
                               width: '100%',
-                              padding: '0.5rem',
+                              padding: responsiveStyles.inputPadding,
                               border: '1px solid #D1D5DB',
                               borderRadius: '4px',
-                              fontSize: '0.875rem',
+                              fontSize: responsiveStyles.body.fontSize,
                               boxSizing: 'border-box'
                             }}
                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                          <label style={{ 
+                            display: 'block', 
+                            marginBottom: '0.5rem', 
+                            fontSize: responsiveStyles.body.fontSize, 
+                            fontWeight: '500' 
+                          }}>
                             Score de passage (%)
                           </label>
                           <input
@@ -2957,16 +3536,21 @@ const CourseDetail = () => {
                             max="100"
                             style={{
                               width: '100%',
-                              padding: '0.5rem',
+                              padding: responsiveStyles.inputPadding,
                               border: '1px solid #D1D5DB',
                               borderRadius: '4px',
-                              fontSize: '0.875rem',
+                              fontSize: responsiveStyles.body.fontSize,
                               boxSizing: 'border-box'
                             }}
                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                          <label style={{ 
+                            display: 'block', 
+                            marginBottom: '0.5rem', 
+                            fontSize: responsiveStyles.body.fontSize, 
+                            fontWeight: '500' 
+                          }}>
                             Tentatives max
                           </label>
                           <input
@@ -2976,16 +3560,21 @@ const CourseDetail = () => {
                             min="1"
                             style={{
                               width: '100%',
-                              padding: '0.5rem',
+                              padding: responsiveStyles.inputPadding,
                               border: '1px solid #D1D5DB',
                               borderRadius: '4px',
-                              fontSize: '0.875rem',
+                              fontSize: responsiveStyles.body.fontSize,
                               boxSizing: 'border-box'
                             }}
                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '500' }}>
+                          <label style={{ 
+                            display: 'block', 
+                            marginBottom: '0.5rem', 
+                            fontSize: responsiveStyles.body.fontSize, 
+                            fontWeight: '500' 
+                          }}>
                             Limite de temps (min)
                           </label>
                           <input
@@ -2995,10 +3584,10 @@ const CourseDetail = () => {
                             min="0"
                             style={{
                               width: '100%',
-                              padding: '0.5rem',
+                              padding: responsiveStyles.inputPadding,
                               border: '1px solid #D1D5DB',
                               borderRadius: '4px',
-                              fontSize: '0.875rem',
+                              fontSize: responsiveStyles.body.fontSize,
                               boxSizing: 'border-box'
                             }}
                           />
@@ -3009,7 +3598,12 @@ const CourseDetail = () => {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: '1rem', 
+                justifyContent: 'flex-end'
+              }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -3018,12 +3612,14 @@ const CourseDetail = () => {
                     resetContentForm();
                   }}
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: responsiveStyles.buttonPadding,
                     border: '1px solid #D1D5DB',
                     borderRadius: '4px',
                     background: '#6D6F71',
+                    color: 'white',
                     cursor: 'pointer',
-                    fontSize: '0.875rem'
+                    fontSize: responsiveStyles.body.fontSize,
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   Annuler
@@ -3031,14 +3627,15 @@ const CourseDetail = () => {
                 <button
                   type="submit"
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: responsiveStyles.buttonPadding,
                     backgroundColor: '#F97316',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    fontWeight: '500'
+                    fontSize: responsiveStyles.body.fontSize,
+                    fontWeight: '500',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   Enregistrer

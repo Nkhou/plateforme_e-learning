@@ -1,0 +1,174 @@
+/* Responsive styles for CourseDetail component */
+@media (max-width: 768px) {
+  .course-detail-container {
+    padding: 1rem !important;
+  }
+  
+  .course-header {
+    padding: 1rem !important;
+  }
+  
+  .course-header h1 {
+    font-size: 1.25rem !important;
+  }
+  
+  .course-header p {
+    font-size: 0.8rem !important;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 1rem !important;
+    padding: 1rem !important;
+  }
+  
+  .stats-grid div {
+    font-size: 1.5rem !important;
+  }
+  
+  .main-content {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+  
+  .sidebar {
+    width: 100% !important;
+  }
+  
+  .sidebar-image {
+    height: 150px !important;
+  }
+  
+  .module-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+  
+  .module-actions {
+    gap: 0.5rem !important;
+    flex-wrap: wrap;
+  }
+  
+  .content-item {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 0.5rem !important;
+  }
+  
+  .content-info {
+    width: 100% !important;
+  }
+  
+  .content-actions {
+    margin-left: auto !important;
+    align-self: flex-end !important;
+  }
+  
+  .modal-container {
+    padding: 1rem !important;
+  }
+  
+  .modal-content {
+    max-width: 95vw !important;
+    max-height: 95vh !important;
+  }
+  
+  .modal-header {
+    padding: 1rem !important;
+  }
+  
+  .modal-body {
+    padding: 1rem !important;
+  }
+  
+  .video-player {
+    max-height: 300px !important;
+  }
+  
+  .qcm-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+  
+  .qcm-question-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+  
+  .file-download-section {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 1rem !important;
+  }
+  
+  .modal-footer {
+    padding: 1rem !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+  
+  .modal-footer-buttons {
+    width: 100% !important;
+  }
+  
+  .modal-footer button {
+    width: 100% !important;
+  }
+  
+  /* Form buttons in modals */
+  .form-buttons {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+  
+  .form-buttons button {
+    width: 100% !important;
+  }
+  
+  /* Content type buttons */
+  .content-type-buttons {
+    flex-wrap: wrap !important;
+  }
+  
+  .content-type-button {
+    min-width: 100px !important;
+  }
+  
+  /* QCM grid */
+  .qcm-settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) and (min-width: 769px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* Mobile-specific enhancements */
+@media (max-width: 480px) {
+  .course-header {
+    padding: 0.75rem !important;
+  }
+  
+  .stats-grid {
+    gap: 0.5rem !important;
+    padding: 0.75rem !important;
+  }
+  
+  .stats-grid div {
+    font-size: 1.25rem !important;
+  }
+  
+  .module-container {
+    padding: 0.75rem !important;
+  }
+  
+  .content-item {
+    padding: 0.375rem !important;
+  }
+}
