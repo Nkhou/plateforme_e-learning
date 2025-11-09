@@ -80,7 +80,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchCardRef = useRef<HTMLDivElement>(null);
   const [activeNavItem, setActiveNavItem] = useState('dashboard');
-  
+
   // Notification states
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -94,7 +94,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         setOpen(false);
         setOpenNotif(false);
       }
-      
+
       // Don't close if clicking inside the search card (including buttons)
       if (searchCardRef.current && !searchCardRef.current.contains(target) &&
         !(target as Element).closest('.search-bar')) {
@@ -178,8 +178,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const markAsRead = async (notificationId: number) => {
     try {
       await api.post(`notifications/${notificationId}/mark-read/`);
-      setNotifications(prev => 
-        prev.map(notif => 
+      setNotifications(prev =>
+        prev.map(notif =>
           notif.id === notificationId ? { ...notif, is_read: true } : notif
         )
       );
@@ -192,7 +192,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const markAllAsRead = async () => {
     try {
       await api.post('notifications/mark-all-read/');
-      setNotifications(prev => 
+      setNotifications(prev =>
         prev.map(notif => ({ ...notif, is_read: true }))
       );
       setUnreadCount(0);
@@ -212,7 +212,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const groupNotificationsByDate = () => {
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
-    
+
     const groups: { [key: string]: Notification[] } = {
       'Aujourd\'hui': [],
       'Hier': [],
@@ -221,7 +221,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
     notifications.forEach(notification => {
       const notificationDate = new Date(notification.created_at).toDateString();
-      
+
       if (notificationDate === today) {
         groups['Aujourd\'hui'].push(notification);
       } else if (notificationDate === yesterday) {
@@ -406,14 +406,12 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               transform: 'translate(-50%, -50%)'
             }}
           >
-            <div className="card-body p-3 p-md-4">
-              <SearchComponent
-                onSearchResultClick={handleSearchResultClick}
-                placeholder="Que cherchez-vous?"
-                className="w-100"
-                autoFocus={true}
-              />
-            </div>
+            <SearchComponent
+              onSearchResultClick={handleSearchResultClick}
+              placeholder="Que cherchez-vous?"
+              className="w-100"
+              autoFocus={true}
+            />
           </div>
         </div>
       )}
@@ -497,20 +495,21 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 </div>
               </div>
 
-              {/* Mobile Search Icon */}
+              {/* Mobile Search Icon - Positioned near notification icon */}
               <button
-                className="btn btn-outline-light d-md-none ms-auto me-2"
+                className="btn btn-outline-light d-md-none me-2"
                 onClick={handleSearchIconClick}
                 style={{
-                  width: '40px',
-                  height: '40px',
+                  width: '45px',
+                  height: '45px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: '6px',
                   backgroundColor: '#1e1b4b',
                   border: 'none',
-                  padding: 0
+                  padding: 0,
+                  marginRight: '8px'
                 }}
                 aria-label="Search"
               >
@@ -534,7 +533,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                       justifyContent: 'center',
                       borderRadius: '6px',
                       backgroundColor: '#1e1b4b',
-                      border: 'none'
+                      border: 'none',
+                      marginRight: '8px'
                     }}
                   >
                     🔔
@@ -607,7 +607,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                           </button>
                         )}
                       </div>
-                      
+
                       <div style={{ padding: '0.5rem' }}>
                         {loadingNotifications ? (
                           <div style={{
@@ -643,9 +643,9 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                               }}>
                                 {groupName}
                               </div>
-                              
+
                               {groupNotifications.map((notification) => (
-                                <div 
+                                <div
                                   key={notification.id}
                                   style={{
                                     display: 'flex',
@@ -676,23 +676,23 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                                     {getNotificationIcon(notification.notification_type)}
                                   </div>
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ 
-                                      fontSize: '0.875rem', 
-                                      color: '#1f2937', 
+                                    <div style={{
+                                      fontSize: '0.875rem',
+                                      color: '#1f2937',
                                       marginBottom: '0.25rem',
                                       fontWeight: notification.is_read ? '400' : '600'
                                     }}>
                                       {notification.title}
                                     </div>
-                                    <div style={{ 
-                                      fontSize: '0.8rem', 
+                                    <div style={{
+                                      fontSize: '0.8rem',
                                       color: '#6b7280',
                                       lineHeight: '1.4'
                                     }}>
                                       {notification.message}
                                     </div>
-                                    <div style={{ 
-                                      fontSize: '0.7rem', 
+                                    <div style={{
+                                      fontSize: '0.7rem',
                                       color: '#9ca3af',
                                       marginTop: '0.25rem'
                                     }}>
@@ -731,8 +731,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                             fontWeight: '600',
                             textDecoration: 'none'
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                          onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>
+                            onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                            onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>
                             Voir toutes les notifications
                           </a>
                         </div>
@@ -783,7 +783,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                           Mon compte
                         </h6>
                       </div>
-                      
+
                       <a href="#" style={{
                         display: 'block',
                         padding: '0.75rem 1rem',
@@ -793,11 +793,11 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                         fontSize: '0.875rem',
                         transition: 'background-color 0.2s'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         Mon compte
                       </a>
-                      
+
                       <a href="#" style={{
                         display: 'block',
                         padding: '0.75rem 1rem',
@@ -807,8 +807,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                         fontSize: '0.875rem',
                         transition: 'background-color 0.2s'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         Paramètres
                       </a>
 
@@ -847,10 +847,10 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         </nav>
 
         {/* Bottom Navigation Bar */}
-        <nav style={{ 
-          backgroundColor: '#12114a', 
-          padding: '0.80rem 1rem', 
-          borderBottom: '1px solid rgba(255,255,255,0.1)', 
+        <nav style={{
+          backgroundColor: '#12114a',
+          padding: '0.80rem 1rem',
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
           overflowX: 'auto',
           WebkitOverflowScrolling: 'touch',
           scrollbarWidth: 'thin',
@@ -873,12 +873,12 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               }
             `}
           </style>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.5rem', 
-            maxWidth: '1400px', 
-            margin: '0 auto', 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            maxWidth: '1400px',
+            margin: '0 auto',
             minWidth: 'max-content',
             paddingLeft: '0.5rem',
             paddingRight: '0.5rem'
@@ -887,14 +887,14 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
             {isAdmin && (
               <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
             )}
-            
+
             <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
-            
+
             {/* Only show Utilisateurs for admin users */}
             {isAdmin && (
               <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
             )}
-            
+
             <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
             <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
           </div>

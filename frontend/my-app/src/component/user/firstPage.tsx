@@ -77,44 +77,52 @@ const FirstPage = () => {
       }}
     >
       <div className="flex-grow-1 container-fluid h-100 d-flex align-items-center justify-content-center">
-        <div className="row w-100 justify-content-center align-items-stretch" style={{ gap: '4rem' }}>
+        <div className="row w-100 justify-content-center align-items-center" style={{ maxWidth: '1800px', margin: '0 auto' }}>
 
-          {/* IMAGE SECTION - Full Card Size */}
-          <div className="col-xl-5 col-lg-7 col-md-10 d-flex">
+          {/* IMAGE SECTION - Wider but same height */}
+          <div className="col-xl-6 col-lg-6 col-md-10 d-flex justify-content-center">
             <div
-              className="card rounded-5 w-100 overflow-hidden"
+              className="card rounded-5 overflow-hidden"
               style={{
                 border: 'none',
                 minHeight: '870px',
-                background: 'transparent'
+                background: 'transparent',
+                width: '100%',
+                maxWidth: '800px'
               }}
             >
-              <div className="card-body p-0 w-100 h-100">
+              <div className="card-body p-0 w-100 h-100 d-flex align-items-center justify-content-center">
                 <EleviaHero />
               </div>
             </div>
           </div>
 
-          {/* LOGIN SECTION - Full Card Size with Left Alignment */}
-          <div className="col-xl-6 col-lg-8 col-md-8 d-flex mt-5">
+          {/* LOGIN SECTION - Wider but same height */}
+          <div className="col-xl-6 col-lg-6 col-md-8 d-flex justify-content-center">
             <div
-              className="card  rounded-6 w-100"
+              className="card rounded-6"
               style={{
                 border: 'none',
                 backdropFilter: 'blur(10px)',
-                minHeight: '700px'
+                minHeight: '700px',
+                width: '100%',
+                maxWidth: '800px'
               }}
             >
               <div className="card-body d-flex flex-column justify-content-center p-4 p-md-5">
-                {/* Login Header - Left Aligned */}
-                <div className="mx-auto w-100" style={{ maxWidth: '600px' }}>
-                  <div className="mb-5 text-start">
+                {/* Login Header - Centered */}
+  
+                {/* Form - Centered */}
+                <div className="w-100">
+                  <form onSubmit={handleSubmit} className="mx-auto" style={{ width: '100%', maxWidth: '500px' }}>
+                      <div className="w-100 ">
+                  <div className="mb-5">
                     <img
                       src="/logo-colored.png"
                       alt="Login"
                       style={{
-                        width: '80px',
-                        height: '50px',
+                        width: '40px',
+                        height: '30px',
                         marginBottom: '30px'
                       }}
                     />
@@ -132,10 +140,6 @@ const FirstPage = () => {
                     </h4>
                   </div>
                 </div>
-                {/* Form - Left Aligned */}
-                <div className="mx-auto w-100" style={{ maxWidth: '600px' }}>
-                  <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '500px' }}>
-
                     <div className="mb-4">
                       <label
                         htmlFor="email"
@@ -241,7 +245,7 @@ const FirstPage = () => {
                       </a>
                     </div>
 
-                    <div className="text-start mb-4 mt-3">
+                    <div className="text-center mb-4 mt-3">
                       <button
                         type="submit"
                         className="btn btn-primary btn-lg w-100 fw-bold py-3"
@@ -274,8 +278,8 @@ const FirstPage = () => {
                   </form>
 
                 </div>
-                {/* Footer - Left Aligned */}
-                <div className="px-0 py-3 d-flex justify-content-between align-items-center mt-auto ">
+                {/* Footer - Centered */}
+                <div className="px-0 py-3 d-flex justify-content-between align-items-center mt-auto">
                   <span
                     className="fw-semibold"
                     style={{ fontSize: '0.9rem' }}

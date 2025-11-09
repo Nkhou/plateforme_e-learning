@@ -132,6 +132,10 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
     } else if (event.key === 'Enter' && selectedIndex >= 0 && visibleResults[selectedIndex]) {
       event.preventDefault();
       handleResultClick(visibleResults[selectedIndex]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setShowResults(false);
+      inputRef.current?.blur();
     }
   };
 
@@ -183,7 +187,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
             style={{
               fontSize: '0.9375rem',
               padding: '0.875rem 1rem 0.875rem 3rem',
-              borderRadius: '12px',
+              borderRadius: '1.5px',
               border: '1px solid #E5E7EB',
               backgroundColor: 'white',
               width: '100%',
@@ -209,44 +213,47 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
         </div>
       </div>
 
-      {/* Search Results */}
+      {/* Search Results - NO SPACE, NO BACKGROUND */}
       {showResults && (searchTerm.trim() || isLoading) && (
         <div
-          className="position-absolute start-0 mt-2 shadow-lg"
           style={{
-            borderRadius: '16px',
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            borderRadius: '0 0 12px 12px',
             border: '1px solid #E5E7EB',
+            borderTop: 'none',
             overflow: 'hidden',
-            maxHeight: '600px',
+            maxHeight: '400px',
             overflowY: 'auto',
-            width: '100%',
-            minWidth: '500px',
             backgroundColor: 'white',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
             zIndex: 1000
           }}
         >
           {isLoading ? (
-            <div className="text-center p-5">
-              <div className="spinner-border text-primary" role="status" style={{ width: '2rem', height: '2rem' }}>
+            <div className="text-center p-4">
+              <div className="spinner-border text-primary" role="status" style={{ width: '1.5rem', height: '1.5rem' }}>
                 <span className="visually-hidden">Loading...</span>
               </div>
-              <p className="text-muted mt-3 mb-0" style={{ fontSize: '0.875rem' }}>Searching...</p>
+              <p className="text-muted mt-2 mb-0" style={{ fontSize: '0.875rem' }}>Recherche en cours...</p>
             </div>
           ) : searchResults.length > 0 ? (
             <div className="search-results-list">
               {/* Search Input Display */}
-              <div
-                className="p-4"
+              {/* <div
+                className="p-3"
                 style={{
-                  backgroundColor: 'white',
-                  borderBottom: '1px solid #F3F4F6'
+                  backgroundColor: '#F9FAFB',
+                  borderBottom: '1px solid #E5E7EB'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.125rem', color: '#6B7280' }}>🔍</span>
+                  <span style={{ fontSize: '1rem', color: '#6B7280' }}>🔍</span>
                   <span
                     style={{
-                      fontSize: '0.9375rem',
+                      fontSize: '0.875rem',
                       color: '#1F2937',
                       fontWeight: '400'
                     }}
@@ -254,70 +261,64 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                     {searchTerm}
                   </span>
                 </div>
-              </div>
+              </div> */}
 
               {/* Filter Buttons */}
               <div
-                className="p-4"
+                className="p-3"
                 style={{
-                  backgroundColor: 'white',
-                  borderBottom: '1px solid #F3F4F6'
+                  backgroundColor: '#F9FAFB',
+                  borderBottom: '1px solid #E5E7EB'
                 }}
               >
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleTypeChange('all');
-                    }}
+                    onClick={() => handleTypeChange('all')}
                     style={{
-                      padding: '0.5rem 1.25rem',
-                      borderRadius: '20px',
+                      padding: '0.375rem 1rem',
+                      borderRadius: '16px',
                       border: 'none',
-                      backgroundColor: selectedType === 'all' ? '#3730A3' : '#F3F4F6',
+                      backgroundColor: selectedType === 'all' ? '#3730A3' : 'white',
                       color: selectedType === 'all' ? 'white' : '#6B7280',
-                      fontSize: '0.875rem',
+                      fontSize: '0.8125rem',
                       fontWeight: '500',
                       cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s',
+                      // border: '1px solid #E5E7EB'
                     }}
                   >
                     Tous
                   </button>
                   <button
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleTypeChange('course');
-                    }}
+                    onClick={() => handleTypeChange('course')}
                     style={{
-                      padding: '0.5rem 1.25rem',
-                      borderRadius: '20px',
+                      padding: '0.375rem 1rem',
+                      borderRadius: '16px',
                       border: 'none',
-                      backgroundColor: selectedType === 'course' ? '#3730A3' : '#F3F4F6',
+                      backgroundColor: selectedType === 'course' ? '#3730A3' : 'white',
                       color: selectedType === 'course' ? 'white' : '#6B7280',
-                      fontSize: '0.875rem',
+                      fontSize: '0.8125rem',
                       fontWeight: '500',
                       cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s',
+                      // border: '1px solid #E5E7EB'
                     }}
                   >
                     Formations
                   </button>
                   <button
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleTypeChange('module');
-                    }}
+                    onClick={() => handleTypeChange('module')}
                     style={{
-                      padding: '0.5rem 1.25rem',
-                      borderRadius: '20px',
+                      padding: '0.375rem 1rem',
+                      borderRadius: '16px',
                       border: 'none',
-                      backgroundColor: selectedType === 'module' ? '#3730A3' : '#F3F4F6',
+                      backgroundColor: selectedType === 'module' ? '#3730A3' : 'white',
                       color: selectedType === 'module' ? 'white' : '#6B7280',
-                      fontSize: '0.875rem',
+                      fontSize: '0.8125rem',
                       fontWeight: '500',
                       cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s',
+                      // border: '1px solid #E5E7EB'
                     }}
                   >
                     Modules
@@ -329,14 +330,14 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               {(selectedType === 'all' || selectedType === 'course') && courses.length > 0 && (
                 <div>
                   <div
-                    className="px-4 py-2"
+                    className="px-3 py-2"
                     style={{
                       backgroundColor: 'white'
                     }}
                   >
                     <h6
                       style={{
-                        fontSize: '0.8125rem',
+                        fontSize: '0.75rem',
                         fontWeight: '600',
                         color: '#6B7280',
                         margin: 0,
@@ -344,7 +345,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                         letterSpacing: '0.05em'
                       }}
                     >
-                      Formations
+                      Formations ({courses.length})
                     </h6>
                   </div>
                   <div className="p-0">
@@ -352,35 +353,31 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                       <div
                         key={`course-${course.id}`}
                         ref={(el) => { resultRefs.current[index] = el; }}
-                        className="px-4 py-3"
+                        className="px-3 py-2"
                         onClick={() => handleResultClick(course)}
                         style={{
                           transition: 'background-color 0.2s ease',
                           cursor: 'pointer',
-                          backgroundColor: selectedIndex === index ? '#F3F4F6' : 'white'
+                          backgroundColor: selectedIndex === index ? '#F3F4F6' : 'white',
+                          borderBottom: '1px solid #F9FAFB'
                         }}
                         onMouseEnter={() => {
                           setSelectedIndex(index);
                         }}
-                        onMouseLeave={(e) => {
-                          if (selectedIndex === index) {
-                            e.currentTarget.style.backgroundColor = '#F3F4F6';
-                          }
-                        }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           <div
                             style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
                               backgroundColor: '#818CF8',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               color: 'white',
                               fontWeight: '600',
-                              fontSize: '0.875rem',
+                              fontSize: '0.75rem',
                               flexShrink: 0
                             }}
                           >
@@ -389,17 +386,17 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                           <div style={{ flex: 1 }}>
                             <h6
                               style={{
-                                fontSize: '0.9375rem',
+                                fontSize: '0.875rem',
                                 fontWeight: '400',
                                 color: '#1F2937',
-                                margin: '0 0 0.25rem 0'
+                                margin: '0 0 0.125rem 0'
                               }}
                             >
                               {course.title}
                             </h6>
                             <p
                               style={{
-                                fontSize: '0.8125rem',
+                                fontSize: '0.75rem',
                                 color: '#9CA3AF',
                                 margin: 0
                               }}
@@ -418,14 +415,14 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
               {(selectedType === 'all' || selectedType === 'module') && modules.length > 0 && (
                 <div>
                   <div
-                    className="px-4 py-2"
+                    className="px-3 py-2"
                     style={{
                       backgroundColor: 'white'
                     }}
                   >
                     <h6
                       style={{
-                        fontSize: '0.8125rem',
+                        fontSize: '0.75rem',
                         fontWeight: '600',
                         color: '#6B7280',
                         margin: 0,
@@ -433,7 +430,7 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                         letterSpacing: '0.05em'
                       }}
                     >
-                      Modules
+                      Modules ({modules.length})
                     </h6>
                   </div>
                   <div className="p-0">
@@ -443,35 +440,31 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                         <div
                           key={`module-${module.id}`}
                           ref={(el) => { resultRefs.current[moduleIndex] = el; }}
-                          className="px-4 py-3"
+                          className="px-3 py-2"
                           onClick={() => handleResultClick(module)}
                           style={{
                             transition: 'background-color 0.2s ease',
                             cursor: 'pointer',
-                            backgroundColor: selectedIndex === moduleIndex ? '#F3F4F6' : 'white'
+                            backgroundColor: selectedIndex === moduleIndex ? '#F3F4F6' : 'white',
+                            borderBottom: '1px solid #F9FAFB'
                           }}
                           onMouseEnter={() => {
                             setSelectedIndex(moduleIndex);
                           }}
-                          onMouseLeave={(e) => {
-                            if (selectedIndex === moduleIndex) {
-                              e.currentTarget.style.backgroundColor = '#F3F4F6';
-                            }
-                          }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <div
                               style={{
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '8px',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
                                 backgroundColor: '#BEF264',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 color: '#365314',
                                 fontWeight: '600',
-                                fontSize: '0.875rem',
+                                fontSize: '0.75rem',
                                 flexShrink: 0
                               }}
                             >
@@ -480,22 +473,22 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
                             <div style={{ flex: 1 }}>
                               <h6
                                 style={{
-                                  fontSize: '0.9375rem',
+                                  fontSize: '0.875rem',
                                   fontWeight: '400',
                                   color: '#1F2937',
-                                  margin: '0 0 0.25rem 0'
+                                  margin: '0 0 0.125rem 0'
                                 }}
                               >
                                 {module.title}
                               </h6>
                               <p
                                 style={{
-                                  fontSize: '0.8125rem',
+                                  fontSize: '0.75rem',
                                   color: '#9CA3AF',
                                   margin: 0
                                 }}
                               >
-                                • {module.element_count || 2} elements
+                                • {module.element_count || 2} éléments
                               </p>
                             </div>
                           </div>
@@ -508,60 +501,60 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
 
               {/* Footer Navigation */}
               <div
-                className="px-4 py-3"
+                className="px-3 py-2"
                 style={{
                   backgroundColor: '#F9FAFB',
-                  borderTop: '1px solid #F3F4F6'
+                  borderTop: '1px solid #E5E7EB'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>↓↑</span>
-                      <span style={{ fontSize: '0.75rem', color: '#6B7280' }}>Naviguer</span>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '0.6875rem', color: '#9CA3AF' }}>↓↑</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#6B7280' }}>Naviguer</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>↵</span>
-                      <span style={{ fontSize: '0.75rem', color: '#6B7280' }}>Select</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '0.6875rem', color: '#9CA3AF' }}>↵</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#6B7280' }}>Select</span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                     <span
                       style={{
-                        fontSize: '0.6875rem',
+                        fontSize: '0.625rem',
                         color: '#9CA3AF',
                         backgroundColor: 'white',
-                        padding: '0.125rem 0.375rem',
-                        borderRadius: '4px',
+                        padding: '0.125rem 0.25rem',
+                        borderRadius: '3px',
                         border: '1px solid #E5E7EB'
                       }}
                     >
                       ESC
                     </span>
-                    <span style={{ fontSize: '0.75rem', color: '#6B7280' }}>Quitter</span>
+                    <span style={{ fontSize: '0.6875rem', color: '#6B7280' }}>Quitter</span>
                   </div>
                 </div>
               </div>
             </div>
           ) : searchTerm.trim() ? (
             <div
-              className="text-center p-5"
+              className="text-center p-4"
               style={{
                 backgroundColor: 'white'
               }}
             >
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>🔍</div>
               <p
-                className="text-muted mb-2"
-                style={{ fontSize: '0.9375rem', fontWeight: '500', color: '#374151' }}
+                className="text-muted mb-1"
+                style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}
               >
-                No results found for "{searchTerm}"
+                Aucun résultat pour "{searchTerm}"
               </p>
               <small
                 className="text-muted"
-                style={{ fontSize: '0.8125rem', color: '#9CA3AF' }}
+                style={{ fontSize: '0.75rem', color: '#9CA3AF' }}
               >
-                Try different keywords or filters
+                Essayez d'autres mots-clés
               </small>
             </div>
           ) : null}

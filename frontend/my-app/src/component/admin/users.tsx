@@ -52,6 +52,25 @@ const UsersManagement: React.FC = () => {
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  // Responsive state
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect screen size and handle resize
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    // Initial check
+    checkScreenSize();
+
+    // Add event listener
+    window.addEventListener('resize', checkScreenSize);
+
+    // Cleanup
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
   // Fetch users from backend
   useEffect(() => {
     const fetchUsers = async () => {
@@ -112,12 +131,6 @@ const UsersManagement: React.FC = () => {
           console.log('View user details:', userId);
           break;
         
-        // case 'delete':
-        //   if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-        //     await deleteUser(userId);
-        //   }
-        //   break;
-        
         default:
           console.log('Action non reconnue:', action);
       }
@@ -136,11 +149,9 @@ const UsersManagement: React.FC = () => {
         throw new Error('Utilisateur non trouvé');
       }
 
-      // Extraire first_name et last_name du full_name si nécessaire
       let first_name = user.first_name;
       let last_name = user.last_name;
       
-      // Si les champs first_name et last_name ne sont pas disponibles, essayer de les extraire du full_name
       if ((!first_name || !last_name) && user.full_name) {
         const nameParts = user.full_name.split(' ');
         if (nameParts.length >= 2) {
@@ -169,7 +180,6 @@ const UsersManagement: React.FC = () => {
       setEditLoading(true);
       setEditError(null);
 
-      // Appel API pour mettre à jour l'utilisateur
       const response = await api.patch(`/admin/users/${formData.id}/update-status/`, {
         status: formData.status,
         privilege: formData.privilege,
@@ -179,7 +189,6 @@ const UsersManagement: React.FC = () => {
       });
 
       if (response.status === 200) {
-        // Mettre à jour les données locales
         setUserData(prev => {
           if (!prev) return prev;
           
@@ -283,8 +292,160 @@ const UsersManagement: React.FC = () => {
     return matchesStatus && matchesPrivilege;
   });
 
+  // Mobile Card View Component
+  const UserCard = ({ user }: { user: User }) => (
+    <div style={{
+      backgroundColor: 'white',
+      border: '1px solid #E5E7EB',
+      borderRadius: '8px',
+      padding: '1rem',
+      marginBottom: '0.75rem',
+      boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+        <div>
+          <h3 style={{ fontWeight: '600', color: '#1F2937', margin: '0 0 0.25rem 0' }}>
+            {user.full_name}
+          </h3>
+          <p style={{ color: '#6B7280', fontSize: '0.875rem', margin: '0 0 0.25rem 0' }}>
+            {user.email}
+          </p>
+          <p style={{ color: '#6B7280', fontSize: '0.875rem', margin: 0 }}>
+            @{user.username}
+          </p>
+        </div>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#6B7280',
+              fontSize: '1.25rem',
+              padding: '0.25rem',
+              width: '2rem',
+              height: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ⋯
+          </button>
+          {openMenuId === user.id && (
+            <div style={{
+              position: 'absolute',
+              right: '0',
+              top: '100%',
+              backgroundColor: 'white',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              zIndex: 1000,
+              minWidth: '180px'
+            }}>
+              <button
+                onClick={() => handleUserAction(user.id, 'edit')}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  textAlign: 'left',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  color: '#374151'
+                }}
+              >
+                ✏️ Modifier utilisateur
+              </button>
+              <button
+                onClick={() => handleUserAction(user.id, 'status')}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  textAlign: 'left',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  color: '#374151'
+                }}
+              >
+                🔄 Changer statut
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: '1fr 1fr', 
+        gap: '0.5rem',
+        fontSize: '0.875rem'
+      }}>
+        <div>
+          <span style={{ color: '#6B7280' }}>Privilège:</span>
+          <span style={{
+            backgroundColor: getPrivilegeColor(user.privilege),
+            color: 'white',
+            padding: '0.125rem 0.5rem',
+            borderRadius: '8px',
+            fontSize: '0.75rem',
+            fontWeight: '500',
+            marginLeft: '0.5rem'
+          }}>
+            {getPrivilegeLabel(user.privilege)}
+          </span>
+        </div>
+        
+        <div>
+          <span style={{ color: '#6B7280' }}>Statut:</span>
+          <span style={{
+            color: getStatusColor(user.status),
+            fontWeight: '500',
+            marginLeft: '0.5rem'
+          }}>
+            {getStatusLabel(user.status)}
+          </span>
+        </div>
+
+        <div>
+          <span style={{ color: '#6B7280' }}>Formations:</span>
+          <span style={{ fontWeight: '500', marginLeft: '0.5rem' }}>
+            {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
+          </span>
+        </div>
+
+        <div>
+          <span style={{ color: '#6B7280' }}>Subscriptions:</span>
+          <span style={{ fontWeight: '500', marginLeft: '0.5rem' }}>
+            {user.subscription_count}
+          </span>
+        </div>
+
+        <div style={{ gridColumn: '1 / -1' }}>
+          <span style={{ color: '#6B7280' }}>Ajouté le:</span>
+          <span style={{ marginLeft: '0.5rem' }}>
+            {new Date(user.date_joined).toLocaleDateString('en-GB', { 
+              day: '2-digit', 
+              month: 'short', 
+              year: 'numeric' 
+            })}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div style={{ 
+      padding: isMobile ? '1rem' : '2rem', 
+      maxWidth: '1400px', 
+      margin: '0 auto' 
+    }}>
       {/* Formulaire d'édition */}
       {editingUser && (
         <EditUserForm
@@ -293,10 +454,16 @@ const UsersManagement: React.FC = () => {
           onCancel={() => setEditingUser(null)}
           loading={editLoading}
           error={editError}
+          isMobile={isMobile}
         />
       )}
 
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div style={{ 
+        backgroundColor: 'white', 
+        borderRadius: '8px', 
+        padding: isMobile ? '1rem' : '1.5rem', 
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)' 
+      }}>
         {showSignUp ? (
           <div>
             <button onClick={handleCloseSignUp}>
@@ -306,12 +473,31 @@ const UsersManagement: React.FC = () => {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1F2937', margin: 0 }}>
+            {/* Header - Responsive Layout */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: isMobile ? 'column' : 'row',
+              justifyContent: 'space-between', 
+              alignItems: isMobile ? 'stretch' : 'center', 
+              marginBottom: '1.5rem', 
+              gap: '1rem' 
+            }}>
+              <h2 style={{ 
+                fontSize: isMobile ? '1.125rem' : '1.25rem', 
+                fontWeight: '600', 
+                color: '#1F2937', 
+                margin: 0,
+                textAlign: isMobile ? 'center' : 'left'
+              }}>
                 {filteredUsers.length} utilisateurs ajoutés
               </h2>
 
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: '0.75rem',
+                width: isMobile ? '100%' : 'auto'
+              }}>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
@@ -323,7 +509,8 @@ const UsersManagement: React.FC = () => {
                     fontSize: '0.875rem',
                     fontWeight: '500',
                     color: '#4338CA',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   <option value="all">Statut &gt; Tous</option>
@@ -342,7 +529,8 @@ const UsersManagement: React.FC = () => {
                     fontSize: '0.875rem',
                     fontWeight: '500',
                     color: '#4338CA',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   <option value="all">Privilège &gt; Tous</option>
@@ -360,7 +548,8 @@ const UsersManagement: React.FC = () => {
                     borderRadius: '6px',
                     fontSize: '0.9375rem',
                     fontWeight: '500',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                   onClick={handleNewUser}
                 >
@@ -383,143 +572,137 @@ const UsersManagement: React.FC = () => {
               </div>
             )}
 
-            {/* Users Table */}
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#E5E7EB' }}>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user, index) => (
-                    <tr
-                      key={user.id}
-                      style={{
-                        borderBottom: '1px solid #E5E7EB',
-                        backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB'
-                      }}
-                    >
-                      <td style={{ padding: '0.75rem', color: '#1F2937' }}>{user.full_name}</td>
-                      <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
-                      <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <span style={{
-                          backgroundColor: getPrivilegeColor(user.privilege),
-                          color: 'white',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '12px',
-                          fontSize: '0.8125rem',
-                          fontWeight: '500'
-                        }}>
-                          {getPrivilegeLabel(user.privilege)}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                        {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
-                      </td>
-                      <td style={{ padding: '0.75rem', color: '#6B7280' }}>
-                        {new Date(user.date_joined).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                        {user.subscription_count}
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <span style={{
-                          color: getStatusColor(user.status),
-                          fontWeight: '500'
-                        }}>
-                          {getStatusLabel(user.status)}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
-                        <button
-                          onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: '#6B7280',
-                            fontSize: '1.25rem',
-                            padding: '0.25rem'
-                          }}
-                        >
-                          ⋯
-                        </button>
-                        {openMenuId === user.id && (
-                          <div style={{
-                            position: 'absolute',
-                            right: '0',
-                            top: '100%',
-                            backgroundColor: 'white',
-                            border: '1px solid #E5E7EB',
-                            borderRadius: '6px',
-                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                            zIndex: 1000,
-                            minWidth: '180px'
-                          }}>
-                            <button
-                              onClick={() => handleUserAction(user.id, 'edit')}
-                              style={{
-                                width: '100%',
-                                padding: '0.75rem 1rem',
-                                textAlign: 'left',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                color: '#374151'
-                              }}
-                            >
-                              ✏️ Modifier utilisateur
-                            </button>
-                            <button
-                              onClick={() => handleUserAction(user.id, 'status')}
-                              style={{
-                                width: '100%',
-                                padding: '0.75rem 1rem',
-                                textAlign: 'left',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                color: '#374151'
-                              }}
-                            >
-                              🔄 Changer statut
-                            </button>
-                            {/* <hr style={{ margin: '0.25rem 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
-                            <button
-                              onClick={() => handleUserAction(user.id, 'delete')}
-                              style={{
-                                width: '100%',
-                                padding: '0.75rem 1rem',
-                                textAlign: 'left',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                color: '#DC2626'
-                              }}
-                            >
-                              🗑️ Supprimer
-                            </button> */}
-                          </div>
-                        )}
-                      </td>
+            {/* Users Display - Table or Cards based on screen size */}
+            {isMobile ? (
+              // Mobile Card View
+              <div>
+                {filteredUsers.map((user) => (
+                  <UserCard key={user.id} user={user} />
+                ))}
+              </div>
+            ) : (
+              // Desktop Table View
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#E5E7EB' }}>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map((user, index) => (
+                      <tr
+                        key={user.id}
+                        style={{
+                          borderBottom: '1px solid #E5E7EB',
+                          backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB'
+                        }}
+                      >
+                        <td style={{ padding: '0.75rem', color: '#1F2937' }}>{user.full_name}</td>
+                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
+                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <span style={{
+                            backgroundColor: getPrivilegeColor(user.privilege),
+                            color: 'white',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '12px',
+                            fontSize: '0.8125rem',
+                            fontWeight: '500'
+                          }}>
+                            {getPrivilegeLabel(user.privilege)}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
+                          {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
+                        </td>
+                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>
+                          {new Date(user.date_joined).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
+                          {user.subscription_count}
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <span style={{
+                            color: getStatusColor(user.status),
+                            fontWeight: '500'
+                          }}>
+                            {getStatusLabel(user.status)}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
+                          <button
+                            onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: '#6B7280',
+                              fontSize: '1.25rem',
+                              padding: '0.25rem'
+                            }}
+                          >
+                            ⋯
+                          </button>
+                          {openMenuId === user.id && (
+                            <div style={{
+                              position: 'absolute',
+                              right: '0',
+                              top: '100%',
+                              backgroundColor: 'white',
+                              border: '1px solid #E5E7EB',
+                              borderRadius: '6px',
+                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                              zIndex: 1000,
+                              minWidth: '180px'
+                            }}>
+                              <button
+                                onClick={() => handleUserAction(user.id, 'edit')}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.75rem 1rem',
+                                  textAlign: 'left',
+                                  border: 'none',
+                                  backgroundColor: 'transparent',
+                                  cursor: 'pointer',
+                                  fontSize: '0.875rem',
+                                  color: '#374151'
+                                }}
+                              >
+                                ✏️ Modifier utilisateur
+                              </button>
+                              <button
+                                onClick={() => handleUserAction(user.id, 'status')}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.75rem 1rem',
+                                  textAlign: 'left',
+                                  border: 'none',
+                                  backgroundColor: 'transparent',
+                                  cursor: 'pointer',
+                                  fontSize: '0.875rem',
+                                  color: '#374151'
+                                }}
+                              >
+                                🔄 Changer statut
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
               <button
@@ -527,11 +710,12 @@ const UsersManagement: React.FC = () => {
                   backgroundColor: '#8B5A3C',
                   color: 'white',
                   border: 'none',
-                  padding: '0.75rem 2rem',
+                  padding: isMobile ? '0.875rem 1.5rem' : '0.75rem 2rem',
                   borderRadius: '6px',
                   fontSize: '0.9375rem',
                   fontWeight: '500',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  width: isMobile ? '100%' : 'auto'
                 }}
               >
                 Afficher plus de résultat
@@ -544,16 +728,17 @@ const UsersManagement: React.FC = () => {
   );
 };
 
-// Composant pour le formulaire d'édition
+// Composant pour le formulaire d'édition avec responsive support
 interface EditUserFormProps {
   user: EditUserForm;
   onSave: (user: EditUserForm) => void;
   onCancel: () => void;
   loading: boolean;
   error: string | null;
+  isMobile: boolean;
 }
 
-const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loading, error }) => {
+const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loading, error, isMobile }) => {
   const [formData, setFormData] = useState<EditUserForm>(user);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -576,18 +761,23 @@ const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loa
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1000
+      zIndex: 1000,
+      padding: isMobile ? '1rem' : '2rem'
     }}>
       <div style={{
         backgroundColor: 'white',
         borderRadius: '8px',
-        padding: '2rem',
-        width: '90%',
+        padding: isMobile ? '1.5rem' : '2rem',
+        width: '100%',
         maxWidth: '500px',
-        maxHeight: '90vh',
+        maxHeight: isMobile ? '85vh' : '90vh',
         overflow: 'auto'
       }}>
-        <h3 style={{ marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: '600' }}>
+        <h3 style={{ 
+          marginBottom: '1.5rem', 
+          fontSize: isMobile ? '1.125rem' : '1.25rem', 
+          fontWeight: '600' 
+        }}>
           Modifier l'utilisateur
         </h3>
 
@@ -726,7 +916,12 @@ const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loa
             </select>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: '0.75rem', 
+            justifyContent: 'flex-end' 
+          }}>
             <button
               type="button"
               onClick={onCancel}
@@ -736,7 +931,8 @@ const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loa
                 borderRadius: '6px',
                 backgroundColor: 'white',
                 color: '#374151',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                width: isMobile ? '100%' : 'auto'
               }}
               disabled={loading}
             >
@@ -750,7 +946,8 @@ const EditUserForm: React.FC<EditUserFormProps> = ({ user, onSave, onCancel, loa
                 borderRadius: '6px',
                 backgroundColor: '#4338CA',
                 color: 'white',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                width: isMobile ? '100%' : 'auto'
               }}
               disabled={loading}
             >
