@@ -304,7 +304,7 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
         {/* Filters */}
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Status Filter */}
-          <select
+          {/* <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
@@ -327,10 +327,10 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
             <option value="Actif">Actif</option>
             <option value="Brouillon">Brouillon</option>
             <option value="Archivé">Archivé</option>
-          </select>
+          </select> */}
           
           {/* Category Filter */}
-          <select
+          {/* <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             style={{
@@ -343,7 +343,7 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
               color: '#4338CA',
               cursor: 'pointer',
               appearance: 'none',
-              backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
+              // backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'right 0.5rem center',
               minWidth: '180px'
@@ -355,7 +355,7 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
             <option value="M">Marketing</option>
             <option value="O">Operations/Production</option>
             <option value="S">Sales</option>
-          </select>
+          </select> */}
         </div>
       </div>
 

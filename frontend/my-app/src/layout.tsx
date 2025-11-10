@@ -423,6 +423,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           className="navbar navbar-light border-bottom px-2 px-md-3"
           style={{ background: 'rgba(5, 44, 101, 0.9)' }}
         >
+          <div className="container">
           <div className="container-fluid">
             <div className="d-flex align-items-center w-100">
               {/* Logo Image */}
@@ -844,6 +845,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               </div>
             </div>
           </div>
+          </div>
         </nav>
 
         {/* Bottom Navigation Bar */}
@@ -873,22 +875,24 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
               }
             `}
           </style>
+          <div className="container">
           <div style={{
             display: 'flex',
-            alignItems: 'center',
+            // alignItems: 'center',
             gap: '0.5rem',
             maxWidth: '1400px',
-            margin: '0 auto',
+            // margin: '0 auto',
             minWidth: 'max-content',
             paddingLeft: '0.5rem',
-            paddingRight: '0.5rem'
+            paddingRight: '0.5rem',
+            // justifyContent: 'center'
           }}>
             {/* Only show Dashboard for admin users */}
             {isAdmin && (
               <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
             )}
-
             <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
+
 
             {/* Only show Utilisateurs for admin users */}
             {isAdmin && (
@@ -898,11 +902,14 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
             <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
             <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
           </div>
+          </div>
         </nav>
 
         {/* Page Content */}
         <div className="flex-grow-1" style={{ background: '#f8f9fa' }}>
+            <div className="container-fluid" style={{ maxWidth: '1400px', margin: '0 auto' }}>
           {children}
+          </div>
         </div>
       </div>
     </div>

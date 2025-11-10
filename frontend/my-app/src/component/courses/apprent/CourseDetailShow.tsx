@@ -26,7 +26,6 @@ type NotificationContainerProps = {
   removeNotification: (id: number) => void;
 };
 
-// ✅ Notification component (copy exactly from your code)
 const Notification: React.FC<NotificationProps> = ({
   type = "success",
   title,
@@ -155,7 +154,6 @@ const Notification: React.FC<NotificationProps> = ({
   );
 };
 
-// ✅ Notification Container (copy exactly from your code)
 const NotificationContainer: React.FC<NotificationContainerProps> = ({
   notifications,
   removeNotification,
@@ -184,7 +182,6 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
   </div>
 );
 
-// ... (all your existing interfaces remain the same)
 interface VideoContent {
   video_file: string;
   duration?: number;
@@ -288,7 +285,6 @@ const CourseDetail = () => {
   // 2️⃣ Add Notification State
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // Add responsive state
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // Effect to handle window resize

@@ -33,7 +33,184 @@ interface CourseLog {
     status?: number;
     department?: string;
 }
+export type NotificationType = "success" | "info" | "warning" | "error";
 
+type NotificationItem = {
+    id: number;
+    type: NotificationType;
+    title: string;
+    message: string;
+    duration: number;
+};
+
+type NotificationProps = {
+    type: NotificationType;
+    title: string;
+    message: string;
+    onClose: () => void;
+    duration?: number;
+};
+
+type NotificationContainerProps = {
+    notifications: NotificationItem[];
+    removeNotification: (id: number) => void;
+};
+
+const Notification: React.FC<NotificationProps> = ({
+    type = "success",
+    title,
+    message,
+    onClose,
+    duration = 5000,
+}) => {
+    const [isVisible, setIsVisible] = useState(true);
+    const [isExiting, setIsExiting] = useState(false);
+
+    useEffect(() => {
+        if (duration > 0) {
+            const timer = setTimeout(() => handleClose(), duration);
+            return () => clearTimeout(timer);
+        }
+    }, [duration]);
+
+    const handleClose = () => {
+        setIsExiting(true);
+        setTimeout(() => {
+            setIsVisible(false);
+            onClose();
+        }, 300);
+    };
+
+    if (!isVisible) return null;
+
+    const styles: Record<
+        NotificationType,
+        { titleColor: string; backgroundColor: string; borderColor: string }
+    > = {
+        success: {
+            titleColor: "#10B981",
+            backgroundColor: "#1F2937",
+            borderColor: "#10B981",
+        },
+        info: {
+            titleColor: "#3B82F6",
+            backgroundColor: "#1F2937",
+            borderColor: "#3B82F6",
+        },
+        warning: {
+            titleColor: "#F59E0B",
+            backgroundColor: "#1F2937",
+            borderColor: "#F59E0B",
+        },
+        error: {
+            titleColor: "#EF4444",
+            backgroundColor: "#1F2937",
+            borderColor: "#EF4444",
+        },
+    };
+
+    const currentStyle = styles[type];
+
+    return (
+        <div
+            style={{
+                backgroundColor: currentStyle.backgroundColor,
+                borderRadius: "12px",
+                padding: "20px 24px",
+                marginBottom: "16px",
+                width: "460px",
+                maxWidth: "90vw",
+                boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+                borderLeft: `4px solid ${currentStyle.borderColor}`,
+                animation: isExiting
+                    ? "slideOut 0.3s ease-out forwards"
+                    : "slideIn 0.3s ease-out",
+                position: "relative",
+            }}
+        >
+            <div style={{ marginBottom: "8px" }}>
+                <span
+                    style={{
+                        color: currentStyle.titleColor,
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        letterSpacing: "0.5px",
+                    }}
+                >
+                    {title}
+                </span>
+                <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+                    •
+                </span>
+                <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+                    {type === "success" && "Données enregistrées"}
+                    {type === "info" && "Quelques informations à vous communiquer"}
+                    {type === "warning" && "Attention à ce que vous avez fait"}
+                    {type === "error" && "Informations non enregistrées, réessayer"}
+                </span>
+            </div>
+
+            <p
+                style={{
+                    color: "#D1D5DB",
+                    fontSize: "13px",
+                    lineHeight: "1.6",
+                    margin: "0 0 16px 0",
+                }}
+            >
+                {message}
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                    onClick={handleClose}
+                    style={{
+                        backgroundColor: "transparent",
+                        border: "none",
+                        color: "#F97316",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        padding: "4px 8px",
+                        transition: "opacity 0.2s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                    onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                >
+                    Ok, fermer
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+    notifications,
+    removeNotification,
+}) => (
+    <div
+        style={{
+            position: "fixed",
+            bottom: "24px",
+            left: "24px",
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column-reverse",
+            gap: "0",
+        }}
+    >
+        {notifications.map((n) => (
+            <Notification
+                key={n.id}
+                type={n.type}
+                title={n.title}
+                message={n.message}
+                duration={n.duration}
+                onClose={() => removeNotification(n.id)}
+            />
+        ))}
+    </div>
+);
 const Dashboard = () => {
     const scrollContainer1 = useRef<HTMLDivElement>(null);
     const scrollContainer2 = useRef<HTMLDivElement>(null);
@@ -42,6 +219,8 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
 
     // Filter only active courses (status = 1)
 
@@ -65,6 +244,49 @@ const Dashboard = () => {
         if (hours === 0) return `${mins}m`;
         if (mins === 0) return `${hours}h`;
         return `${hours}h ${mins}m`;
+    };
+    const addNotification = (
+        type: NotificationType,
+        title: string,
+        message: string,
+        duration: number = 5000
+    ) => {
+        const id = Date.now();
+        setNotifications((prev) => [
+            ...prev,
+            { id, type, title, message, duration },
+        ]);
+    };
+
+    const removeNotification = (id: number) =>
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+
+    // Enhanced duration calculation with proper typing
+    const calculateTotalDuration = (courseData: Course | null): number => {
+        if (!courseData) return 0;
+
+        // Use backend value if available and valid
+        if (courseData.total_duration_minutes && courseData.total_duration_minutes > 0) {
+            return courseData.total_duration_minutes;
+        }
+
+        // // Calculate from modules and contents
+        // if (courseData.modules) {
+        //   return courseData.modules.reduce((total: number, module: Module) => {
+        //     let moduleDuration = module.estimated_duration || 0;
+
+        //     // If module duration is 0, calculate from contents
+        //     if (moduleDuration === 0 && module.contents) {
+        //       moduleDuration = module.contents.reduce((contentTotal: number, content: Content) => {
+        //         return contentTotal + (content.estimated_duration || 0);
+        //       }, 0);
+        //     }
+
+        //     return total + moduleDuration;
+        //   }, 0);
+        // }
+
+        return 0;
     };
 
     // Fetch course details including modules, duration, and learners
@@ -180,7 +402,18 @@ const Dashboard = () => {
             return [];
         }
     };
+    // Fonction pour déterminer la couleur en fonction du pourcentage
+    const getProgressColor = (progress: number | undefined): string => {
+        const percentage = progress || 0;
 
+        if (percentage === 100) {
+            return '#B0B0E1'; // Bleu ciel pour 100%
+        } else if (percentage >= 50) {
+            return '#FFA500'; // Jaune/orange pour >= 50%
+        } else {
+            return '#C85B3C'; // Rouge pour < 50%
+        }
+    };
     // Fetch recommended courses
     const fetchRecommendedCourses = async (myCourseIds: number[] = []) => {
         try {
@@ -449,23 +682,26 @@ const Dashboard = () => {
             {myCourses.length > 0 ? (
                 <div
                     ref={scrollContainer2}
-                    className="d-flex gap-3 mb-5 scroll-container"
+                    className="scroll-container"
                     style={{
+                        display: 'flex', // Use flexbox manually
+                        gap: '1.5rem', // Space between cards
                         overflowX: 'auto',
                         scrollBehavior: 'smooth',
                         paddingBottom: '1rem',
                         scrollbarWidth: 'none',
-                        msOverflowStyle: 'none'
+                        msOverflowStyle: 'none',
                     }}
                 >
+
                     {myCourses.map(course => (
                         <div
                             key={course.id}
                             onClick={() => handleCardClick(course.id)}
                             style={{
                                 cursor: 'pointer',
-                                minWidth: '260px',
-                                maxWidth: '260px',
+                                flex: '0 0 400px',
+                                height: '100%',
                                 backgroundColor: 'white',
                                 borderRadius: '12px',
                                 overflow: 'hidden',
@@ -493,16 +729,41 @@ const Dashboard = () => {
                                         }}
                                     />
                                 </div>
-                                <div style={{
+                                {/* <div style={{
                                     position: 'absolute',
                                     bottom: '0',
                                     left: 0,
                                     right: 0,
-                                    height: '10px',
+                                    height: '4px',
                                     background: `linear-gradient(90deg, 
                                         #C85B3C ${course.progress_percentage || 0}%, 
                                         transparent ${course.progress_percentage || 0}%)`
-                                }}></div>
+                                }}></div> */}
+                                <div style={{ position: 'relative', height: '8px' }}>
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: '0',
+                                        left: 0,
+                                        right: 0,
+                                        height: '5px',
+                                        background: `linear-gradient(90deg, 
+                                        ${getProgressColor(course.progress_percentage)} 
+                                        ${course.progress_percentage || 0}%, 
+                                        transparent ${course.progress_percentage || 0}%)`
+                                    }}></div>
+
+                                    <div style={{
+                                        position: "absolute",
+                                        right: "0",
+                                        left: `${course.progress_percentage}%`,
+                                        transform: 'translateX(-40%)',
+                                        height: "9px",
+                                        width: "9px",
+                                        borderRadius: "50%",
+                                        backgroundColor: getProgressColor(course.progress_percentage)
+                                    }}></div>
+                                </div>
+
                             </div>
                             <div style={{ padding: '1rem' }}>
                                 <div className="d-flex justify-content-between align-items-start mb-2">
@@ -589,7 +850,8 @@ const Dashboard = () => {
                     <strong>Aucune formation en cours</strong><br />
                     Vous n'êtes pas encore inscrit à des formations. Découvrez nos formations recommandées ci-dessous !
                 </div>
-            )}
+            )
+            }
 
             {/* Recommended Courses Section */}
             <div className="d-flex justify-content-between align-items-center mb-4 mt-5">
@@ -633,67 +895,71 @@ const Dashboard = () => {
                 )}
             </div>
 
-            {recommendedCourses.length > 0 ? (
-                <div
-                    ref={scrollContainer1}
-                    className="d-flex gap-3 scroll-container"
-                    style={{
-                        overflowX: 'auto',
-                        scrollBehavior: 'smooth',
-                        paddingBottom: '1rem',
-                        scrollbarWidth: 'none',
-                        msOverflowStyle: 'none'
-                    }}
-                >
-                    {recommendedCourses.map(course => (
-                        <div
-                            key={course.id}
-                            onClick={() => handleCardClick(course.id)}
-                            style={{
-                                cursor: 'pointer',
-                                minWidth: '260px',
-                                maxWidth: '260px',
-                                backgroundColor: 'white',
-                                borderRadius: '12px',
-                                overflow: 'hidden',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                                transition: 'all 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'translateY(-4px)';
-                                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'translateY(0)';
-                                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                            }}
-                        >
-                            <div style={{ position: 'relative' }}>
-                                <div className="course-image-container">
-                                    <CourseImage
-                                        src={course.image_url || course.image}
-                                        fallback="/group.avif"
-                                        alt={course.title_of_course}
-                                        className="course-image"
-                                        style={{
-                                            backgroundColor: '#E8E8F5'
-                                        }}
-                                    />
+            {
+                recommendedCourses.length > 0 ? (
+                    <div
+                        ref={scrollContainer1}
+                        className="scroll-container"
+                        style={{
+                            display: 'flex', // Use flexbox manually
+                            gap: '1.5rem', // Space between cards
+                            overflowX: 'auto',
+                            scrollBehavior: 'smooth',
+                            paddingBottom: '1rem',
+                            scrollbarWidth: 'none',
+                            msOverflowStyle: 'none',
+                        }}
+                    >
+                        {recommendedCourses.map(course => (
+                            <div
+                                key={course.id}
+                                onClick={() => handleCardClick(course.id)}
+                                style={{
+                                    cursor: 'pointer',
+                                    flex: '0 0 300px',
+                                    minWidth: '260px',
+                                    maxWidth: '260px',
+                                    backgroundColor: 'white',
+                                    borderRadius: '12px',
+                                    overflow: 'hidden',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'translateY(-4px)';
+                                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                                }}
+                            >
+                                <div style={{ position: 'relative' }}>
+                                    <div className="course-image-container">
+                                        <CourseImage
+                                            src={course.image_url || course.image}
+                                            fallback="/group.avif"
+                                            alt={course.title_of_course}
+                                            className="course-image"
+                                            style={{
+                                                backgroundColor: '#E8E8F5'
+                                            }}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            <div style={{ padding: '1rem' }}>
-                                <div className="d-flex justify-content-between align-items-start mb-2">
-                                    <span style={{
-                                        backgroundColor: '#E3F2FD',
-                                        color: '#1976D2',
-                                        fontSize: '0.75rem',
-                                        fontWeight: '500',
-                                        padding: '0.25rem 0.75rem',
-                                        borderRadius: '6px'
-                                    }}>
-                                        {course.department || 'Finance dept.'}
-                                    </span>
-                                    <button
+                                <div style={{ padding: '1rem' }}>
+                                    <div className="d-flex justify-content-between align-items-start mb-2">
+                                        <span style={{
+                                            backgroundColor: '#E3F2FD',
+                                            color: '#1976D2',
+                                            fontSize: '0.75rem',
+                                            fontWeight: '500',
+                                            padding: '0.25rem 0.75rem',
+                                            borderRadius: '6px'
+                                        }}>
+                                            {course.department || 'Finance dept.'}
+                                        </span>
+                                        {/* <button
                                         style={{
                                             border: 'none',
                                             background: 'transparent',
@@ -704,74 +970,75 @@ const Dashboard = () => {
                                         }}
                                     >
                                         ☆
+                                    </button> */}
+                                    </div>
+                                    <h5 style={{
+                                        fontSize: '1rem',
+                                        fontWeight: '600',
+                                        marginBottom: '0.5rem',
+                                        color: '#1a1a1a'
+                                    }}>
+                                        {course.title_of_course}
+                                    </h5>
+                                    <p style={{
+                                        fontSize: '0.875rem',
+                                        color: '#666',
+                                        marginBottom: '1rem',
+                                        display: '-webkit-box',
+                                        WebkitLineClamp: 2,
+                                        WebkitBoxOrient: 'vertical',
+                                        overflow: 'hidden',
+                                        lineHeight: '1.4'
+                                    }}>
+                                        {course.description}
+                                    </p>
+                                    <div className="d-flex justify-content-between align-items-center" style={{
+                                        fontSize: '0.8rem',
+                                        color: '#666',
+                                        paddingTop: '0.75rem',
+                                        borderTop: '1px solid #f0f0f0'
+                                    }}>
+                                        <span>📚 {course.module_count || 5} modules</span>
+                                        <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
+                                        <span>👥 {course.subscriber_count || 32} apprenants</span>
+                                    </div>
+                                    <button
+                                        onClick={(e) => handleSubscribeClick(course.id, e)}
+                                        style={{
+                                            width: '100%',
+                                            marginTop: '1rem',
+                                            backgroundColor: '#28a745',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            padding: '0.625rem',
+                                            fontSize: '0.9rem',
+                                            fontWeight: '500',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.opacity = '0.9';
+                                            e.currentTarget.style.transform = 'scale(1.02)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.opacity = '1';
+                                            e.currentTarget.style.transform = 'scale(1)';
+                                        }}
+                                    >
+                                        commencer la lecture
                                     </button>
                                 </div>
-                                <h5 style={{
-                                    fontSize: '1rem',
-                                    fontWeight: '600',
-                                    marginBottom: '0.5rem',
-                                    color: '#1a1a1a'
-                                }}>
-                                    {course.title_of_course}
-                                </h5>
-                                <p style={{
-                                    fontSize: '0.875rem',
-                                    color: '#666',
-                                    marginBottom: '1rem',
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: 'vertical',
-                                    overflow: 'hidden',
-                                    lineHeight: '1.4'
-                                }}>
-                                    {course.description}
-                                </p>
-                                <div className="d-flex justify-content-between align-items-center" style={{
-                                    fontSize: '0.8rem',
-                                    color: '#666',
-                                    paddingTop: '0.75rem',
-                                    borderTop: '1px solid #f0f0f0'
-                                }}>
-                                    <span>📚 {course.module_count || 5} modules</span>
-                                    <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
-                                    <span>👥 {course.subscriber_count || 32} apprenants</span>
-                                </div>
-                                <button
-                                    onClick={(e) => handleSubscribeClick(course.id, e)}
-                                    style={{
-                                        width: '100%',
-                                        marginTop: '1rem',
-                                        backgroundColor: '#28a745',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '8px',
-                                        padding: '0.625rem',
-                                        fontSize: '0.9rem',
-                                        fontWeight: '500',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.opacity = '0.9';
-                                        e.currentTarget.style.transform = 'scale(1.02)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.opacity = '1';
-                                        e.currentTarget.style.transform = 'scale(1)';
-                                    }}
-                                >
-                                    S'inscrire et commencer
-                                </button>
                             </div>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <div className="alert alert-info">
-                    Aucune formation recommandée disponible pour votre département pour le moment.
-                </div>
-            )}
-        </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="alert alert-info">
+                        Aucune formation recommandée disponible pour votre département pour le moment.
+                    </div>
+                )
+            }
+        </div >
     );
 };
 
