@@ -20,6 +20,7 @@ import CoursesManagement from '../component/admin/courses';
 import AnalyticsDashboard from '../component/admin/analytics';
 import ContentManagement from '../component/admin/content';
 import SystemHealth from '../component/admin/systems';
+import { NavigationContext } from '../layout'
 
 // Register ChartJS components
 ChartJS.register(
@@ -362,8 +363,21 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; 
     }}>{label}</span>
   </button>
 );
+import { createContext, useContext } from 'react';
+
+interface NavigationContextType {
+  activeTab: string;
+  activeNavItem: string;
+  setActiveTab: (tab: string) => void;
+  setActiveNavItem: (item: string) => void;
+}
+
+// const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
+// import { createContext, useContext } from 'react';
+// const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 
 const AdminDashboard: React.FC = () => {
+  // const { activeTab, activeNavItem } = useContext(NavigationContext);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserData | null>(null);
   const [courses, setCourses] = useState<CourseData | null>(null);
@@ -371,9 +385,14 @@ const AdminDashboard: React.FC = () => {
   const [contents, setContents] = useState<ContentData | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealthData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [activeNavItem, setActiveNavItem] = useState('dashboard');
+  // const [activeTab, setActiveTab] = useState('overview');
+  // const [activeNavItem, setActiveNavItem] = useState('dashboard');
+const context = useContext(NavigationContext);
+if (!context) {
+  throw new Error("useContext must be used within a NavigationProvider");
+}
 
+const { activeTab, activeNavItem } = context;
   useEffect(() => {
     fetchData(activeNavItem === 'dashboard' ? activeTab : activeNavItem);
   }, [activeTab, activeNavItem]);
@@ -420,12 +439,12 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleNavigation = (item: string) => {
-    setActiveNavItem(item);
-    if (item === 'dashboard') {
-      setActiveTab('overview');
-    }
-  };
+  // const handleNavigation = (item: string) => {
+  //   setActiveNavItem(item);
+  //   if (item === 'dashboard') {
+  //     setActiveTab('overview');
+  //   }
+  // };
 
   const getSafeNumber = (value: any, defaultValue: number = 0): number => {
     if (typeof value === 'number') return value;
@@ -567,7 +586,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
       {/* Breadcrumb and Title Header */}
-      <div style={{ 
+      {/* <div style={{ 
         backgroundColor: '#212068', 
         color: 'white', 
         padding: '1rem clamp(1rem, 3vw, 2rem)'
@@ -588,8 +607,8 @@ const AdminDashboard: React.FC = () => {
           lineHeight: '1.2'
         }}>
           {getPageTitle()}
-        </h1>
-        {activeNavItem !== 'dashboard' && (
+        </h1> */}
+        {/* {activeNavItem !== 'dashboard' && (
           <p style={{ 
             fontSize: '0.875rem', 
             marginTop: '0.5rem', 
@@ -603,12 +622,12 @@ const AdminDashboard: React.FC = () => {
             Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
           </p>
         )}
-      </div>
+      </div> */}
 
       {/* Dashboard Content */}
       {activeNavItem === 'dashboard' && stats && (
         <>
-          <div style={{ 
+          {/* <div style={{ 
             backgroundColor: '#212068', 
             padding: '1.5rem 1rem',
             color: 'white' 
@@ -621,15 +640,15 @@ const AdminDashboard: React.FC = () => {
             padding: '0 clamp(1rem, 3vw, 2rem)', 
             borderBottom: '1px solid #E5E7EB',
             overflowX: 'auto'
-          }}>
-            <div style={{ 
+          }}> */}
+            {/* <div style={{ 
               display: 'flex', 
               gap: 'clamp(1rem, 3vw, 2.5rem)', 
               maxWidth: '1400px', 
               margin: '0 auto',
               minWidth: 'min-content'
-            }}>
-              {['overview', 'analytics', 'system'].map((tab) => (
+            }}> */}
+              {/* {['overview', 'analytics', 'system'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -649,9 +668,9 @@ const AdminDashboard: React.FC = () => {
                 >
                   {tab === 'overview' ? 'Overview' : tab === 'analytics' ? 'Analytics' : 'System'}
                 </button>
-              ))}
-            </div>
-          </div>
+              ))} */}
+            {/* </div> */}
+          {/* </div> */}
 
           <div style={{ 
             padding: '1.5rem clamp(1rem, 3vw, 2rem)', 

@@ -14,7 +14,43 @@ export interface User {
   email: string;
   privilege: string;
 }
-
+interface AdminStats {
+  overview: {
+    total_users: number;
+    total_courses: number;
+    active_subscriptions: number;
+    recent_users: number;
+    recent_courses: number;
+    engagement_rate?: number;
+    trends?: {
+      total_users?: { formatted: string; is_positive: boolean };
+      total_courses?: { formatted: string; is_positive: boolean };
+      recent_users?: { formatted: string; is_positive: boolean };
+      active_subscriptions?: { formatted: string; is_positive: boolean };
+      engagement_rate?: { formatted: string; is_positive: boolean };
+    };
+  };
+  user_distribution: Array<{ privilege: string; count: number }>;
+  user_registration_chart: {
+    labels: string[];
+    data: number[];
+  };
+  course_statistics: Array<{
+    id: number;
+    title: string;
+    creator: string;
+    created_at: string;
+    total_subscribers: number;
+    completed_count: number;
+    completion_rate: number;
+    average_score: number;
+  }>;
+  dau_weekly?: {
+    labels: string[];
+    data: number[];
+  };
+  account_status?: Array<{ status: string; count: number }>;
+}
 interface SearchResult {
   id: number;
   type: 'course' | 'module' | 'content';
@@ -42,6 +78,16 @@ interface Notification {
   related_module_title?: string;
   related_content_title?: string;
 }
+import { createContext, useContext } from 'react';
+
+interface NavigationContextType {
+  activeTab: string;
+  activeNavItem: string;
+  setActiveTab: (tab: string) => void;
+  setActiveNavItem: (item: string) => void;
+}
+
+const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 
 const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
   <button
@@ -67,6 +113,125 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; 
     {label}
   </button>
 );
+const StatCardsSection: React.FC<{ stats: any }> = ({ stats }) => {
+  const trends = stats?.overview?.trends || {};
+
+  return (
+    <div className="container" style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+      gap: '1rem',
+      maxWidth: '1400px',
+      margin: '0 auto',
+      padding: '0 1rem'
+    }}>
+      <StatCard
+        title="N° des utilisateurs"
+        value={stats?.overview?.total_users?.toLocaleString() || '0'}
+        subtitle=""
+        trend={trends.total_users?.formatted || "+0%"}
+        trendLabel="vs mois dernier"
+        trendUp={trends.total_users?.is_positive !== false}
+      />
+
+      <StatCard
+        title="N° de formations"
+        value={stats?.overview?.total_courses || 0}
+        subtitle=""
+        trend={trends.total_courses?.formatted || "+0%"}
+        trendLabel="vs mois dernier"
+        trendUp={trends.total_courses?.is_positive !== false}
+      />
+
+      <StatCard
+        title="Nouveaux utilisateurs"
+        value={stats?.overview?.recent_users || 0}
+        subtitle=""
+        trend={trends.recent_users?.formatted || "+0%"}
+        trendLabel="vs 7 jours derniers"
+        trendUp={trends.recent_users?.is_positive !== false}
+      />
+
+      <StatCard
+        title="Utilisateurs actifs"
+        value={stats?.overview?.active_subscriptions || 0}
+        subtitle=""
+        trend={trends.active_subscriptions?.formatted || "+0%"}
+        trendLabel="vs mois dernier"
+        trendUp={trends.active_subscriptions?.is_positive !== false}
+      />
+
+      {stats?.overview?.engagement_rate && (
+        <StatCard
+          title="Taux d'engagement"
+          value={`${stats.overview.engagement_rate}%`}
+          subtitle=""
+          trend={trends.engagement_rate?.formatted || "+0%"}
+          trendLabel="vs mois dernier"
+          trendUp={trends.engagement_rate?.is_positive !== false}
+        />
+      )}
+    </div>
+  );
+};
+
+// StatCard Component
+const StatCard: React.FC<{
+  title: string;
+  value: string | number;
+  subtitle: string;
+  trend: string;
+  trendLabel: string;
+  trendUp: boolean;
+}> = ({ title, value, subtitle, trend, trendLabel, trendUp }) => (
+  <div  style={{
+    lineHeight: '1.5',
+    padding: '0.5rem'
+  }}>
+    <div style={{
+      fontSize: '0.875rem',
+      marginBottom: '0.5rem',
+      opacity: 0.9,
+      fontWeight: '400',
+      wordWrap: 'break-word'
+    }}>
+      {title}
+    </div>
+    <div style={{
+      fontSize: 'clamp(1.5rem, 4vw, 2.25rem)',
+      fontWeight: 'bold',
+      marginBottom: '0.25rem',
+      letterSpacing: '-0.02em',
+      lineHeight: '1.2'
+    }}>
+      {value}
+    </div>
+    {subtitle && (
+      <div style={{
+        fontSize: '0.875rem',
+        opacity: 0.8,
+        marginBottom: '0.5rem'
+      }}>
+        {subtitle}
+      </div>
+    )}
+    <div style={{
+      fontSize: '0.75rem',
+      marginTop: '0.5rem',
+      color: trendUp ? '#86EFAC' : '#FCA5A5',
+      fontWeight: '500',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.25rem',
+      flexWrap: 'wrap'
+    }}>
+      <span style={{ fontSize: '0.875rem' }}>
+        {trendUp ? '▲' : '▼'}
+      </span>
+      <span>{trend} {trendLabel}</span>
+    </div>
+  </div>
+);
 
 const AuthGuard = ({ children }: AuthGuardProps) => {
   const [loading, setLoading] = useState(true);
@@ -79,12 +244,40 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const [showSearchCard, setShowSearchCard] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchCardRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState('overview');
   const [activeNavItem, setActiveNavItem] = useState('dashboard');
 
   // Notification states
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  // useEffect(() => {
+  //     fetchData(activeNavItem === 'dashboard' ? activeTab : activeNavItem);
+  //   }, [activeTab, activeNavItem]);
+   useEffect(() => {
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      let response;
+
+      switch (activeTab) {
+        case 'overview':
+          response = await api.get('admin/dashboard/');
+          setStats(response.data);
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, [activeTab, activeNavItem]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -369,7 +562,49 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
       navigate('/');
     }
   };
+  const getBreadcrumb = () => {
+    if (activeNavItem === 'dashboard') {
+      return `Dashboard > ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`;
+    }
+    return activeNavItem.charAt(0).toUpperCase() + activeNavItem.slice(1);
+  };
+  const getPageTitle = () => {
+    switch (activeNavItem) {
+      case 'dashboard':
+        return activeTab === 'overview' ? 'Dashboard - Overview' :
+          activeTab === 'analytics' ? 'Dashboard - Analytics' : 'Dashboard - System';
+      case 'formations':
+        return 'Liste des Formations';
+      case 'utilisateurs':
+        return 'Liste des Utilisateurs';
+      case 'messages':
+        return 'Messages';
+      case 'favoris':
+        return 'Favoris';
+      default:
+        return 'Dashboard';
+    }
+  };
+  const getSafeNumber = (value: any, defaultValue: number = 0): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') return parseInt(value) || defaultValue;
+    return defaultValue;
+  };
 
+  const getSafeString = (value: any, defaultValue: string = ''): string => {
+    if (typeof value === 'string') return value;
+    if (value != null) return String(value);
+    return defaultValue;
+  };
+  const accountStatusData = stats?.account_status ? {
+    labels: stats.account_status.map(d => getSafeString(d.status)),
+    datasets: [{
+      data: stats.account_status.map(d => getSafeNumber(d.count)),
+      backgroundColor: ['#4F46E5', '#818CF8'],
+      borderWidth: 0,
+      hoverOffset: 4
+    }]
+  } : null;
   // Check if user is admin
   const isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
 
@@ -379,6 +614,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const notificationGroups = groupNotificationsByDate();
 
   return (
+    <NavigationContext.Provider value={{ activeTab, activeNavItem, setActiveTab, setActiveNavItem }}>
     <div className="d-flex" style={{ minHeight: '100vh' }}>
       {/* Search Overlay Card */}
       {showSearchCard && (
@@ -424,427 +660,427 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           style={{ background: 'rgba(5, 44, 101, 0.9)' }}
         >
           <div className="container">
-          <div className="container-fluid">
-            <div className="d-flex align-items-center w-100">
-              {/* Logo Image */}
-              <img
-                src="/logo-colored.png"
-                alt="Logo"
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  objectFit: 'contain',
-                  marginRight: '0.75rem'
-                }}
-              />
-
-              {/* Search Bar - Hidden on small screens, visible on md+ */}
-              <div
-                className="search-bar-container position-relative d-none d-md-block"
-                style={{
-                  maxWidth: '250px',
-                  minWidth: '200px',
-                  marginRight: 'auto'
-                }}
-              >
-                <div
-                  className="search-bar d-flex align-items-center"
-                  onClick={handleSearchIconClick}
+            <div className="container-fluid">
+              <div className="d-flex align-items-center w-100">
+                {/* Logo Image */}
+                <img
+                  src="/logo-colored.png"
+                  alt="Logo"
                   style={{
-                    background: 'white',
-                    border: '1px solid #dee2e6',
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                    height: '40px'
+                    width: '40px',
+                    height: '40px',
+                    objectFit: 'contain',
+                    marginRight: '0.75rem'
                   }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = '#f8f9fa';
-                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'white';
-                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                />
+
+                {/* Search Bar - Hidden on small screens, visible on md+ */}
+                <div
+                  className="search-bar-container position-relative d-none d-md-block"
+                  style={{
+                    maxWidth: '250px',
+                    minWidth: '200px',
+                    marginRight: 'auto'
                   }}
                 >
-                  <i className="fas fa-search me-2" style={{ color: '#6c757d' }}></i>
-                  <span style={{ color: '#6c757d', fontWeight: '400', fontSize: '0.875rem' }}>
-                    Que cherchez-vous?
-                  </span>
-
                   <div
+                    className="search-bar d-flex align-items-center"
+                    onClick={handleSearchIconClick}
                     style={{
-                      width: '1px',
-                      height: '24px',
-                      backgroundColor: '#ced4da',
-                      marginLeft: '8px',
-                      marginRight: '8px'
+                      background: 'white',
+                      border: '1px solid #dee2e6',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      height: '40px'
                     }}
-                  ></div>
-                  <button
-                    type="button"
-                    className="btn bg-gray-100 text-black px-2 py-1 rounded"
-                    style={{
-                      border: 'none',
-                      fontSize: '0.875rem'
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#f8f9fa';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'white';
+                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
                     }}
                   >
-                    🔎︎
-                  </button>
+                    <i className="fas fa-search me-2" style={{ color: '#6c757d' }}></i>
+                    <span style={{ color: '#6c757d', fontWeight: '400', fontSize: '0.875rem' }}>
+                      Que cherchez-vous?
+                    </span>
+
+                    <div
+                      style={{
+                        width: '1px',
+                        height: '24px',
+                        backgroundColor: '#ced4da',
+                        marginLeft: '8px',
+                        marginRight: '8px'
+                      }}
+                    ></div>
+                    <button
+                      type="button"
+                      className="btn bg-gray-100 text-black px-2 py-1 rounded"
+                      style={{
+                        border: 'none',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      🔎︎
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Mobile Search Icon - Positioned near notification icon */}
-              <button
-                className="btn btn-outline-light d-md-none me-2"
-                onClick={handleSearchIconClick}
-                style={{
-                  width: '45px',
-                  height: '45px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '6px',
-                  backgroundColor: '#1e1b4b',
-                  border: 'none',
-                  padding: 0,
-                  marginRight: '8px'
-                }}
-                aria-label="Search"
-              >
-                🔍
-              </button>
+                {/* Mobile Search Icon - Positioned near notification icon */}
+                <button
+                  className="btn btn-outline-light d-md-none me-2"
+                  onClick={handleSearchIconClick}
+                  style={{
+                    width: '45px',
+                    height: '45px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '6px',
+                    backgroundColor: '#1e1b4b',
+                    border: 'none',
+                    padding: 0,
+                    marginRight: '8px'
+                  }}
+                  aria-label="Search"
+                >
+                  🔍
+                </button>
 
-              <div className="btn-group custom-dropdown-group ms-auto ms-md-0" ref={dropdownRef}>
-                {/* Notifications Dropdown */}
-                <div className="dropdown me-2">
-                  <button
-                    type="button"
-                    className="btn btn-outline-light dropdown-toggle position-relative"
-                    onClick={handleNotif}
-                    aria-expanded={openNotif}
-                    aria-label="Notifications"
-                    style={{
-                      width: '45px',
-                      height: '45px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '6px',
-                      backgroundColor: '#1e1b4b',
-                      border: 'none',
-                      marginRight: '8px'
-                    }}
-                  >
-                    🔔
-                    {unreadCount > 0 && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: '-5px',
-                          right: '-5px',
-                          backgroundColor: '#ef4444',
-                          color: 'white',
-                          borderRadius: '50%',
-                          width: '18px',
-                          height: '18px',
-                          fontSize: '0.7rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </button>
-                  {openNotif && (
-                    <div className="dropdown-menu show mt-2" style={{
-                      minWidth: '380px',
-                      maxWidth: '95vw',
-                      maxHeight: '70vh',
-                      overflowY: 'auto',
-                      backgroundColor: '#e8eaf6',
-                      border: 'none',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                      padding: '0',
-                      right: '0',
-                      left: 'auto'
-                    }}>
-                      <div style={{
-                        padding: '1rem 1.5rem',
-                        borderBottom: '1px solid #d1d5db',
-                        backgroundColor: '#e8eaf6',
-                        borderTopLeftRadius: '12px',
-                        borderTopRightRadius: '12px',
+                <div className="btn-group custom-dropdown-group ms-auto ms-md-0" ref={dropdownRef}>
+                  {/* Notifications Dropdown */}
+                  <div className="dropdown me-2">
+                    <button
+                      type="button"
+                      className="btn btn-outline-light dropdown-toggle position-relative"
+                      onClick={handleNotif}
+                      aria-expanded={openNotif}
+                      aria-label="Notifications"
+                      style={{
+                        width: '45px',
+                        height: '45px',
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '6px',
+                        backgroundColor: '#1e1b4b',
+                        border: 'none',
+                        marginRight: '8px'
+                      }}
+                    >
+                      🔔
+                      {unreadCount > 0 && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '-5px',
+                            right: '-5px',
+                            backgroundColor: '#ef4444',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: '18px',
+                            height: '18px',
+                            fontSize: '0.7rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+                    {openNotif && (
+                      <div className="dropdown-menu show mt-2" style={{
+                        minWidth: '380px',
+                        maxWidth: '95vw',
+                        maxHeight: '70vh',
+                        overflowY: 'auto',
+                        backgroundColor: '#e8eaf6',
+                        border: 'none',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                        padding: '0',
+                        right: '0',
+                        left: 'auto'
                       }}>
-                        <h6 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#1f2937' }}>
-                          Notifications
-                        </h6>
-                        {notifications.length > 0 && unreadCount > 0 && (
-                          <button
-                            onClick={markAllAsRead}
-                            style={{
-                              background: 'none',
-                              border: 'none',
+                        <div style={{
+                          padding: '1rem 1.5rem',
+                          borderBottom: '1px solid #d1d5db',
+                          backgroundColor: '#e8eaf6',
+                          borderTopLeftRadius: '12px',
+                          borderTopRightRadius: '12px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <h6 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#1f2937' }}>
+                            Notifications
+                          </h6>
+                          {notifications.length > 0 && unreadCount > 0 && (
+                            <button
+                              onClick={markAllAsRead}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#4338ca',
+                                fontSize: '0.875rem',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                padding: '4px 8px',
+                                borderRadius: '4px'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                              Tout marquer comme lu
+                            </button>
+                          )}
+                        </div>
+
+                        <div style={{ padding: '0.5rem' }}>
+                          {loadingNotifications ? (
+                            <div style={{
+                              padding: '2rem',
+                              textAlign: 'center',
+                              color: '#6b7280'
+                            }}>
+                              Chargement des notifications...
+                            </div>
+                          ) : notifications.length === 0 ? (
+                            <div style={{
+                              padding: '3rem 2rem',
+                              textAlign: 'center',
+                              color: '#6b7280'
+                            }}>
+                              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
+                              <div style={{ fontSize: '1rem', fontWeight: '500' }}>
+                                Aucune notification
+                              </div>
+                              <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                                Vous serez notifié quand de nouveaux contenus seront disponibles
+                              </div>
+                            </div>
+                          ) : (
+                            Object.entries(notificationGroups).map(([groupName, groupNotifications]) => (
+                              <div key={groupName}>
+                                <div style={{
+                                  padding: '0.5rem 1rem',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '600',
+                                  color: '#6b7280',
+                                  textTransform: 'uppercase'
+                                }}>
+                                  {groupName}
+                                </div>
+
+                                {groupNotifications.map((notification) => (
+                                  <div
+                                    key={notification.id}
+                                    style={{
+                                      display: 'flex',
+                                      gap: '0.75rem',
+                                      padding: '0.75rem 1rem',
+                                      backgroundColor: notification.is_read ? 'white' : '#f0f4ff',
+                                      borderRadius: '8px',
+                                      marginBottom: '0.5rem',
+                                      cursor: 'pointer',
+                                      transition: 'background-color 0.2s',
+                                      borderLeft: notification.is_read ? 'none' : '3px solid #4338ca'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = notification.is_read ? '#f3f4f6' : '#e0e7ff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = notification.is_read ? 'white' : '#f0f4ff'}
+                                    onClick={() => markAsRead(notification.id)}
+                                  >
+                                    <div style={{
+                                      width: '40px',
+                                      height: '40px',
+                                      borderRadius: '8px',
+                                      backgroundColor: getNotificationColor(notification.notification_type),
+                                      flexShrink: 0,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '1.2rem'
+                                    }}>
+                                      {getNotificationIcon(notification.notification_type)}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{
+                                        fontSize: '0.875rem',
+                                        color: '#1f2937',
+                                        marginBottom: '0.25rem',
+                                        fontWeight: notification.is_read ? '400' : '600'
+                                      }}>
+                                        {notification.title}
+                                      </div>
+                                      <div style={{
+                                        fontSize: '0.8rem',
+                                        color: '#6b7280',
+                                        lineHeight: '1.4'
+                                      }}>
+                                        {notification.message}
+                                      </div>
+                                      <div style={{
+                                        fontSize: '0.7rem',
+                                        color: '#9ca3af',
+                                        marginTop: '0.25rem'
+                                      }}>
+                                        • {notification.time_ago}
+                                      </div>
+                                    </div>
+                                    {!notification.is_read && (
+                                      <div style={{
+                                        width: '8px',
+                                        height: '8px',
+                                        borderRadius: '50%',
+                                        backgroundColor: '#4338ca',
+                                        flexShrink: 0,
+                                        marginTop: '4px'
+                                      }}></div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {notifications.length > 0 && (
+                          <div style={{
+                            padding: '1rem',
+                            borderTop: '1px solid #d1d5db',
+                            backgroundColor: '#e8eaf6',
+                            borderBottomLeftRadius: '12px',
+                            borderBottomRightRadius: '12px',
+                            textAlign: 'center'
+                          }}>
+                            <a href="/notifications" style={{
                               color: '#4338ca',
                               fontSize: '0.875rem',
                               fontWeight: '600',
-                              cursor: 'pointer',
-                              padding: '4px 8px',
-                              borderRadius: '4px'
+                              textDecoration: 'none'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                          >
-                            Tout marquer comme lu
-                          </button>
+                              onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                              onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>
+                              Voir toutes les notifications
+                            </a>
+                          </div>
                         )}
                       </div>
+                    )}
+                  </div>
 
-                      <div style={{ padding: '0.5rem' }}>
-                        {loadingNotifications ? (
-                          <div style={{
-                            padding: '2rem',
-                            textAlign: 'center',
-                            color: '#6b7280'
-                          }}>
-                            Chargement des notifications...
-                          </div>
-                        ) : notifications.length === 0 ? (
-                          <div style={{
-                            padding: '3rem 2rem',
-                            textAlign: 'center',
-                            color: '#6b7280'
-                          }}>
-                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
-                            <div style={{ fontSize: '1rem', fontWeight: '500' }}>
-                              Aucune notification
-                            </div>
-                            <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                              Vous serez notifié quand de nouveaux contenus seront disponibles
-                            </div>
-                          </div>
-                        ) : (
-                          Object.entries(notificationGroups).map(([groupName, groupNotifications]) => (
-                            <div key={groupName}>
-                              <div style={{
-                                padding: '0.5rem 1rem',
-                                fontSize: '0.75rem',
-                                fontWeight: '600',
-                                color: '#6b7280',
-                                textTransform: 'uppercase'
-                              }}>
-                                {groupName}
-                              </div>
-
-                              {groupNotifications.map((notification) => (
-                                <div
-                                  key={notification.id}
-                                  style={{
-                                    display: 'flex',
-                                    gap: '0.75rem',
-                                    padding: '0.75rem 1rem',
-                                    backgroundColor: notification.is_read ? 'white' : '#f0f4ff',
-                                    borderRadius: '8px',
-                                    marginBottom: '0.5rem',
-                                    cursor: 'pointer',
-                                    transition: 'background-color 0.2s',
-                                    borderLeft: notification.is_read ? 'none' : '3px solid #4338ca'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = notification.is_read ? '#f3f4f6' : '#e0e7ff'}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = notification.is_read ? 'white' : '#f0f4ff'}
-                                  onClick={() => markAsRead(notification.id)}
-                                >
-                                  <div style={{
-                                    width: '40px',
-                                    height: '40px',
-                                    borderRadius: '8px',
-                                    backgroundColor: getNotificationColor(notification.notification_type),
-                                    flexShrink: 0,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '1.2rem'
-                                  }}>
-                                    {getNotificationIcon(notification.notification_type)}
-                                  </div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{
-                                      fontSize: '0.875rem',
-                                      color: '#1f2937',
-                                      marginBottom: '0.25rem',
-                                      fontWeight: notification.is_read ? '400' : '600'
-                                    }}>
-                                      {notification.title}
-                                    </div>
-                                    <div style={{
-                                      fontSize: '0.8rem',
-                                      color: '#6b7280',
-                                      lineHeight: '1.4'
-                                    }}>
-                                      {notification.message}
-                                    </div>
-                                    <div style={{
-                                      fontSize: '0.7rem',
-                                      color: '#9ca3af',
-                                      marginTop: '0.25rem'
-                                    }}>
-                                      • {notification.time_ago}
-                                    </div>
-                                  </div>
-                                  {!notification.is_read && (
-                                    <div style={{
-                                      width: '8px',
-                                      height: '8px',
-                                      borderRadius: '50%',
-                                      backgroundColor: '#4338ca',
-                                      flexShrink: 0,
-                                      marginTop: '4px'
-                                    }}></div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      {notifications.length > 0 && (
-                        <div style={{
-                          padding: '1rem',
-                          borderTop: '1px solid #d1d5db',
-                          backgroundColor: '#e8eaf6',
-                          borderBottomLeftRadius: '12px',
-                          borderBottomRightRadius: '12px',
-                          textAlign: 'center'
-                        }}>
-                          <a href="/notifications" style={{
-                            color: '#4338ca',
-                            fontSize: '0.875rem',
-                            fontWeight: '600',
-                            textDecoration: 'none'
-                          }}
-                            onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                            onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}>
-                            Voir toutes les notifications
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* User Menu Dropdown */}
-                <div className="dropdown">
-                  <button
-                    type="button"
-                    className="btn btn-outline-light dropdown-toggle"
-                    onClick={handleMenu}
-                    aria-expanded={open}
-                    aria-label="User menu"
-                    style={{
-                      width: '45px',
-                      height: '45px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '6px',
-                      backgroundColor: '#1e1b4b',
-                      border: 'none'
-                    }}
-                  >
-                    👤
-                  </button>
-                  {open && (
-                    <div className="dropdown-menu show mt-2" style={{
-                      minWidth: '280px',
-                      maxWidth: '95vw',
-                      backgroundColor: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                      padding: '0.5rem',
-                      right: '0',
-                      left: 'auto'
-                    }}>
-                      <div style={{
-                        padding: '0.75rem 1rem',
-                        borderBottom: '1px solid #e5e7eb',
-                        marginBottom: '0.5rem'
+                  {/* User Menu Dropdown */}
+                  <div className="dropdown">
+                    <button
+                      type="button"
+                      className="btn btn-outline-light dropdown-toggle"
+                      onClick={handleMenu}
+                      aria-expanded={open}
+                      aria-label="User menu"
+                      style={{
+                        width: '45px',
+                        height: '45px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '6px',
+                        backgroundColor: '#1e1b4b',
+                        border: 'none'
+                      }}
+                    >
+                      👤
+                    </button>
+                    {open && (
+                      <div className="dropdown-menu show mt-2" style={{
+                        minWidth: '280px',
+                        maxWidth: '95vw',
+                        backgroundColor: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                        padding: '0.5rem',
+                        right: '0',
+                        left: 'auto'
                       }}>
-                        <h6 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
-                          Mon compte
-                        </h6>
-                      </div>
-
-                      <a href="#" style={{
-                        display: 'block',
-                        padding: '0.75rem 1rem',
-                        color: '#374151',
-                        textDecoration: 'none',
-                        borderRadius: '6px',
-                        fontSize: '0.875rem',
-                        transition: 'background-color 0.2s'
-                      }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                        Mon compte
-                      </a>
-
-                      <a href="#" style={{
-                        display: 'block',
-                        padding: '0.75rem 1rem',
-                        color: '#374151',
-                        textDecoration: 'none',
-                        borderRadius: '6px',
-                        fontSize: '0.875rem',
-                        transition: 'background-color 0.2s'
-                      }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                        Paramètres
-                      </a>
-
-                      <div style={{
-                        borderTop: '1px solid #e5e7eb',
-                        margin: '0.5rem 0'
-                      }}></div>
-
-                      <button
-                        onClick={handleLogOut}
-                        style={{
-                          display: 'block',
-                          width: '100%',
+                        <div style={{
                           padding: '0.75rem 1rem',
-                          color: '#dc2626',
+                          borderBottom: '1px solid #e5e7eb',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <h6 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
+                            Mon compte
+                          </h6>
+                        </div>
+
+                        <a href="#" style={{
+                          display: 'block',
+                          padding: '0.75rem 1rem',
+                          color: '#374151',
                           textDecoration: 'none',
                           borderRadius: '6px',
                           fontSize: '0.875rem',
-                          transition: 'background-color 0.2s',
-                          background: 'none',
-                          border: 'none',
-                          textAlign: 'left',
-                          cursor: 'pointer'
+                          transition: 'background-color 0.2s'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        Se déconnecter
-                      </button>
-                    </div>
-                  )}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                          Mon compte
+                        </a>
+
+                        <a href="#" style={{
+                          display: 'block',
+                          padding: '0.75rem 1rem',
+                          color: '#374151',
+                          textDecoration: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          transition: 'background-color 0.2s'
+                        }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                          Paramètres
+                        </a>
+
+                        <div style={{
+                          borderTop: '1px solid #e5e7eb',
+                          margin: '0.5rem 0'
+                        }}></div>
+
+                        <button
+                          onClick={handleLogOut}
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '0.75rem 1rem',
+                            color: '#dc2626',
+                            textDecoration: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.875rem',
+                            transition: 'background-color 0.2s',
+                            background: 'none',
+                            border: 'none',
+                            textAlign: 'left',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          Se déconnecter
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           </div>
         </nav>
 
@@ -876,44 +1112,133 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
             `}
           </style>
           <div className="container">
-          <div style={{
-            display: 'flex',
-            // alignItems: 'center',
-            gap: '0.5rem',
-            maxWidth: '1400px',
-            // margin: '0 auto',
-            minWidth: 'max-content',
-            paddingLeft: '0.5rem',
-            paddingRight: '0.5rem',
-            // justifyContent: 'center'
-          }}>
-            {/* Only show Dashboard for admin users */}
-            {isAdmin && (
-              <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
-            )}
-            <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
+            <div style={{
+              display: 'flex',
+              // alignItems: 'center',
+              gap: '0.5rem',
+              maxWidth: '1400px',
+              // margin: '0 auto',
+              minWidth: 'max-content',
+              paddingLeft: '0.5rem',
+              paddingRight: '0.5rem',
+              // justifyContent: 'center'
+            }}>
+              {/* Only show Dashboard for admin users */}
+              {isAdmin && (
+                <NavButton active={activeNavItem === 'dashboard'} onClick={() => handleNavigation('dashboard')} icon="" label="Dashboard" />
+              )}
+              <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon="" label="Formations" />
 
 
-            {/* Only show Utilisateurs for admin users */}
-            {isAdmin && (
-              <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
-            )}
+              {/* Only show Utilisateurs for admin users */}
+              {isAdmin && (
+                <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon="" label="Utilisateurs" />
+              )}
 
-            <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
-            <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
-          </div>
+              <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon="" label="Messages" />
+              <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon="" label="Favoris" />
+            </div>
           </div>
         </nav>
+        <div style={{
+          backgroundColor: '#212068',
+          color: 'white',
+          padding: '1rem clamp(1rem, 3vw, 2rem)'
+        }}>
+          <div className='container'style={{
+            fontSize: '0.75rem',
+            marginBottom: '0.5rem',
+            opacity: 0.9,
+            wordWrap: 'break-word'
+          }}>
+            Main {'>'} <span style={{ color: '#FCD34D', fontWeight: '500' }}>{getBreadcrumb()}</span>
+          </div>
+          <div className='container'>
+          <h1  style={{
+            fontSize: 'clamp(1.25rem, 4vw, 1.75rem)',
+            fontWeight: 'bold',
+            margin: 0,
+            letterSpacing: '-0.025em',
+            lineHeight: '1.2'
+          }}>
+            {getPageTitle()}
+          </h1>
+          {activeNavItem !== 'dashboard' && (
+            <p style={{
+              fontSize: '0.875rem',
+              marginTop: '0.5rem',
+              marginBottom: 0,
+              opacity: 0.9,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden'
+            }}>
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+            </p>
+          )}
+          </div>
+        </div>
+        {activeNavItem === 'dashboard' ? (
+          <>
+          <div style={{ 
+            backgroundColor: '#212068', 
+            padding: '1.5rem 1rem',
+            color: 'white' 
+          }}>
+            <StatCardsSection stats={stats} />
+          </div>
+            <div style={{
+              backgroundColor: 'white',
+              padding: '0 clamp(1rem, 3vw, 2rem)',
+              borderBottom: '1px solid #E5E7EB',
+              overflowX: 'auto'
+            }}>
+              <div style={{
+                display: 'flex',
+                gap: 'clamp(1rem, 3vw, 2.5rem)',
+                maxWidth: '1400px',
+                margin: '0 auto',
+                minWidth: 'min-content'
+              }}>
+                {['overview', 'analytics', 'system'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '1rem 0',
+                      fontSize: 'clamp(0.85rem, 2vw, 0.95rem)',
+                      fontWeight: activeTab === tab ? '600' : '500',
+                      color: activeTab === tab ? '#4338CA' : '#6B7280',
+                      borderBottom: activeTab === tab ? '3px solid #4338CA' : '3px solid transparent',
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                      whiteSpace: 'nowrap',
+                      minWidth: 'max-content'
+                    }}
+                  >
+                    {tab === 'overview' ? 'Overview' : tab === 'analytics' ? 'Analytics' : 'System'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (<></>)}
 
         {/* Page Content */}
         <div className="flex-grow-1" style={{ background: '#f8f9fa' }}>
-            <div className="container-fluid" style={{ maxWidth: '1400px', margin: '0 auto' }}>
-          {children}
+          <div className="container-fluid" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+            {/* <NavigationContext.Provider value={{ activeTab, activeNavItem, setActiveTab, setActiveNavItem }}> */}
+              {children}
+            {/* </NavigationContext.Provider> */}
           </div>
         </div>
       </div>
     </div>
+    </NavigationContext.Provider>
   );
 };
-
+export { NavigationContext };
 export default AuthGuard;
