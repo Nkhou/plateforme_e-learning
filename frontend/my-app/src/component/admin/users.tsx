@@ -466,9 +466,9 @@ const UsersManagement: React.FC = () => {
       }}>
         {showSignUp ? (
           <div>
-            <button onClick={handleCloseSignUp}>
+            {/* <button onClick={handleCloseSignUp}>
               ← Retour à la liste
-            </button>
+            </button> */}
             <SignUp />
           </div>
         ) : (

@@ -95,7 +95,7 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
     style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '0.5rem',
+      gap: '1.2rem',
       backgroundColor: 'transparent',
       color: active ? 'white' : '#A0AEC0',
       border: 'none',
@@ -109,7 +109,7 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
       flexShrink: 0
     }}
   >
-    <span style={{ fontSize: '1rem' }}>{icon}</span>
+    <span style={{ fontSize: '1,75rem' }}>{icon}</span>
     {label}
   </button>
 );
@@ -245,16 +245,27 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchCardRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState('overview');
-  const [activeNavItem, setActiveNavItem] = useState('dashboard');
+ 
 
   // Notification states
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
-  // useEffect(() => {
-  //     fetchData(activeNavItem === 'dashboard' ? activeTab : activeNavItem);
-  //   }, [activeTab, activeNavItem]);
+  let isAdmin = false;
+  useEffect(() => {
+        // fetchData(activeNavItem === 'dashboard' ? activeTab : activeNavItem);
+        isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
+        // const isFormateur = user?.privilege === 'F' || user?.privilege === 'Formateur'; // adjust according to your backend
+      }, [user]);
+
+console.log('------------------------------------------------', isAdmin)
+const [activeNavItem, setActiveNavItem] = useState(() => {
+  if (isAdmin) return 'dashboard';
+  // if (isFormateur) return 'formation';
+  return 'formations'; // default for others
+});
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -298,6 +309,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+  
 
   // Close search card when pressing Escape key
   useEffect(() => {
@@ -563,6 +575,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
     }
   };
   const getBreadcrumb = () => {
+    console.log('whywhy', activeNavItem)
     if (activeNavItem === 'dashboard') {
       return `Dashboard > ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`;
     }
@@ -585,6 +598,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
     }
   }
   const getPageTitle = () => {
+    console.log('**************************', activeNavItem)
     switch (activeNavItem) {
       case 'dashboard':
         return activeTab === 'overview' ? 'Dashboard - Overview' :
@@ -622,7 +636,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
     }]
   } : null;
   // Check if user is admin
-  const isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
+  // const isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
 
   if (loading) return <div className="text-center p-5">Loading...</div>;
   if (!isAuthenticated) return <>{children}</>;
@@ -1130,14 +1144,11 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
             <div className="container">
               <div style={{
                 display: 'flex',
-                // alignItems: 'center',
                 gap: '0.5rem',
                 maxWidth: '1400px',
-                // margin: '0 auto',
                 minWidth: 'max-content',
                 paddingLeft: '0.5rem',
                 paddingRight: '0.5rem',
-                // justifyContent: 'center'
               }}>
                 {/* Only show Dashboard for admin users */}
                 {isAdmin && (
@@ -1197,8 +1208,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                       WebkitMaskSize: '100% 100%', // make mask fill the div fully
                       maskSize: '100% 100%',
                       backgroundColor: 'white', // visible color through mask
-                      width: 20,
-                      height: 20,
+                      width: 17,
+                      height: 17,
                       display: 'inline-block', // ensures no collapsing
                     }}
                   />} label="Utilisateurs" />
@@ -1215,8 +1226,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                       WebkitMaskSize: '100% 100%', // make mask fill the div fully
                       maskSize: '100% 100%',
                       backgroundColor: 'white', // visible color through mask
-                      width: 20,
-                      height: 20,
+                      width: 17,
+                      height: 17,
                       display: 'inline-block', // ensures no collapsing
                   }}
                 />} label="Messages" />
@@ -1231,8 +1242,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                       WebkitMaskSize: '100% 100%', // make mask fill the div fully
                       maskSize: '100% 100%',
                       backgroundColor: 'white', // visible color through mask
-                      width: 20,
-                      height: 20,
+                      width: 17,
+                      height: 17,
                       display: 'inline-block', // ensures no collapsing
                   }}
                 />} label="Favoris" />
