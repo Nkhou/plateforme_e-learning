@@ -1157,55 +1157,69 @@ const CourseDetail = () => {
       lineHeight: responsiveStyles.body.lineHeight
     }}>
       {/* Enhanced Responsive Header */}
-      <div style={{ 
-        backgroundColor: '#2D2B6B', 
-        color: 'white', 
-        padding: responsiveStyles.containerPadding
+       <div style={{
+        backgroundColor: '#212068',
+        color: 'white',
+        padding: isMobile ? '1rem 0' : '1.5rem 0'
       }}>
-        <div style={{ 
-          display: 'flex', 
+        <div style={{
+          maxWidth: '1400px',  // Same as your main content
+          margin: '0 auto',     // Center the container
+          padding: isMobile ? '0 1rem' : '0 2rem',  // Add padding inside
+          display: 'flex',
+          gap: '1rem',
           flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center', 
-          gap: responsiveStyles.smallGap,
-          marginBottom: responsiveStyles.smallGap
+          alignItems: isMobile ? 'flex-start' : 'center'
         }}>
-          <h1 style={{ 
-            ...responsiveStyles.heading1,
+          <h1 style={{
+            fontSize: isMobile ? '1.5rem' : '1.75rem',
+            fontWeight: 'bold',
             margin: 0,
-            flex: 1
+            marginBottom: isMobile ? '0.5rem' : '0'
           }}>
             {course.title_of_course}
           </h1>
-          <span style={{
-            backgroundColor: statusBadge.color,
-            color: 'white',
-            padding: '0.25rem 0.75rem',
-            borderRadius: '12px',
-            fontSize: responsiveStyles.small.fontSize,
-            alignSelf: isMobile ? 'flex-start' : 'center'
+          <div style={{
+            display: 'flex',
+            gap: '1rem',
+            alignItems: 'center',
+            flexWrap: 'wrap'
           }}>
-            {statusBadge.text}
-          </span>
+            <span style={{
+              backgroundColor: statusBadge.color,
+              color: 'white',
+              padding: '0.25rem 0.75rem',
+              borderRadius: '12px',
+              fontSize: '0.75rem',
+              whiteSpace: 'nowrap'
+            }}>
+              {statusBadge.text}
+            </span>
+          </div>
         </div>
-        <p style={{ 
-          fontSize: responsiveStyles.body.fontSize,
-          margin: 0,
-          opacity: 0.9,
-          lineHeight: responsiveStyles.body.lineHeight
+        <p style={{
+          maxWidth: '1400px',      // Same as your main content
+          margin: '0 auto',         // Center the container
+          padding: isMobile ? '0.5rem 1rem 0' : '0.5rem 2rem 0',  // Add padding inside
+          fontSize: isMobile ? '0.8rem' : '0.9rem',
+          opacity: 0.9
         }}>
           {course.description}
         </p>
       </div>
 
       {/* Enhanced Responsive Stats Bar */}
-      <div style={{ 
-        backgroundColor: '#2D2B6B', 
-        padding: `0 ${responsiveStyles.containerPadding} ${responsiveStyles.containerPadding}`
+      <div style={{
+        backgroundColor: '#212068',
+        padding: isMobile ? '1rem' : '0 2rem 2rem 2rem'
       }}>
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: responsiveStyles.statsGrid,
-          gap: responsiveStyles.elementGap, 
+        <div style={{
+          display: 'grid',
+          maxWidth: '1400px',
+          margin: '0 auto',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)',
+          gap: isMobile ? '1rem' : '2rem',
+          padding: isMobile ? '0 1rem' : '0 2rem',
           color: 'white'
         }}>
           <div>

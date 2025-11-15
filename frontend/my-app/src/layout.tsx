@@ -1342,11 +1342,11 @@ const [activeNavItem, setActiveNavItem] = useState(() => {
 
           {/* Page Content */}
           <div className="flex-grow-1" style={{ background: '#f8f9fa' }}>
-            <div className="container-fluid" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+            {/* <div className="container-fluid" style={{ maxWidth: '1400px', margin: '0 auto' }}> */}
               {/* <NavigationContext.Provider value={{ activeTab, activeNavItem, setActiveTab, setActiveNavItem }}> */}
               {children}
               {/* </NavigationContext.Provider> */}
-            </div>
+            {/* </div> */}
           </div>
         </div>
       </div>
