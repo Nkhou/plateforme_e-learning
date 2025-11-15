@@ -2,6 +2,189 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../api/api';
 
+// Add the notification types and interfaces from the second component
+export type NotificationType = "success" | "info" | "warning" | "error";
+
+type NotificationItem = {
+  id: number;
+  type: NotificationType;
+  title: string;
+  message: string;
+  duration: number;
+};
+
+type NotificationProps = {
+  type: NotificationType;
+  title: string;
+  message: string;
+  onClose: () => void;
+  duration?: number;
+};
+
+type NotificationContainerProps = {
+  notifications: NotificationItem[];
+  removeNotification: (id: number) => void;
+};
+
+// Notification Component
+const Notification: React.FC<NotificationProps> = ({
+  type = "success",
+  title,
+  message,
+  onClose,
+  duration = 5000,
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    if (duration > 0) {
+      const timer = setTimeout(() => handleClose(), duration);
+      return () => clearTimeout(timer);
+    }
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setIsVisible(false);
+      onClose();
+    }, 300);
+  };
+
+  if (!isVisible) return null;
+
+  const styles: Record<
+    NotificationType,
+    { titleColor: string; backgroundColor: string; borderColor: string }
+  > = {
+    success: {
+      titleColor: "#10B981",
+      backgroundColor: "#1F2937",
+      borderColor: "#10B981",
+    },
+    info: {
+      titleColor: "#3B82F6",
+      backgroundColor: "#1F2937",
+      borderColor: "#3B82F6",
+    },
+    warning: {
+      titleColor: "#F59E0B",
+      backgroundColor: "#1F2937",
+      borderColor: "#F59E0B",
+    },
+    error: {
+      titleColor: "#EF4444",
+      backgroundColor: "#1F2937",
+      borderColor: "#EF4444",
+    },
+  };
+
+  const currentStyle = styles[type];
+
+  return (
+    <div
+      style={{
+        backgroundColor: currentStyle.backgroundColor,
+        borderRadius: "12px",
+        padding: "20px 24px",
+        marginBottom: "16px",
+        width: "460px",
+        maxWidth: "90vw",
+        boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+        borderLeft: `4px solid ${currentStyle.borderColor}`,
+        animation: isExiting
+          ? "slideOut 0.3s ease-out forwards"
+          : "slideIn 0.3s ease-out",
+        position: "relative",
+      }}
+    >
+      <div style={{ marginBottom: "8px" }}>
+        <span
+          style={{
+            color: currentStyle.titleColor,
+            fontSize: "14px",
+            fontWeight: 600,
+            letterSpacing: "0.5px",
+          }}
+        >
+          {title}
+        </span>
+        <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+          •
+        </span>
+        <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+          {type === "success" && "Données enregistrées"}
+          {type === "info" && "Quelques informations à vous communiquer"}
+          {type === "warning" && "Attention à ce que vous avez fait"}
+          {type === "error" && "Informations non enregistrées, réessayer"}
+        </span>
+      </div>
+
+      <p
+        style={{
+          color: "#D1D5DB",
+          fontSize: "13px",
+          lineHeight: "1.6",
+          margin: "0 0 16px 0",
+        }}
+      >
+        {message}
+      </p>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={handleClose}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#F97316",
+            fontSize: "13px",
+            fontWeight: 500,
+            cursor: "pointer",
+            padding: "4px 8px",
+            transition: "opacity 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          Ok, fermer
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Notification Container Component
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+  notifications,
+  removeNotification,
+}) => (
+  <div
+    style={{
+      position: "fixed",
+      bottom: "24px",
+      left: "24px",
+      zIndex: 9999,
+      display: "flex",
+      flexDirection: "column-reverse",
+      gap: "0",
+    }}
+  >
+    {notifications.map((n) => (
+      <Notification
+        key={n.id}
+        type={n.type}
+        title={n.title}
+        message={n.message}
+        duration={n.duration}
+        onClose={() => removeNotification(n.id)}
+      />
+    ))}
+  </div>
+);
+
+// Rest of your existing interfaces...
 interface VideoContent {
   video_file: string;
   duration?: number;
@@ -91,6 +274,28 @@ interface Course {
 const CourseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  // Add notification state
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  // Add notification functions
+  const addNotification = (
+    type: NotificationType,
+    title: string,
+    message: string,
+    duration: number = 5000
+  ) => {
+    const notificationId = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id: notificationId, type, title, message, duration },
+    ]);
+  };
+
+  const removeNotification = (id: number) =>
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+
+  // Rest of your existing state...
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
@@ -386,8 +591,11 @@ const CourseDetail = () => {
         if (savedProgress) {
           setUserProgress(JSON.parse(savedProgress));
         }
+
+        addNotification("success", "Chargement réussi", "Les données du cours ont été chargées avec succès", 3000);
       } catch (error) {
         console.error('Error fetching course:', error);
+        addNotification("error", "Erreur de chargement", "Impossible de charger les données du cours", 5000);
       } finally {
         setLoading(false);
       }
@@ -524,7 +732,7 @@ const CourseDetail = () => {
         (userProgress.timeSpent[selectedContent.id] || 0) >= (selectedContent.min_required_time * 60);
 
       if (!hasMetTimeRequirement) {
-        alert(`Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`);
+        addNotification("warning", "Temps requis", `Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`);
         return;
       }
 
@@ -541,7 +749,7 @@ const CourseDetail = () => {
           return newProgress;
         });
 
-        alert('Contenu marqué comme terminé');
+        addNotification("success", "Contenu terminé", "Le contenu a été marqué comme terminé avec succès");
         setShowModal(false);
         setSelectedContent(null);
 
@@ -550,7 +758,7 @@ const CourseDetail = () => {
         setCourse(response.data);
       } catch (error) {
         console.error('Error marking content as completed:', error);
-        alert('Erreur lors de la mise à jour');
+        addNotification("error", "Erreur", "Erreur lors de la mise à jour du contenu");
       }
     }
   };
@@ -577,10 +785,10 @@ const CourseDetail = () => {
       const response = await api.get(`courses/${id}/`);
       setCourse(response.data);
 
-      alert('Statut du module mis à jour avec succès!');
+      addNotification("success", "Statut mis à jour", "Statut du module mis à jour avec succès!");
     } catch (error) {
       console.error('Failed to update module status:', error);
-      alert('Échec de mise à jour du statut du module.');
+      addNotification("error", "Erreur", "Échec de mise à jour du statut du module.");
     }
   };
 
@@ -589,7 +797,7 @@ const CourseDetail = () => {
     e.preventDefault();
 
     if (!id || !moduleForm.title.trim()) {
-      alert('Veuillez entrer un titre pour le module');
+      addNotification("warning", "Champ requis", "Veuillez entrer un titre pour le module");
       return;
     }
 
@@ -608,10 +816,10 @@ const CourseDetail = () => {
 
       setShowNewModuleModal(false);
       setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
-      alert('Module créé avec succès!');
+      addNotification("success", "Module créé", "Module créé avec succès!");
     } catch (error: any) {
       console.error('Failed to create module:', error);
-      alert(`Échec de création du module: ${error.response?.data?.message || error.message}`);
+      addNotification("error", "Erreur", `Échec de création du module: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -630,7 +838,7 @@ const CourseDetail = () => {
     e.preventDefault();
 
     if (!id || !editingModule || !moduleForm.title.trim()) {
-      alert('Veuillez entrer un titre pour le module');
+      addNotification("warning", "Champ requis", "Veuillez entrer un titre pour le module");
       return;
     }
 
@@ -648,10 +856,10 @@ const CourseDetail = () => {
       setShowEditModuleModal(false);
       setEditingModule(null);
       setModuleForm({ title: '', description: '', estimated_duration: undefined, min_required_time: undefined });
-      alert('Module mis à jour avec succès!');
+      addNotification("success", "Module mis à jour", "Module mis à jour avec succès!");
     } catch (error: any) {
       console.error('Failed to update module:', error);
-      alert(`Échec de mise à jour: ${error.response?.data?.message || error.message}`);
+      addNotification("error", "Erreur", `Échec de mise à jour: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -736,7 +944,7 @@ const CourseDetail = () => {
     e.preventDefault();
 
     if (!id || !editingContent || !contentForm.title.trim()) {
-      alert('Veuillez remplir tous les champs requis');
+      addNotification("warning", "Champs requis", "Veuillez remplir tous les champs requis");
       return;
     }
 
@@ -797,7 +1005,7 @@ const CourseDetail = () => {
       }
 
       if (!endpoint) {
-        alert(`Type de contenu non supporté: ${contentType}`);
+        addNotification("error", "Type non supporté", `Type de contenu non supporté: ${contentType}`);
         return;
       }
 
@@ -811,10 +1019,10 @@ const CourseDetail = () => {
       setShowEditContentModal(false);
       setEditingContent(null);
       resetContentForm();
-      alert('Contenu mis à jour avec succès!');
+      addNotification("success", "Contenu mis à jour", "Contenu mis à jour avec succès!");
     } catch (error: any) {
       console.error('Failed to update content:', error);
-      alert(`Échec de mise à jour du contenu: ${error.response?.data?.message || error.message}`);
+      addNotification("error", "Erreur", `Échec de mise à jour du contenu: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -823,7 +1031,7 @@ const CourseDetail = () => {
     e.preventDefault();
 
     if (!id || !selectedModule || !selectedContentType || !contentForm.title.trim()) {
-      alert('Veuillez remplir tous les champs requis');
+      addNotification("warning", "Champs requis", "Veuillez remplir tous les champs requis");
       return;
     }
 
@@ -833,7 +1041,7 @@ const CourseDetail = () => {
 
       if (selectedContentType === 'pdf') {
         if (!contentForm.file) {
-          alert('Veuillez sélectionner un fichier PDF');
+          addNotification("warning", "Fichier requis", "Veuillez sélectionner un fichier PDF");
           return;
         }
         endpoint = `courses/${id}/modules/${selectedModule}/contents/pdf/`;
@@ -848,7 +1056,7 @@ const CourseDetail = () => {
         requestData = formData;
       } else if (selectedContentType === 'video') {
         if (!contentForm.file) {
-          alert('Veuillez sélectionner un fichier vidéo');
+          addNotification("warning", "Fichier requis", "Veuillez sélectionner un fichier vidéo");
           return;
         }
         endpoint = `courses/${id}/modules/${selectedModule}/contents/video/`;
@@ -897,10 +1105,10 @@ const CourseDetail = () => {
       setSelectedContentType(null);
       setSelectedModule(null);
       resetContentForm();
-      alert('Contenu créé avec succès!');
+      addNotification("success", "Contenu créé", "Contenu créé avec succès!");
     } catch (error: any) {
       console.error('Failed to create content:', error);
-      alert(`Échec de création du contenu: ${error.response?.data?.message || error.message}`);
+      addNotification("error", "Erreur", `Échec de création du contenu: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -1000,10 +1208,10 @@ const CourseDetail = () => {
       setCourse(response.data);
 
       setShowContentMenu(null);
-      alert('Statut mis à jour avec succès!');
+      addNotification("success", "Statut mis à jour", "Statut mis à jour avec succès!");
     } catch (error) {
       console.error('Failed to update status:', error);
-      alert('Échec de mise à jour du statut.');
+      addNotification("error", "Erreur", "Échec de mise à jour du statut.");
     }
   };
 
@@ -1156,8 +1364,14 @@ const CourseDetail = () => {
       fontSize: responsiveStyles.body.fontSize,
       lineHeight: responsiveStyles.body.lineHeight
     }}>
+      {/* Notification Container */}
+      <NotificationContainer 
+        notifications={notifications} 
+        removeNotification={removeNotification} 
+      />
+
       {/* Enhanced Responsive Header */}
-       <div style={{
+      <div style={{
         backgroundColor: '#212068',
         color: 'white',
         padding: isMobile ? '1rem 0' : '1.5rem 0'
@@ -1208,6 +1422,7 @@ const CourseDetail = () => {
         </p>
       </div>
 
+      {/* Rest of your existing JSX remains the same... */}
       {/* Enhanced Responsive Stats Bar */}
       <div style={{
         backgroundColor: '#212068',
@@ -1995,6 +2210,7 @@ const CourseDetail = () => {
         </div>
       </div>
 
+      {/* All your existing modals remain the same... */}
       {/* Enhanced Content Viewer Modal */}
       {showModal && selectedContent && (
         <div style={{
@@ -2288,6 +2504,7 @@ const CourseDetail = () => {
         </div>
       )}
 
+      {/* All other modals (New Module, Edit Module, New Content, Edit Content) remain the same... */}
       {/* Enhanced New Module Modal */}
       {showNewModuleModal && (
         <div style={{
