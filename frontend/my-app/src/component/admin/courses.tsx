@@ -47,6 +47,211 @@ interface CoursesManagementProps {
   courses?: CourseData;
 }
 
+// Notification types and components
+export type NotificationType = "success" | "info" | "warning" | "error";
+
+type NotificationItem = {
+  id: number;
+  type: NotificationType;
+  title: string;
+  message: string;
+  duration: number;
+};
+
+type NotificationProps = {
+  type: NotificationType;
+  title: string;
+  message: string;
+  onClose: () => void;
+  duration?: number;
+};
+
+type NotificationContainerProps = {
+  notifications: NotificationItem[];
+  removeNotification: (id: number) => void;
+};
+
+const Notification: React.FC<NotificationProps> = ({
+  type = "success",
+  title,
+  message,
+  onClose,
+  duration = 5000,
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    if (duration > 0) {
+      const timer = setTimeout(() => handleClose(), duration);
+      return () => clearTimeout(timer);
+    }
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setIsVisible(false);
+      onClose();
+    }, 300);
+  };
+
+  if (!isVisible) return null;
+
+  const styles: Record<
+    NotificationType,
+    { titleColor: string; backgroundColor: string; borderColor: string }
+  > = {
+    success: {
+      titleColor: "#10B981",
+      backgroundColor: "#1F2937",
+      borderColor: "#10B981",
+    },
+    info: {
+      titleColor: "#3B82F6",
+      backgroundColor: "#1F2937",
+      borderColor: "#3B82F6",
+    },
+    warning: {
+      titleColor: "#F59E0B",
+      backgroundColor: "#1F2937",
+      borderColor: "#F59E0B",
+    },
+    error: {
+      titleColor: "#EF4444",
+      backgroundColor: "#1F2937",
+      borderColor: "#EF4444",
+    },
+  };
+
+  const currentStyle = styles[type];
+
+  return (
+    <div
+      style={{
+        backgroundColor: currentStyle.backgroundColor,
+        borderRadius: "12px",
+        padding: "20px 24px",
+        marginBottom: "16px",
+        width: "460px",
+        maxWidth: "90vw",
+        boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+        borderLeft: `4px solid ${currentStyle.borderColor}`,
+        animation: isExiting
+          ? "slideOut 0.3s ease-out forwards"
+          : "slideIn 0.3s ease-out",
+        position: "relative",
+      }}
+    >
+      <div style={{ marginBottom: "8px" }}>
+        <span
+          style={{
+            color: currentStyle.titleColor,
+            fontSize: "14px",
+            fontWeight: 600,
+            letterSpacing: "0.5px",
+          }}
+        >
+          {title}
+        </span>
+        <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+          •
+        </span>
+        <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+          {type === "success" && "Données enregistrées"}
+          {type === "info" && "Quelques informations à vous communiquer"}
+          {type === "warning" && "Attention à ce que vous avez fait"}
+          {type === "error" && "Informations non enregistrées, réessayer"}
+        </span>
+      </div>
+
+      <p
+        style={{
+          color: "#D1D5DB",
+          fontSize: "13px",
+          lineHeight: "1.6",
+          margin: "0 0 16px 0",
+        }}
+      >
+        {message}
+      </p>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={handleClose}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#F97316",
+            fontSize: "13px",
+            fontWeight: 500,
+            cursor: "pointer",
+            padding: "4px 8px",
+            transition: "opacity 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          Ok, fermer
+        </button>
+      </div>
+
+      {/* Add inline styles for animations */}
+      <style>{`
+        @keyframes slideIn {
+          from {
+            transform: translateX(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        
+        @keyframes slideOut {
+          from {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateX(-100%);
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+  notifications,
+  removeNotification,
+}) => (
+  <div
+    style={{
+      position: "fixed",
+      bottom: "24px",
+      left: "24px",
+      zIndex: 9999,
+      display: "flex",
+      flexDirection: "column-reverse",
+      gap: "0",
+    }}
+  >
+    {notifications.map((n) => (
+      <Notification
+        key={n.id}
+        type={n.type}
+        title={n.title}
+        message={n.message}
+        duration={n.duration}
+        onClose={() => removeNotification(n.id)}
+      />
+    ))}
+  </div>
+);
+
 const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialCourses }) => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseData>({
@@ -65,6 +270,9 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   const [currentCourseTitle, setCurrentCourseTitle] = useState<string>('');
   const [showNewCours, setShowNewCours] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  
+  // Add notifications state
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const DEPARTMENT_CHOICES = [
     { code: 'F', label: 'Finance' },
@@ -80,6 +288,25 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
     { value: 'Archivé', label: 'Archivé', color: '#6B7280', numeric: 2 }
   ];
 
+  // Notification functions
+  const addNotification = (
+    type: NotificationType,
+    title: string,
+    message: string,
+    duration: number = 5000
+  ) => {
+    const id = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id, type, title, message, duration },
+    ]);
+    console.log('Notification added:', { type, title, message, duration });
+  };
+
+  const removeNotification = (id: number) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -94,44 +321,43 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   }, []);
 
   // Fetch courses from backend
-  // In your fetchCourses function, add logging:
-const fetchCourses = async () => {
-  try {
-    setLoading(true);
-    setError(null);
-    
-    const response = await api.get('courses/');
-    console.log('API Response:', response.data);
-    
-    // ADD THIS DEBUG LOG
-    if (response.data && response.data.courses && response.data.courses.length > 0) {
-      console.log('First course data:', response.data.courses[0]);
-      console.log('Available properties:', Object.keys(response.data.courses[0]));
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await api.get('courses/');
+      console.log('API Response:', response.data);
+      
+      if (response.data && response.data.courses && response.data.courses.length > 0) {
+        console.log('First course data:', response.data.courses[0]);
+        console.log('Available properties:', Object.keys(response.data.courses[0]));
+      }
+      
+      // Handle different response structures
+      if (Array.isArray(response.data)) {
+        setCourses({
+          courses: response.data,
+          enrollment_stats: { labels: [], data: [] }
+        });
+      } else if (response.data && response.data.courses) {
+        setCourses(response.data);
+      } else {
+        console.warn('Unexpected API response structure:', response.data);
+        setCourses({
+          courses: [],
+          enrollment_stats: { labels: [], data: [] }
+        });
+      }
+    } catch (err: any) {
+      console.error('Error fetching courses:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to fetch courses';
+      setError(errorMessage);
+      addNotification('error', 'Erreur', errorMessage);
+    } finally {
+      setLoading(false);
     }
-    
-    // Handle different response structures
-    if (Array.isArray(response.data)) {
-      setCourses({
-        courses: response.data,
-        enrollment_stats: { labels: [], data: [] }
-      });
-    } else if (response.data && response.data.courses) {
-      setCourses(response.data);
-    } else {
-      console.warn('Unexpected API response structure:', response.data);
-      setCourses({
-        courses: [],
-        enrollment_stats: { labels: [], data: [] }
-      });
-    }
-  } catch (err: any) {
-    console.error('Error fetching courses:', err);
-    const errorMessage = err.response?.data?.error || err.message || 'Failed to fetch courses';
-    setError(errorMessage);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Fetch students for a specific course
   const fetchCourseStudents = async (courseId: number) => {
@@ -152,12 +378,12 @@ const fetchCourses = async () => {
         setCurrentCourseTitle(studentsResponse.course_title || '');
         setShowStudentsModal(courseId);
       } else {
-        alert('Aucun étudiant trouvé pour ce cours');
+        addNotification('warning', 'Information', 'Aucun étudiant trouvé pour ce cours');
       }
     } catch (err: any) {
       console.error('Error fetching students:', err);
       const errorMessage = err.response?.data?.error || 'Erreur lors du chargement des étudiants';
-      alert(errorMessage);
+      addNotification('error', 'Erreur', errorMessage);
     } finally {
       setStudentsLoading(null);
     }
@@ -168,13 +394,13 @@ const fetchCourses = async () => {
     try {
       const response = await api.post(`courses/${courseId}/subscribe/`);
       if (response.status === 200) {
-        alert('Inscription réussie !');
+        addNotification('success', 'Succès', 'Inscription réussie !');
         fetchCourses();
       }
     } catch (err: any) {
       console.error('Error subscribing to course:', err);
       const errorMessage = err.response?.data?.error || 'Erreur lors de l\'inscription au cours';
-      alert(errorMessage);
+      addNotification('error', 'Erreur', errorMessage);
     }
   };
 
@@ -257,14 +483,14 @@ const fetchCourses = async () => {
               : course
           )
         }));
-        alert('Statut mis à jour avec succès');
+        addNotification('success', 'Succès', 'Statut mis à jour avec succès');
       } else {
         throw new Error('Failed to update status');
       }
     } catch (err: any) {
       console.error('Error updating course status:', err);
       const errorMessage = err.response?.data?.error || 'Erreur lors de la mise à jour du statut';
-      alert(errorMessage);
+      addNotification('error', 'Erreur', errorMessage);
     } finally {
       setChangingStatus(null);
     }
@@ -288,7 +514,7 @@ const fetchCourses = async () => {
               ...prev,
               courses: prev.courses.filter(course => course.id !== courseId)
             }));
-            alert('Formation supprimée avec succès');
+            addNotification('success', 'Succès', 'Formation supprimée avec succès');
           } else {
             throw new Error('Failed to delete course');
           }
@@ -308,7 +534,7 @@ const fetchCourses = async () => {
         case 'duplicate':
           const duplicateResponse = await api.post(`courses/${courseId}/duplicate/`);
           if (duplicateResponse.status === 200 || duplicateResponse.status === 201) {
-            alert('Formation dupliquée avec succès');
+            addNotification('success', 'Succès', 'Formation dupliquée avec succès');
             fetchCourses();
           }
           break;
@@ -328,7 +554,7 @@ const fetchCourses = async () => {
       console.error('Error performing course action:', err);
       const errorMessage = err.response?.data?.error || err.message || 'Action failed';
       setError(errorMessage);
-      alert('Une erreur est survenue. Veuillez réessayer.');
+      addNotification('error', 'Erreur', 'Une erreur est survenue. Veuillez réessayer.');
     }
   };
 
@@ -401,13 +627,13 @@ const fetchCourses = async () => {
                 : course
             )
           }));
-          alert('Formation modifiée avec succès');
+          addNotification('success', 'Succès', 'Formation modifiée avec succès');
           setEditingCourse(null);
         }
       } catch (err: any) {
         console.error('Error updating course:', err);
         const errorMessage = err.response?.data?.error || 'Erreur lors de la modification de la formation';
-        alert(errorMessage);
+        addNotification('error', 'Erreur', errorMessage);
       } finally {
         setSaving(false);
       }
@@ -614,7 +840,7 @@ const fetchCourses = async () => {
     );
   };
 
-  // Students Modal Component - keeping original styling
+  // Students Modal Component
   const StudentsModal = () => {
     const students = studentsData;
 
@@ -861,6 +1087,12 @@ const fetchCourses = async () => {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Add Notification Container */}
+      <NotificationContainer 
+        notifications={notifications} 
+        removeNotification={removeNotification} 
+      />
+      
       {showStudentsModal && <StudentsModal />}
       {editingCourse && <EditCourseModal />}
       
@@ -1280,57 +1512,6 @@ const fetchCourses = async () => {
                                 >
                                   👁️ Voir les détails
                                 </button>
-                                {/* <button
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleCourseAction(course.id, 'duplicate');
-                                  }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.75rem 1rem',
-                                    textAlign: 'left',
-                                    border: 'none',
-                                    backgroundColor: 'transparent',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    color: '#374151',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    transition: 'background-color 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                  📋 Dupliquer
-                                </button>
-                                <hr style={{ margin: '0.25rem 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
-                                <button
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleCourseAction(course.id, 'delete');
-                                  }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.75rem 1rem',
-                                    textAlign: 'left',
-                                    border: 'none',
-                                    backgroundColor: 'transparent',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    color: '#DC2626',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    transition: 'background-color 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                  🗑️ Supprimer
-                                </button> */}
                               </div>
                             )}
                           </div>

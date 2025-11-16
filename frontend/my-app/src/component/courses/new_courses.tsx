@@ -1,13 +1,217 @@
 import React, { useState } from 'react';
-// import axios from "axios";
 import 'bootstrap/dist/css/bootstrap.min.css';
 import api from '../../api/api';
+
 interface NewCoursProps {
     onCourseCreated?: () => void;
 }
 
+// Notification types and components
+export type NotificationType = "success" | "info" | "warning" | "error";
+
+type NotificationItem = {
+    id: number;
+    type: NotificationType;
+    title: string;
+    message: string;
+    duration: number;
+};
+
+type NotificationProps = {
+    type: NotificationType;
+    title: string;
+    message: string;
+    onClose: () => void;
+    duration?: number;
+};
+
+type NotificationContainerProps = {
+    notifications: NotificationItem[];
+    removeNotification: (id: number) => void;
+};
+
+const Notification: React.FC<NotificationProps> = ({
+    type = "success",
+    title,
+    message,
+    onClose,
+    duration = 5000,
+}) => {
+    const [isVisible, setIsVisible] = useState(true);
+    const [isExiting, setIsExiting] = useState(false);
+
+    React.useEffect(() => {
+        if (duration > 0) {
+            const timer = setTimeout(() => handleClose(), duration);
+            return () => clearTimeout(timer);
+        }
+    }, [duration]);
+
+    const handleClose = () => {
+        setIsExiting(true);
+        setTimeout(() => {
+            setIsVisible(false);
+            onClose();
+        }, 300);
+    };
+
+    if (!isVisible) return null;
+
+    const styles: Record<
+        NotificationType,
+        { titleColor: string; backgroundColor: string; borderColor: string }
+    > = {
+        success: {
+            titleColor: "#10B981",
+            backgroundColor: "#1F2937",
+            borderColor: "#10B981",
+        },
+        info: {
+            titleColor: "#3B82F6",
+            backgroundColor: "#1F2937",
+            borderColor: "#3B82F6",
+        },
+        warning: {
+            titleColor: "#F59E0B",
+            backgroundColor: "#1F2937",
+            borderColor: "#F59E0B",
+        },
+        error: {
+            titleColor: "#EF4444",
+            backgroundColor: "#1F2937",
+            borderColor: "#EF4444",
+        },
+    };
+
+    const currentStyle = styles[type];
+
+    return (
+        <div
+            style={{
+                backgroundColor: currentStyle.backgroundColor,
+                borderRadius: "12px",
+                padding: "20px 24px",
+                marginBottom: "16px",
+                width: "460px",
+                maxWidth: "90vw",
+                boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+                borderLeft: `4px solid ${currentStyle.borderColor}`,
+                animation: isExiting
+                    ? "slideOut 0.3s ease-out forwards"
+                    : "slideIn 0.3s ease-out",
+                position: "relative",
+            }}
+        >
+            <div style={{ marginBottom: "8px" }}>
+                <span
+                    style={{
+                        color: currentStyle.titleColor,
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        letterSpacing: "0.5px",
+                    }}
+                >
+                    {title}
+                </span>
+                <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+                    •
+                </span>
+                <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+                    {type === "success" && "Données enregistrées"}
+                    {type === "info" && "Quelques informations à vous communiquer"}
+                    {type === "warning" && "Attention à ce que vous avez fait"}
+                    {type === "error" && "Informations non enregistrées, réessayer"}
+                </span>
+            </div>
+
+            <p
+                style={{
+                    color: "#D1D5DB",
+                    fontSize: "13px",
+                    lineHeight: "1.6",
+                    margin: "0 0 16px 0",
+                }}
+            >
+                {message}
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                    onClick={handleClose}
+                    style={{
+                        backgroundColor: "transparent",
+                        border: "none",
+                        color: "#F97316",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        padding: "4px 8px",
+                        transition: "opacity 0.2s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                    onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                >
+                    Ok, fermer
+                </button>
+            </div>
+
+            {/* Add inline styles for animations */}
+            <style>{`
+                @keyframes slideIn {
+                    from {
+                        transform: translateX(-100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                
+                @keyframes slideOut {
+                    from {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(-100%);
+                        opacity: 0;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+    notifications,
+    removeNotification,
+}) => (
+    <div
+        style={{
+            position: "fixed",
+            bottom: "24px",
+            left: "24px",
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column-reverse",
+            gap: "0",
+        }}
+    >
+        {notifications.map((n) => (
+            <Notification
+                key={n.id}
+                type={n.type}
+                title={n.title}
+                message={n.message}
+                duration={n.duration}
+                onClose={() => removeNotification(n.id)}
+            />
+        ))}
+    </div>
+);
+
 function NewCours({ onCourseCreated }: NewCoursProps) {
-    // const [toggle, setToggle] = useState(true);
     const [error, setError] = useState('');
     const [title, setTitle] = useState('');
     const [file, setFile] = useState<File | null>(null);
@@ -15,12 +219,36 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
     const [description, setDescription] = useState('');
     const [uploading, setUploading] = useState(false);
     const [success, setSuccess] = useState<string | null>(null);
+    
+    // Add notifications state
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+    // Notification functions
+    const addNotification = (
+        type: NotificationType,
+        title: string,
+        message: string,
+        duration: number = 5000
+    ) => {
+        const id = Date.now();
+        setNotifications((prev) => [
+            ...prev,
+            { id, type, title, message, duration },
+        ]);
+        console.log('Notification added:', { type, title, message, duration });
+    };
+
+    const removeNotification = (id: number) => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+    };
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
 
         if (!selectedFile) {
-            setError('No file selected.');
+            const errorMsg = 'No file selected.';
+            setError(errorMsg);
+            addNotification('warning', 'Attention', errorMsg);
             setFile(null);
             setImagePreview(null);
             return;
@@ -29,7 +257,9 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
         // Check file size (2MB limit)
         const maxSize = 2 * 1024 * 1024;
         if (selectedFile.size > maxSize) {
-            setError('File is too large. Maximum size is 2MB.');
+            const errorMsg = 'File is too large. Maximum size is 2MB.';
+            setError(errorMsg);
+            addNotification('error', 'Erreur', errorMsg);
             setFile(null);
             setImagePreview(null);
             return;
@@ -48,7 +278,9 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
             /\.(jpe?g|png|gif|webp|svg)$/i.test(selectedFile.name);
 
         if (!isImage) {
-            setError('Invalid file type. Only image files are allowed.');
+            const errorMsg = 'Invalid file type. Only image files are allowed.';
+            setError(errorMsg);
+            addNotification('error', 'Erreur', errorMsg);
             setFile(null);
             setImagePreview(null);
             return;
@@ -64,76 +296,85 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
             setImagePreview(reader.result as string);
         };
         reader.readAsDataURL(selectedFile);
+        
+        addNotification('success', 'Succès', 'Image sélectionnée avec succès', 3000);
     };
 
-   const uploadImageToDjango = async (imageFile: File): Promise<any> => {
-    const formData = new FormData();
-    formData.append('title_of_course', String(title));
-    formData.append('description', String(description));
-    formData.append('image', imageFile);
+    const uploadImageToDjango = async (imageFile: File): Promise<any> => {
+        const formData = new FormData();
+        formData.append('title_of_course', String(title));
+        formData.append('description', String(description));
+        formData.append('image', imageFile);
 
-    try {
-        const response = await api.post('courses/', formData);
-        return response;
-    } catch (error: any) {
-        console.error("Create course error:", error.response?.data || error.message);
-        
-        // ADD THIS TO SEE THE FULL RESPONSE
-        console.log("Full error response:", error.response);
-        console.log("Error data:", error.response?.data);
-        
-        let errorMessage = 'Failed to create course';
-        if (error.response?.data?.detail) {
-            errorMessage = error.response.data.detail;
-        } else if (error.response?.data?.error) {
-            errorMessage = error.response.data.error;
-        } else if (error.response?.data) {
-            const errorData = error.response.data;
-            if (typeof errorData === 'object') {
-                // Extract all error messages from serializer errors
-                const errorMessages: string[] = [];
-                Object.values(errorData).forEach((fieldErrors: any) => {
-                    if (Array.isArray(fieldErrors)) {
-                        errorMessages.push(...fieldErrors);
-                    } else if (typeof fieldErrors === 'string') {
-                        errorMessages.push(fieldErrors);
-                    } else if (typeof fieldErrors === 'object') {
-                        // Handle nested errors
-                        Object.values(fieldErrors).forEach((nestedError: any) => {
-                            if (Array.isArray(nestedError)) {
-                                errorMessages.push(...nestedError);
-                            } else if (typeof nestedError === 'string') {
-                                errorMessages.push(nestedError);
-                            }
-                        });
-                    }
-                });
-                errorMessage = errorMessages.join(', ') || 'Validation error';
-            } else {
-                errorMessage = String(errorData);
+        try {
+            const response = await api.post('courses/', formData);
+            return response;
+        } catch (error: any) {
+            console.error("Create course error:", error.response?.data || error.message);
+            
+            // ADD THIS TO SEE THE FULL RESPONSE
+            console.log("Full error response:", error.response);
+            console.log("Error data:", error.response?.data);
+            
+            let errorMessage = 'Failed to create course';
+            if (error.response?.data?.detail) {
+                errorMessage = error.response.data.detail;
+            } else if (error.response?.data?.error) {
+                errorMessage = error.response.data.error;
+            } else if (error.response?.data) {
+                const errorData = error.response.data;
+                if (typeof errorData === 'object') {
+                    // Extract all error messages from serializer errors
+                    const errorMessages: string[] = [];
+                    Object.values(errorData).forEach((fieldErrors: any) => {
+                        if (Array.isArray(fieldErrors)) {
+                            errorMessages.push(...fieldErrors);
+                        } else if (typeof fieldErrors === 'string') {
+                            errorMessages.push(fieldErrors);
+                        } else if (typeof fieldErrors === 'object') {
+                            // Handle nested errors
+                            Object.values(fieldErrors).forEach((nestedError: any) => {
+                                if (Array.isArray(nestedError)) {
+                                    errorMessages.push(...nestedError);
+                                } else if (typeof nestedError === 'string') {
+                                    errorMessages.push(nestedError);
+                                }
+                            });
+                        }
+                    });
+                    errorMessage = errorMessages.join(', ') || 'Validation error';
+                } else {
+                    errorMessage = String(errorData);
+                }
             }
+            
+            setError(errorMessage);
+            addNotification('error', 'Erreur', errorMessage);
+            throw error;
         }
-        
-        setError(errorMessage);
-        throw error;
-    }
-};
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!file) {
-            setError('Please select an image first');
+            const errorMsg = 'Please select an image first';
+            setError(errorMsg);
+            addNotification('warning', 'Attention', errorMsg);
             return;
         }
 
         if (!title.trim()) {
-            setError('Please enter a title');
+            const errorMsg = 'Please enter a title';
+            setError(errorMsg);
+            addNotification('warning', 'Attention', errorMsg);
             return;
         }
 
         if (!description.trim()) {
-            setError('Please enter a description');
+            const errorMsg = 'Please enter a description';
+            setError(errorMsg);
+            addNotification('warning', 'Attention', errorMsg);
             return;
         }
 
@@ -144,7 +385,10 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
 
             const result = await uploadImageToDjango(file);
             console.log('Upload successful:', result);
-            setSuccess('Course created successfully!');
+            
+            const successMsg = 'Course created successfully!';
+            setSuccess(successMsg);
+            addNotification('success', 'Succès', successMsg);
 
             setFile(null);
             setImagePreview(null);
@@ -158,6 +402,7 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
 
         } catch (error: any) {
             console.error('Upload failed:', error);
+            // Error notification is already handled in uploadImageToDjango
         } finally {
             setUploading(false);
         }
@@ -165,6 +410,12 @@ function NewCours({ onCourseCreated }: NewCoursProps) {
 
     return (
         <div className="container-fluid py-3 py-md-5" style={{ minHeight: '100vh', paddingBottom: '80px' }}>
+            {/* Add Notification Container */}
+            <NotificationContainer 
+                notifications={notifications} 
+                removeNotification={removeNotification} 
+            />
+            
             <div className="row justify-content-center mx-0">
                 <div className="col-12 col-sm-11 col-md-10 col-lg-8 col-xl-6">
                     <div className="card shadow-lg border-0">

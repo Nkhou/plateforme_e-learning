@@ -1902,3 +1902,5 @@ class NotificationUpdateSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['is_read']
 
+
+

@@ -5,7 +5,6 @@ import api from '../api/api';
 import CourseDetail from "../component/courses/formateur/CourseDetail";
 import CourseImage from '../component/courses/CourseImage';
 import { useNavigate } from 'react-router-dom';
-// import getimageUrl from '../component/courses/apprent/CourseDetailShow'
 
 interface Course {
     id: number;
@@ -19,11 +18,215 @@ interface Course {
     created_at?: string;
     updated_at?: string;
     subscriber_count?: number;
-    // module_count?: number;
-    module_count?:number;
+    module_count?: number;
     status?: any;
     department?: string;
 }
+
+// Notification types and components
+export type NotificationType = "success" | "info" | "warning" | "error";
+
+type NotificationItem = {
+    id: number;
+    type: NotificationType;
+    title: string;
+    message: string;
+    duration: number;
+};
+
+type NotificationProps = {
+    type: NotificationType;
+    title: string;
+    message: string;
+    onClose: () => void;
+    duration?: number;
+};
+
+type NotificationContainerProps = {
+    notifications: NotificationItem[];
+    removeNotification: (id: number) => void;
+};
+
+const Notification: React.FC<NotificationProps> = ({
+    type = "success",
+    title,
+    message,
+    onClose,
+    duration = 5000,
+}) => {
+    const [isVisible, setIsVisible] = useState(true);
+    const [isExiting, setIsExiting] = useState(false);
+
+    useEffect(() => {
+        if (duration > 0) {
+            const timer = setTimeout(() => handleClose(), duration);
+            return () => clearTimeout(timer);
+        }
+    }, [duration]);
+
+    const handleClose = () => {
+        setIsExiting(true);
+        setTimeout(() => {
+            setIsVisible(false);
+            onClose();
+        }, 300);
+    };
+
+    if (!isVisible) return null;
+
+    const styles: Record<
+        NotificationType,
+        { titleColor: string; backgroundColor: string; borderColor: string }
+    > = {
+        success: {
+            titleColor: "#10B981",
+            backgroundColor: "#1F2937",
+            borderColor: "#10B981",
+        },
+        info: {
+            titleColor: "#3B82F6",
+            backgroundColor: "#1F2937",
+            borderColor: "#3B82F6",
+        },
+        warning: {
+            titleColor: "#F59E0B",
+            backgroundColor: "#1F2937",
+            borderColor: "#F59E0B",
+        },
+        error: {
+            titleColor: "#EF4444",
+            backgroundColor: "#1F2937",
+            borderColor: "#EF4444",
+        },
+    };
+
+    const currentStyle = styles[type];
+
+    return (
+        <div
+            style={{
+                backgroundColor: currentStyle.backgroundColor,
+                borderRadius: "12px",
+                padding: "20px 24px",
+                marginBottom: "16px",
+                width: "460px",
+                maxWidth: "90vw",
+                boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+                borderLeft: `4px solid ${currentStyle.borderColor}`,
+                animation: isExiting
+                    ? "slideOut 0.3s ease-out forwards"
+                    : "slideIn 0.3s ease-out",
+                position: "relative",
+            }}
+        >
+            <div style={{ marginBottom: "8px" }}>
+                <span
+                    style={{
+                        color: currentStyle.titleColor,
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        letterSpacing: "0.5px",
+                    }}
+                >
+                    {title}
+                </span>
+                <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+                    •
+                </span>
+                <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+                    {type === "success" && "Données enregistrées"}
+                    {type === "info" && "Quelques informations à vous communiquer"}
+                    {type === "warning" && "Attention à ce que vous avez fait"}
+                    {type === "error" && "Informations non enregistrées, réessayer"}
+                </span>
+            </div>
+
+            <p
+                style={{
+                    color: "#D1D5DB",
+                    fontSize: "13px",
+                    lineHeight: "1.6",
+                    margin: "0 0 16px 0",
+                }}
+            >
+                {message}
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                    onClick={handleClose}
+                    style={{
+                        backgroundColor: "transparent",
+                        border: "none",
+                        color: "#F97316",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        padding: "4px 8px",
+                        transition: "opacity 0.2s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                    onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                >
+                    Ok, fermer
+                </button>
+            </div>
+
+            {/* Add inline styles for animations */}
+            <style>{`
+                @keyframes slideIn {
+                    from {
+                        transform: translateX(-100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                
+                @keyframes slideOut {
+                    from {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(-100%);
+                        opacity: 0;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+    notifications,
+    removeNotification,
+}) => (
+    <div
+        style={{
+            position: "fixed",
+            bottom: "24px",
+            left: "24px",
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column-reverse",
+            gap: "0",
+        }}
+    >
+        {notifications.map((n) => (
+            <Notification
+                key={n.id}
+                type={n.type}
+                title={n.title}
+                message={n.message}
+                duration={n.duration}
+                onClose={() => removeNotification(n.id)}
+            />
+        ))}
+    </div>
+);
 
 const Cours = () => {
     const [newProject, setNewProject] = useState(false);
@@ -38,6 +241,9 @@ const Cours = () => {
     const [openMenuId, setOpenMenuId] = useState<number | null>(null);
     const [changingStatus, setChangingStatus] = useState<number | null>(null);
     const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+    
+    // Add notifications state
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
     const DEPARTMENT_CHOICES = [
         { code: 'F', label: 'Finance' },
@@ -53,28 +259,49 @@ const Cours = () => {
         { value: 'Archivé', label: 'Archivé', color: '#6B7280', numeric: 2 }
     ];
     const BASE_URL = 'http://localhost:8000';
+
+    // Notification functions
+    const addNotification = (
+        type: NotificationType,
+        title: string,
+        message: string,
+        duration: number = 5000
+    ) => {
+        const id = Date.now();
+        setNotifications((prev) => [
+            ...prev,
+            { id, type, title, message, duration },
+        ]);
+        console.log('Notification added:', { type, title, message, duration });
+    };
+
+    const removeNotification = (id: number) => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+    };
+
     // Close dropdown when clicking outside
     const getimageUrl = (contentOrPath:  string | undefined): string | undefined => {
-    if (!contentOrPath) return undefined;
+        if (!contentOrPath) return undefined;
 
-    let imagePath: string | undefined;
+        let imagePath: string | undefined;
 
-    if (typeof contentOrPath === 'string') {
-      imagePath = contentOrPath;
-    } else {
-      imagePath = (contentOrPath as any).image_url;
-    }
+        if (typeof contentOrPath === 'string') {
+            imagePath = contentOrPath;
+        } else {
+            imagePath = (contentOrPath as any).image_url;
+        }
 
-    if (!imagePath) return undefined;
+        if (!imagePath) return undefined;
 
-    let url = imagePath.replace('http://backend:8000', BASE_URL);
+        let url = imagePath.replace('http://backend:8000', BASE_URL);
 
-    if (!url.startsWith('http')) {
-      url = `${BASE_URL}${url}`;
-    }
+        if (!url.startsWith('http')) {
+            url = `${BASE_URL}${url}`;
+        }
 
-    return url;
-  };
+        return url;
+    };
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
@@ -90,7 +317,7 @@ const Cours = () => {
     // Add the edit course handler
     const handleEditCourse = (courseId: number) => {
         console.log('Edit course requested:', courseId);
-        alert(`Edit course with ID: ${courseId}`);
+        addNotification('info', 'Modification', `Modification du cours avec ID: ${courseId}`);
     };
 
     // Fetch user's created courses
@@ -103,7 +330,9 @@ const Cours = () => {
             setError('');
         } catch (error: any) {
             console.error('Failed to fetch courses:', error);
-            setError('Failed to load your courses. Please check if the backend server is running.');
+            const errorMessage = 'Failed to load your courses. Please check if the backend server is running.';
+            setError(errorMessage);
+            addNotification('error', 'Erreur', errorMessage);
         } finally {
             setLoading(false);
         }
@@ -206,14 +435,14 @@ const Cours = () => {
                         ? { ...course, status: statusChoice.numeric }
                         : course
                 ));
-                alert('Statut mis à jour avec succès');
+                addNotification('success', 'Succès', 'Statut mis à jour avec succès');
             } else {
                 throw new Error('Failed to update status');
             }
         } catch (err: any) {
             console.error('Error updating course status:', err);
             const errorMessage = err.response?.data?.error || 'Erreur lors de la mise à jour du statut';
-            alert(errorMessage);
+            addNotification('error', 'Erreur', errorMessage);
         } finally {
             setChangingStatus(null);
         }
@@ -225,21 +454,6 @@ const Cours = () => {
         
         try {
             switch (action) {
-                // case 'delete':
-                //     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) {
-                //         return;
-                //     }
-                    
-                //     const deleteResponse = await api.delete(`courses/${courseId}/`);
-
-                //     if (deleteResponse.status === 200 || deleteResponse.status === 204) {
-                //         setMyCourses(prev => prev.filter(course => course.id !== courseId));
-                //         alert('Formation supprimée avec succès');
-                //     } else {
-                //         throw new Error('Failed to delete course');
-                //     }
-                //     break;
-
                 case 'edit':
                     const courseToEdit = myCourses.find(course => course.id === courseId);
                     if (courseToEdit) {
@@ -254,19 +468,17 @@ const Cours = () => {
                 case 'duplicate':
                     const duplicateResponse = await api.post(`courses/${courseId}/duplicate/`);
                     if (duplicateResponse.status === 200 || duplicateResponse.status === 201) {
-                        alert('Formation dupliquée avec succès');
+                        addNotification('success', 'Succès', 'Formation dupliquée avec succès');
                         fetchMyCourses();
                     }
                     break;
 
                 case 'show_students':
-                    // Implement show students functionality
-                    alert(`Afficher les étudiants pour le cours ${courseId}`);
+                    addNotification('info', 'Information', `Afficher les étudiants pour le cours ${courseId}`);
                     break;
 
                 case 'subscribe':
-                    // Implement subscribe functionality
-                    alert(`S'inscrire au cours ${courseId}`);
+                    addNotification('info', 'Information', `S'inscrire au cours ${courseId}`);
                     break;
 
                 default:
@@ -276,7 +488,7 @@ const Cours = () => {
             console.error('Error performing course action:', err);
             const errorMessage = err.response?.data?.error || err.message || 'Action failed';
             setError(errorMessage);
-            alert('Une erreur est survenue. Veuillez réessayer.');
+            addNotification('error', 'Erreur', 'Une erreur est survenue. Veuillez réessayer.');
         }
     };
 
@@ -331,13 +543,13 @@ const Cours = () => {
                             }
                             : course
                     ));
-                    alert('Formation modifiée avec succès');
+                    addNotification('success', 'Succès', 'Formation modifiée avec succès');
                     setEditingCourse(null);
                 }
             } catch (err: any) {
                 console.error('Error updating course:', err);
                 const errorMessage = err.response?.data?.error || 'Erreur lors de la modification de la formation';
-                alert(errorMessage);
+                addNotification('error', 'Erreur', errorMessage);
             } finally {
                 setSaving(false);
             }
@@ -565,6 +777,12 @@ const Cours = () => {
 
     return (
         <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+            {/* Add Notification Container */}
+            <NotificationContainer 
+                notifications={notifications} 
+                removeNotification={removeNotification} 
+            />
+            
             {editingCourse && <EditCourseModal />}
             
             {!newProject && !showCourseDetail ? (
@@ -709,7 +927,8 @@ const Cours = () => {
                                                 <td style={{ padding: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
                                                     {course.image_url ? (
                                                         <img
-                                                            src={getimageUrl(course.image_url)}                                                      alt={course.title_of_course}
+                                                            src={getimageUrl(course.image_url)}                                                      
+                                                            alt={course.title_of_course}
                                                             style={{
                                                                 width: '50px',
                                                                 height: '50px',
@@ -1001,57 +1220,6 @@ const Cours = () => {
                                                                 >
                                                                     👁️ Voir les détails
                                                                 </button>
-                                                                {/* <button
-                                                                    onClick={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        handleCourseAction(course.id, 'duplicate');
-                                                                    }}
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        padding: '0.75rem 1rem',
-                                                                        textAlign: 'left',
-                                                                        border: 'none',
-                                                                        backgroundColor: 'transparent',
-                                                                        cursor: 'pointer',
-                                                                        fontSize: '0.875rem',
-                                                                        color: '#374151',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '0.5rem',
-                                                                        transition: 'background-color 0.2s'
-                                                                    }}
-                                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
-                                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                                >
-                                                                    📋 Dupliquer
-                                                                </button>
-                                                                <hr style={{ margin: '0.25rem 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        handleCourseAction(course.id, 'delete');
-                                                                    }}
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        padding: '0.75rem 1rem',
-                                                                        textAlign: 'left',
-                                                                        border: 'none',
-                                                                        backgroundColor: 'transparent',
-                                                                        cursor: 'pointer',
-                                                                        fontSize: '0.875rem',
-                                                                        color: '#DC2626',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '0.5rem',
-                                                                        transition: 'background-color 0.2s'
-                                                                    }}
-                                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                                >
-                                                                    🗑️ Supprimer
-                                                                </button> */}
                                                             </div>
                                                         )}
                                                     </div>

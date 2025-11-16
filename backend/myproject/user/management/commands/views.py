@@ -75,3 +75,5 @@ class SystemHealthView(APIView):
             'labels': ['Auth', 'Courses', 'Content', 'QCM'],
             'data': [120, 250, 180, 300]  # response times in ms
         }
+
+
