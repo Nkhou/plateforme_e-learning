@@ -20,7 +20,8 @@ import CoursesManagement from '../component/admin/courses';
 import AnalyticsDashboard from '../component/admin/analytics';
 import ContentManagement from '../component/admin/content';
 import SystemHealth from '../component/admin/systems';
-import { NavigationContext } from '../layout'
+import { NavigationContext } from '../layout';
+import { createContext, useContext } from 'react';
 
 // Register ChartJS components
 ChartJS.register(
@@ -34,6 +35,188 @@ ChartJS.register(
   Tooltip,
   Legend,
   Filler
+);
+
+// Add notification types and interfaces
+export type NotificationType = "success" | "info" | "warning" | "error";
+
+type NotificationItem = {
+  id: number;
+  type: NotificationType;
+  title: string;
+  message: string;
+  duration: number;
+};
+
+type NotificationProps = {
+  type: NotificationType;
+  title: string;
+  message: string;
+  onClose: () => void;
+  duration?: number;
+};
+
+type NotificationContainerProps = {
+  notifications: NotificationItem[];
+  removeNotification: (id: number) => void;
+};
+
+// Notification Component
+const Notification: React.FC<NotificationProps> = ({
+  type = "success",
+  title,
+  message,
+  onClose,
+  duration = 5000,
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    if (duration > 0) {
+      const timer = setTimeout(() => handleClose(), duration);
+      return () => clearTimeout(timer);
+    }
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setIsVisible(false);
+      onClose();
+    }, 300);
+  };
+
+  if (!isVisible) return null;
+
+  const styles: Record<
+    NotificationType,
+    { titleColor: string; backgroundColor: string; borderColor: string }
+  > = {
+    success: {
+      titleColor: "#10B981",
+      backgroundColor: "#1F2937",
+      borderColor: "#10B981",
+    },
+    info: {
+      titleColor: "#3B82F6",
+      backgroundColor: "#1F2937",
+      borderColor: "#3B82F6",
+    },
+    warning: {
+      titleColor: "#F59E0B",
+      backgroundColor: "#1F2937",
+      borderColor: "#F59E0B",
+    },
+    error: {
+      titleColor: "#EF4444",
+      backgroundColor: "#1F2937",
+      borderColor: "#EF4444",
+    },
+  };
+
+  const currentStyle = styles[type];
+
+  return (
+    <div
+      style={{
+        backgroundColor: currentStyle.backgroundColor,
+        borderRadius: "12px",
+        padding: "20px 24px",
+        marginBottom: "16px",
+        width: "460px",
+        maxWidth: "90vw",
+        boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+        borderLeft: `4px solid ${currentStyle.borderColor}`,
+        animation: isExiting
+          ? "slideOut 0.3s ease-out forwards"
+          : "slideIn 0.3s ease-out",
+        position: "relative",
+      }}
+    >
+      <div style={{ marginBottom: "8px" }}>
+        <span
+          style={{
+            color: currentStyle.titleColor,
+            fontSize: "14px",
+            fontWeight: 600,
+            letterSpacing: "0.5px",
+          }}
+        >
+          {title}
+        </span>
+        <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+          •
+        </span>
+        <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+          {type === "success" && "Données enregistrées"}
+          {type === "info" && "Quelques informations à vous communiquer"}
+          {type === "warning" && "Attention à ce que vous avez fait"}
+          {type === "error" && "Informations non enregistrées, réessayer"}
+        </span>
+      </div>
+
+      <p
+        style={{
+          color: "#D1D5DB",
+          fontSize: "13px",
+          lineHeight: "1.6",
+          margin: "0 0 16px 0",
+        }}
+      >
+        {message}
+      </p>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={handleClose}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#F97316",
+            fontSize: "13px",
+            fontWeight: 500,
+            cursor: "pointer",
+            padding: "4px 8px",
+            transition: "opacity 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          Ok, fermer
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Notification Container Component
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+  notifications,
+  removeNotification,
+}) => (
+  <div
+    style={{
+      position: "fixed",
+      bottom: "24px",
+      left: "24px",
+      zIndex: 9999,
+      display: "flex",
+      flexDirection: "column-reverse",
+      gap: "0",
+    }}
+  >
+    {notifications.map((n) => (
+      <Notification
+        key={n.id}
+        type={n.type}
+        title={n.title}
+        message={n.message}
+        duration={n.duration}
+        onClose={() => removeNotification(n.id)}
+      />
+    ))}
+  </div>
 );
 
 interface AdminStats {
@@ -363,21 +546,28 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; 
     }}>{label}</span>
   </button>
 );
-import { createContext, useContext } from 'react';
-
-interface NavigationContextType {
-  activeTab: string;
-  activeNavItem: string;
-  setActiveTab: (tab: string) => void;
-  setActiveNavItem: (item: string) => void;
-}
-
-// const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
-// import { createContext, useContext } from 'react';
-// const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 
 const AdminDashboard: React.FC = () => {
-  // const { activeTab, activeNavItem } = useContext(NavigationContext);
+  // Add notification state
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  // Add notification functions
+  const addNotification = (
+    type: NotificationType,
+    title: string,
+    message: string,
+    duration: number = 5000
+  ) => {
+    const notificationId = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id: notificationId, type, title, message, duration },
+    ]);
+  };
+
+  const removeNotification = (id: number) =>
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserData | null>(null);
   const [courses, setCourses] = useState<CourseData | null>(null);
@@ -385,14 +575,14 @@ const AdminDashboard: React.FC = () => {
   const [contents, setContents] = useState<ContentData | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealthData | null>(null);
   const [loading, setLoading] = useState(true);
-  // const [activeTab, setActiveTab] = useState('overview');
-  // const [activeNavItem, setActiveNavItem] = useState('dashboard');
-const context = useContext(NavigationContext);
-if (!context) {
-  throw new Error("useContext must be used within a NavigationProvider");
-}
+  
+  const context = useContext(NavigationContext);
+  if (!context) {
+    throw new Error("useContext must be used within a NavigationProvider");
+  }
 
-const { activeTab, activeNavItem } = context;
+  const { activeTab, activeNavItem } = context;
+
   useEffect(() => {
     fetchData(activeNavItem === 'dashboard' ? activeTab : activeNavItem);
   }, [activeTab, activeNavItem]);
@@ -406,45 +596,45 @@ const { activeTab, activeNavItem } = context;
         case 'overview':
           response = await api.get('admin/dashboard/');
           setStats(response.data);
+          addNotification("success", "Données chargées", "Les données du tableau de bord ont été chargées avec succès", 3000);
           break;
         case 'analytics':
           response = await api.get('admin/analytics/');
           setAnalytics(response.data);
+          addNotification("success", "Analytics chargés", "Les données analytiques ont été chargées avec succès", 3000);
           break;
         case 'system':
           response = await api.get('admin/system-health/');
           setSystemHealth(response.data);
+          addNotification("success", "Santé système chargée", "Les données de santé du système ont été chargées avec succès", 3000);
           break;
         case 'users':
         case 'utilisateurs':
           response = await api.get('admin/users/');
           setUsers(response.data);
+          addNotification("success", "Utilisateurs chargés", "Les données des utilisateurs ont été chargées avec succès", 3000);
           break;
         case 'courses':
         case 'formations':
           response = await api.get('admin/courses/');
           setCourses(response.data);
+          addNotification("success", "Formations chargées", "Les données des formations ont été chargées avec succès", 3000);
           break;
         case 'contents':
           response = await api.get('admin/contents/');
           setContents(response.data);
+          addNotification("success", "Contenus chargés", "Les données des contenus ont été chargées avec succès", 3000);
           break;
         default:
           break;
       }
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
+      addNotification("error", "Erreur de chargement", "Impossible de charger les données. Veuillez réessayer.", 5000);
     } finally {
       setLoading(false);
     }
   };
-
-  // const handleNavigation = (item: string) => {
-  //   setActiveNavItem(item);
-  //   if (item === 'dashboard') {
-  //     setActiveTab('overview');
-  //   }
-  // };
 
   const getSafeNumber = (value: any, defaultValue: number = 0): number => {
     if (typeof value === 'number') return value;
@@ -467,26 +657,26 @@ const { activeTab, activeNavItem } = context;
   }
 
   const userRegistrationData = {
-  labels: stats?.user_registration_chart?.labels || [],
-  datasets: [{
-    label: 'Nouveaux utilisateurs',
-    data: stats?.user_registration_chart?.data || [],
-    backgroundColor: '#818CF8',
-    borderRadius: 4,
-    barThickness: 'flex' as const, // Add 'as const' to fix the type issue
-  }]
-};
+    labels: stats?.user_registration_chart?.labels || [],
+    datasets: [{
+      label: 'Nouveaux utilisateurs',
+      data: stats?.user_registration_chart?.data || [],
+      backgroundColor: '#818CF8',
+      borderRadius: 4,
+      barThickness: 'flex' as const,
+    }]
+  };
 
   const dauData = stats?.dau_weekly ? {
-  labels: stats.dau_weekly.labels,
-  datasets: [{
-    label: 'DAU',
-    data: stats.dau_weekly.data,
-    backgroundColor: '#818CF8',
-    borderRadius: 4,
-    barThickness: 'flex' as const, // Add 'as const' to fix the type issue
-  }]
-} : null;
+    labels: stats.dau_weekly.labels,
+    datasets: [{
+      label: 'DAU',
+      data: stats.dau_weekly.data,
+      backgroundColor: '#818CF8',
+      borderRadius: 4,
+      barThickness: 'flex' as const,
+    }]
+  } : null;
 
   const userDistributionData = {
     labels: stats?.user_distribution?.map(d => getSafeString(d.privilege)) || [],
@@ -585,93 +775,15 @@ const { activeTab, activeNavItem } = context;
 
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
-      {/* Breadcrumb and Title Header */}
-      {/* <div style={{ 
-        backgroundColor: '#212068', 
-        color: 'white', 
-        padding: '1rem clamp(1rem, 3vw, 2rem)'
-      }}>
-        <div style={{ 
-          fontSize: '0.75rem', 
-          marginBottom: '0.5rem', 
-          opacity: 0.9,
-          wordWrap: 'break-word'
-        }}>
-          Main {'>'} <span style={{ color: '#FCD34D', fontWeight: '500' }}>{getBreadcrumb()}</span>
-        </div>
-        <h1 style={{ 
-          fontSize: 'clamp(1.25rem, 4vw, 1.75rem)', 
-          fontWeight: 'bold', 
-          margin: 0, 
-          letterSpacing: '-0.025em',
-          lineHeight: '1.2'
-        }}>
-          {getPageTitle()}
-        </h1> */}
-        {/* {activeNavItem !== 'dashboard' && (
-          <p style={{ 
-            fontSize: '0.875rem', 
-            marginTop: '0.5rem', 
-            marginBottom: 0, 
-            opacity: 0.9,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden'
-          }}>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
-          </p>
-        )}
-      </div> */}
+      {/* Notification Container */}
+      <NotificationContainer 
+        notifications={notifications} 
+        removeNotification={removeNotification} 
+      />
 
       {/* Dashboard Content */}
       {activeNavItem === 'dashboard' && stats && (
         <>
-          {/* <div style={{ 
-            backgroundColor: '#212068', 
-            padding: '1.5rem 1rem',
-            color: 'white' 
-          }}>
-            <StatCardsSection stats={stats} />
-          </div>
-
-          <div style={{ 
-            backgroundColor: 'white', 
-            padding: '0 clamp(1rem, 3vw, 2rem)', 
-            borderBottom: '1px solid #E5E7EB',
-            overflowX: 'auto'
-          }}> */}
-            {/* <div style={{ 
-              display: 'flex', 
-              gap: 'clamp(1rem, 3vw, 2.5rem)', 
-              maxWidth: '1400px', 
-              margin: '0 auto',
-              minWidth: 'min-content'
-            }}> */}
-              {/* {['overview', 'analytics', 'system'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: '1rem 0',
-                    fontSize: 'clamp(0.85rem, 2vw, 0.95rem)',
-                    fontWeight: activeTab === tab ? '600' : '500',
-                    color: activeTab === tab ? '#4338CA' : '#6B7280',
-                    borderBottom: activeTab === tab ? '3px solid #4338CA' : '3px solid transparent',
-                    cursor: 'pointer',
-                    textTransform: 'capitalize',
-                    whiteSpace: 'nowrap',
-                    minWidth: 'max-content'
-                  }}
-                >
-                  {tab === 'overview' ? 'Overview' : tab === 'analytics' ? 'Analytics' : 'System'}
-                </button>
-              ))} */}
-            {/* </div> */}
-          {/* </div> */}
-
           <div style={{ 
             padding: '1.5rem clamp(1rem, 3vw, 2rem)', 
             maxWidth: '1400px', 

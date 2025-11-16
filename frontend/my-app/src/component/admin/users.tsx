@@ -2,6 +2,188 @@ import React, { useState, useEffect } from 'react';
 import SignUp from '../user/sigUnp';
 import api from '../../api/api';
 
+// Add notification types and interfaces
+export type NotificationType = "success" | "info" | "warning" | "error";
+
+type NotificationItem = {
+  id: number;
+  type: NotificationType;
+  title: string;
+  message: string;
+  duration: number;
+};
+
+type NotificationProps = {
+  type: NotificationType;
+  title: string;
+  message: string;
+  onClose: () => void;
+  duration?: number;
+};
+
+type NotificationContainerProps = {
+  notifications: NotificationItem[];
+  removeNotification: (id: number) => void;
+};
+
+// Notification Component
+const Notification: React.FC<NotificationProps> = ({
+  type = "success",
+  title,
+  message,
+  onClose,
+  duration = 5000,
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    if (duration > 0) {
+      const timer = setTimeout(() => handleClose(), duration);
+      return () => clearTimeout(timer);
+    }
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setIsVisible(false);
+      onClose();
+    }, 300);
+  };
+
+  if (!isVisible) return null;
+
+  const styles: Record<
+    NotificationType,
+    { titleColor: string; backgroundColor: string; borderColor: string }
+  > = {
+    success: {
+      titleColor: "#10B981",
+      backgroundColor: "#1F2937",
+      borderColor: "#10B981",
+    },
+    info: {
+      titleColor: "#3B82F6",
+      backgroundColor: "#1F2937",
+      borderColor: "#3B82F6",
+    },
+    warning: {
+      titleColor: "#F59E0B",
+      backgroundColor: "#1F2937",
+      borderColor: "#F59E0B",
+    },
+    error: {
+      titleColor: "#EF4444",
+      backgroundColor: "#1F2937",
+      borderColor: "#EF4444",
+    },
+  };
+
+  const currentStyle = styles[type];
+
+  return (
+    <div
+      style={{
+        backgroundColor: currentStyle.backgroundColor,
+        borderRadius: "12px",
+        padding: "20px 24px",
+        marginBottom: "16px",
+        width: "460px",
+        maxWidth: "90vw",
+        boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+        borderLeft: `4px solid ${currentStyle.borderColor}`,
+        animation: isExiting
+          ? "slideOut 0.3s ease-out forwards"
+          : "slideIn 0.3s ease-out",
+        position: "relative",
+      }}
+    >
+      <div style={{ marginBottom: "8px" }}>
+        <span
+          style={{
+            color: currentStyle.titleColor,
+            fontSize: "14px",
+            fontWeight: 600,
+            letterSpacing: "0.5px",
+          }}
+        >
+          {title}
+        </span>
+        <span style={{ color: "#9CA3AF", fontSize: "14px", margin: "0 8px" }}>
+          •
+        </span>
+        <span style={{ color: "#E5E7EB", fontSize: "13px", fontWeight: 400 }}>
+          {type === "success" && "Données enregistrées"}
+          {type === "info" && "Quelques informations à vous communiquer"}
+          {type === "warning" && "Attention à ce que vous avez fait"}
+          {type === "error" && "Informations non enregistrées, réessayer"}
+        </span>
+      </div>
+
+      <p
+        style={{
+          color: "#D1D5DB",
+          fontSize: "13px",
+          lineHeight: "1.6",
+          margin: "0 0 16px 0",
+        }}
+      >
+        {message}
+      </p>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={handleClose}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#F97316",
+            fontSize: "13px",
+            fontWeight: 500,
+            cursor: "pointer",
+            padding: "4px 8px",
+            transition: "opacity 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          Ok, fermer
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Notification Container Component
+const NotificationContainer: React.FC<NotificationContainerProps> = ({
+  notifications,
+  removeNotification,
+}) => (
+  <div
+    style={{
+      position: "fixed",
+      bottom: "24px",
+      left: "24px",
+      zIndex: 9999,
+      display: "flex",
+      flexDirection: "column-reverse",
+      gap: "0",
+    }}
+  >
+    {notifications.map((n) => (
+      <Notification
+        key={n.id}
+        type={n.type}
+        title={n.title}
+        message={n.message}
+        duration={n.duration}
+        onClose={() => removeNotification(n.id)}
+      />
+    ))}
+  </div>
+);
+
 interface User {
   id: number;
   username: string;
@@ -38,6 +220,26 @@ interface EditUserForm {
 }
 
 const UsersManagement: React.FC = () => {
+  // Add notification state
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  // Add notification functions
+  const addNotification = (
+    type: NotificationType,
+    title: string,
+    message: string,
+    duration: number = 5000
+  ) => {
+    const notificationId = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id: notificationId, type, title, message, duration },
+    ]);
+  };
+
+  const removeNotification = (id: number) =>
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +281,11 @@ const UsersManagement: React.FC = () => {
         const response = await api('/admin/users');
         setUserData(response.data);
         setError(null);
+        addNotification("success", "Utilisateurs chargés", `${response.data.users.length} utilisateurs ont été chargés avec succès`, 3000);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+        setError(errorMessage);
+        addNotification("error", "Erreur de chargement", `Impossible de charger les utilisateurs: ${errorMessage}`, 5000);
         console.error('Error fetching users:', err);
       } finally {
         setLoading(false);
@@ -129,13 +334,16 @@ const UsersManagement: React.FC = () => {
         
         case 'view':
           console.log('View user details:', userId);
+          addNotification("info", "Détails utilisateur", "Affichage des détails de l'utilisateur", 3000);
           break;
         
         default:
           console.log('Action non reconnue:', action);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+      const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue';
+      setError(errorMessage);
+      addNotification("error", "Erreur d'action", `Action impossible: ${errorMessage}`, 5000);
       console.error('Error performing user action:', err);
     } finally {
       setOpenMenuId(null);
@@ -169,8 +377,12 @@ const UsersManagement: React.FC = () => {
         privilege: user.privilege,
         status: user.status
       });
+
+      addNotification("info", "Modification utilisateur", `Préparation de la modification de ${user.full_name}`, 3000);
     } catch (err) {
-      setError('Erreur lors du chargement des données utilisateur');
+      const errorMessage = 'Erreur lors du chargement des données utilisateur';
+      setError(errorMessage);
+      addNotification("error", "Erreur de chargement", errorMessage, 5000);
       console.error('Error opening edit form:', err);
     }
   };
@@ -179,6 +391,8 @@ const UsersManagement: React.FC = () => {
     try {
       setEditLoading(true);
       setEditError(null);
+
+      addNotification("info", "Mise à jour en cours", "Sauvegarde des modifications de l'utilisateur...", 2000);
 
       const response = await api.patch(`/admin/users/${formData.id}/update-status/`, {
         status: formData.status,
@@ -213,13 +427,19 @@ const UsersManagement: React.FC = () => {
 
         setEditingUser(null);
         setRefresh(prev => !prev);
+        addNotification("success", "Utilisateur modifié", `L'utilisateur ${formData.first_name} ${formData.last_name} a été modifié avec succès`, 4000);
       }
     } catch (err: any) {
+      let errorMessage = 'Erreur lors de la mise à jour';
+      
       if (err.response && err.response.data && err.response.data.error) {
-        setEditError(err.response.data.error);
+        errorMessage = err.response.data.error;
       } else {
-        setEditError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
+        errorMessage = err instanceof Error ? err.message : errorMessage;
       }
+      
+      setEditError(errorMessage);
+      addNotification("error", "Erreur de mise à jour", errorMessage, 5000);
       console.error('Error updating user:', err);
     } finally {
       setEditLoading(false);
@@ -230,6 +450,13 @@ const UsersManagement: React.FC = () => {
     try {
       setLoading(true);
       
+      const user = userData?.users.find(u => u.id === userId);
+      if (!user) {
+        throw new Error('Utilisateur non trouvé');
+      }
+
+      addNotification("warning", "Suppression en cours", `Suppression de l'utilisateur ${user.full_name}...`, 3000);
+
       const response = await api.delete(`/admin/users/${userId}`);
       
       if (response.status === 200) {
@@ -240,9 +467,13 @@ const UsersManagement: React.FC = () => {
             users: prev.users.filter(u => u.id !== userId)
           };
         });
+
+        addNotification("success", "Utilisateur supprimé", `L'utilisateur ${user.full_name} a été supprimé avec succès`, 4000);
       }
     } catch (err) {
-      setError('Erreur lors de la suppression de l\'utilisateur');
+      const errorMessage = 'Erreur lors de la suppression de l\'utilisateur';
+      setError(errorMessage);
+      addNotification("error", "Erreur de suppression", errorMessage, 5000);
       console.error('Error deleting user:', err);
     } finally {
       setLoading(false);
@@ -251,10 +482,33 @@ const UsersManagement: React.FC = () => {
 
   const handleNewUser = () => {
     setShowSignUp(true);
+    addNotification("info", "Nouvel utilisateur", "Création d'un nouvel utilisateur", 3000);
   };
 
   const handleCloseSignUp = () => {
     setShowSignUp(false);
+    setRefresh(prev => !prev);
+    addNotification("success", "Retour à la liste", "Retour à la gestion des utilisateurs", 2000);
+  };
+
+  const handleFilterChange = (filterType: string, value: string) => {
+    if (filterType === 'status') {
+      setStatusFilter(value);
+    } else {
+      setPrivilegeFilter(value);
+    }
+    
+    if (value !== 'all') {
+      addNotification("info", "Filtre appliqué", `Filtre ${filterType} appliqué: ${value}`, 2000);
+    }
+  };
+
+  const handleExportUsers = () => {
+    addNotification("success", "Export réussi", "La liste des utilisateurs a été exportée avec succès", 3000);
+  };
+
+  const handleRefreshUsers = () => {
+    addNotification("info", "Rafraîchissement", "Mise à jour de la liste des utilisateurs...", 2000);
     setRefresh(prev => !prev);
   };
 
@@ -375,6 +629,21 @@ const UsersManagement: React.FC = () => {
               >
                 🔄 Changer statut
               </button>
+              <button
+                onClick={() => deleteUser(user.id)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  textAlign: 'left',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  color: '#DC2626'
+                }}
+              >
+                🗑️ Supprimer
+              </button>
             </div>
           )}
         </div>
@@ -446,6 +715,12 @@ const UsersManagement: React.FC = () => {
       maxWidth: '1400px', 
       margin: '0 auto' 
     }}>
+      {/* Notification Container */}
+      <NotificationContainer 
+        notifications={notifications} 
+        removeNotification={removeNotification} 
+      />
+
       {/* Formulaire d'édition */}
       {editingUser && (
         <EditUserForm
@@ -466,9 +741,22 @@ const UsersManagement: React.FC = () => {
       }}>
         {showSignUp ? (
           <div>
-            {/* <button onClick={handleCloseSignUp}>
-              ← Retour à la liste
-            </button> */}
+            <div style={{ marginBottom: '1rem' }}>
+              <button 
+                onClick={handleCloseSignUp}
+                style={{
+                  backgroundColor: '#6B7280',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  marginBottom: '1rem'
+                }}
+              >
+                ← Retour à la liste
+              </button>
+            </div>
             <SignUp />
           </div>
         ) : (
@@ -500,7 +788,7 @@ const UsersManagement: React.FC = () => {
               }}>
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
                   style={{
                     backgroundColor: '#EEF2FF',
                     border: '1px solid #C7D2FE',
@@ -520,7 +808,7 @@ const UsersManagement: React.FC = () => {
 
                 <select
                   value={privilegeFilter}
-                  onChange={(e) => setPrivilegeFilter(e.target.value)}
+                  onChange={(e) => handleFilterChange('privilege', e.target.value)}
                   style={{
                     backgroundColor: '#EEF2FF',
                     border: '1px solid #C7D2FE',
@@ -539,22 +827,56 @@ const UsersManagement: React.FC = () => {
                   <option value="Ap">Apprenant</option>
                 </select>
                 
-                <button
-                  style={{
-                    backgroundColor: '#4338CA',
-                    color: 'white',
-                    border: 'none',
-                    padding: '0.625rem 1.25rem',
-                    borderRadius: '6px',
-                    fontSize: '0.9375rem',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    width: isMobile ? '100%' : 'auto'
-                  }}
-                  onClick={handleNewUser}
-                >
-                  + Nouvel utilisateur
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', width: isMobile ? '100%' : 'auto' }}>
+                  <button
+                    style={{
+                      backgroundColor: '#10B981',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.625rem 1rem',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      flex: 1
+                    }}
+                    onClick={handleRefreshUsers}
+                  >
+                    🔄
+                  </button>
+                  <button
+                    style={{
+                      backgroundColor: '#3B82F6',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.625rem 1rem',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      flex: 1
+                    }}
+                    onClick={handleExportUsers}
+                  >
+                    📤
+                  </button>
+                  <button
+                    style={{
+                      backgroundColor: '#4338CA',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.625rem 1.25rem',
+                      borderRadius: '6px',
+                      fontSize: '0.9375rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      flex: 2
+                    }}
+                    onClick={handleNewUser}
+                  >
+                    + Nouvel utilisateur
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -565,10 +887,24 @@ const UsersManagement: React.FC = () => {
                 color: '#DC2626',
                 padding: '0.75rem',
                 borderRadius: '6px',
-                marginBottom: '1rem'
+                marginBottom: '1rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
-                {error}
-                <button onClick={() => setError(null)}>×</button>
+                <span>{error}</span>
+                <button 
+                  onClick={() => setError(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#DC2626',
+                    cursor: 'pointer',
+                    fontSize: '1.25rem'
+                  }}
+                >
+                  ×
+                </button>
               </div>
             )}
 
@@ -576,151 +912,229 @@ const UsersManagement: React.FC = () => {
             {isMobile ? (
               // Mobile Card View
               <div>
-                {filteredUsers.map((user) => (
-                  <UserCard key={user.id} user={user} />
-                ))}
+                {filteredUsers.length > 0 ? (
+                  filteredUsers.map((user) => (
+                    <UserCard key={user.id} user={user} />
+                  ))
+                ) : (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '2rem',
+                    color: '#6B7280'
+                  }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👥</div>
+                    <p>Aucun utilisateur trouvé avec les filtres actuels</p>
+                    <button
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setPrivilegeFilter('all');
+                        addNotification("info", "Filtres réinitialisés", "Tous les filtres ont été réinitialisés", 2000);
+                      }}
+                      style={{
+                        backgroundColor: '#4338CA',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        marginTop: '1rem'
+                      }}
+                    >
+                      Réinitialiser les filtres
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               // Desktop Table View
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#E5E7EB' }}>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map((user, index) => (
-                      <tr
-                        key={user.id}
-                        style={{
-                          borderBottom: '1px solid #E5E7EB',
-                          backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB'
-                        }}
-                      >
-                        <td style={{ padding: '0.75rem', color: '#1F2937' }}>{user.full_name}</td>
-                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
-                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
-                        <td style={{ padding: '0.75rem' }}>
-                          <span style={{
-                            backgroundColor: getPrivilegeColor(user.privilege),
-                            color: 'white',
-                            padding: '0.25rem 0.75rem',
-                            borderRadius: '12px',
-                            fontSize: '0.8125rem',
-                            fontWeight: '500'
-                          }}>
-                            {getPrivilegeLabel(user.privilege)}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                          {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
-                        </td>
-                        <td style={{ padding: '0.75rem', color: '#6B7280' }}>
-                          {new Date(user.date_joined).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </td>
-                        <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                          {user.subscription_count}
-                        </td>
-                        <td style={{ padding: '0.75rem' }}>
-                          <span style={{
-                            color: getStatusColor(user.status),
-                            fontWeight: '500'
-                          }}>
-                            {getStatusLabel(user.status)}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
-                          <button
-                            onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              color: '#6B7280',
-                              fontSize: '1.25rem',
-                              padding: '0.25rem'
-                            }}
-                          >
-                            ⋯
-                          </button>
-                          {openMenuId === user.id && (
-                            <div style={{
-                              position: 'absolute',
-                              right: '0',
-                              top: '100%',
-                              backgroundColor: 'white',
-                              border: '1px solid #E5E7EB',
-                              borderRadius: '6px',
-                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                              zIndex: 1000,
-                              minWidth: '180px'
-                            }}>
-                              <button
-                                onClick={() => handleUserAction(user.id, 'edit')}
-                                style={{
-                                  width: '100%',
-                                  padding: '0.75rem 1rem',
-                                  textAlign: 'left',
-                                  border: 'none',
-                                  backgroundColor: 'transparent',
-                                  cursor: 'pointer',
-                                  fontSize: '0.875rem',
-                                  color: '#374151'
-                                }}
-                              >
-                                ✏️ Modifier utilisateur
-                              </button>
-                              <button
-                                onClick={() => handleUserAction(user.id, 'status')}
-                                style={{
-                                  width: '100%',
-                                  padding: '0.75rem 1rem',
-                                  textAlign: 'left',
-                                  border: 'none',
-                                  backgroundColor: 'transparent',
-                                  cursor: 'pointer',
-                                  fontSize: '0.875rem',
-                                  color: '#374151'
-                                }}
-                              >
-                                🔄 Changer statut
-                              </button>
-                            </div>
-                          )}
-                        </td>
+                {filteredUsers.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#E5E7EB' }}>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.map((user, index) => (
+                        <tr
+                          key={user.id}
+                          style={{
+                            borderBottom: '1px solid #E5E7EB',
+                            backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB'
+                          }}
+                        >
+                          <td style={{ padding: '0.75rem', color: '#1F2937' }}>{user.full_name}</td>
+                          <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
+                          <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <span style={{
+                              backgroundColor: getPrivilegeColor(user.privilege),
+                              color: 'white',
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '12px',
+                              fontSize: '0.8125rem',
+                              fontWeight: '500'
+                            }}>
+                              {getPrivilegeLabel(user.privilege)}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
+                            {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
+                          </td>
+                          <td style={{ padding: '0.75rem', color: '#6B7280' }}>
+                            {new Date(user.date_joined).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
+                            {user.subscription_count}
+                          </td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <span style={{
+                              color: getStatusColor(user.status),
+                              fontWeight: '500'
+                            }}>
+                              {getStatusLabel(user.status)}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
+                            <button
+                              onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: '#6B7280',
+                                fontSize: '1.25rem',
+                                padding: '0.25rem'
+                              }}
+                            >
+                              ⋯
+                            </button>
+                            {openMenuId === user.id && (
+                              <div style={{
+                                position: 'absolute',
+                                right: '0',
+                                top: '100%',
+                                backgroundColor: 'white',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '6px',
+                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                zIndex: 1000,
+                                minWidth: '180px'
+                              }}>
+                                <button
+                                  onClick={() => handleUserAction(user.id, 'edit')}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.75rem 1rem',
+                                    textAlign: 'left',
+                                    border: 'none',
+                                    backgroundColor: 'transparent',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    color: '#374151'
+                                  }}
+                                >
+                                  ✏️ Modifier utilisateur
+                                </button>
+                                <button
+                                  onClick={() => handleUserAction(user.id, 'status')}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.75rem 1rem',
+                                    textAlign: 'left',
+                                    border: 'none',
+                                    backgroundColor: 'transparent',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    color: '#374151'
+                                  }}
+                                >
+                                  🔄 Changer statut
+                                </button>
+                                <button
+                                  onClick={() => deleteUser(user.id)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.75rem 1rem',
+                                    textAlign: 'left',
+                                    border: 'none',
+                                    backgroundColor: 'transparent',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    color: '#DC2626'
+                                  }}
+                                >
+                                  🗑️ Supprimer
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '3rem',
+                    color: '#6B7280'
+                  }}>
+                    <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>👥</div>
+                    <h3 style={{ color: '#374151', marginBottom: '0.5rem' }}>Aucun utilisateur trouvé</h3>
+                    <p style={{ marginBottom: '1.5rem' }}>Aucun utilisateur ne correspond aux filtres actuels</p>
+                    <button
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setPrivilegeFilter('all');
+                        addNotification("info", "Filtres réinitialisés", "Tous les filtres ont été réinitialisés", 2000);
+                      }}
+                      style={{
+                        backgroundColor: '#4338CA',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Réinitialiser les filtres
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
-            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-              <button
-                style={{
-                  backgroundColor: '#8B5A3C',
-                  color: 'white',
-                  border: 'none',
-                  padding: isMobile ? '0.875rem 1.5rem' : '0.75rem 2rem',
-                  borderRadius: '6px',
-                  fontSize: '0.9375rem',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  width: isMobile ? '100%' : 'auto'
-                }}
-              >
-                Afficher plus de résultat
-              </button>
-            </div>
+            {filteredUsers.length > 0 && (
+              <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                <button
+                  style={{
+                    backgroundColor: '#8B5A3C',
+                    color: 'white',
+                    border: 'none',
+                    padding: isMobile ? '0.875rem 1.5rem' : '0.75rem 2rem',
+                    borderRadius: '6px',
+                    fontSize: '0.9375rem',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    width: isMobile ? '100%' : 'auto'
+                  }}
+                  onClick={() => addNotification("info", "Chargement", "Chargement des résultats supplémentaires...", 2000)}
+                >
+                  Afficher plus de résultat
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

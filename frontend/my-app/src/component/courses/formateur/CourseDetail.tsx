@@ -1422,7 +1422,6 @@ const CourseDetail = () => {
         </p>
       </div>
 
-      {/* Rest of your existing JSX remains the same... */}
       {/* Enhanced Responsive Stats Bar */}
       <div style={{
         backgroundColor: '#212068',
@@ -2210,7 +2209,6 @@ const CourseDetail = () => {
         </div>
       </div>
 
-      {/* All your existing modals remain the same... */}
       {/* Enhanced Content Viewer Modal */}
       {showModal && selectedContent && (
         <div style={{
@@ -2271,10 +2269,16 @@ const CourseDetail = () => {
                 <span style={{ fontSize: '1.25rem' }}>⏱️</span>
                 <span style={{ fontSize: '0.875rem', color: '#4338CA', fontWeight: '500' }}>
                   Temps estimé : {selectedContent.estimated_duration || 15}min
+                  {selectedContent.min_required_time && ` • Minimum requis : ${selectedContent.min_required_time}min`}
                 </span>
               </div>
               <div style={{ fontSize: '1rem', fontWeight: '600', color: '#4338CA' }}>
                 {formatTime(timeSpent)} / {formatTime((selectedContent.estimated_duration || 15) * 60)}
+                {selectedContent.min_required_time && (
+                  <div style={{ fontSize: '0.75rem', color: selectedContent.min_required_time * 60 <= timeSpent ? '#10B981' : '#EF4444' }}>
+                    {selectedContent.min_required_time * 60 <= timeSpent ? '✓ Temps requis atteint' : '⏳ Temps requis non atteint'}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2504,7 +2508,6 @@ const CourseDetail = () => {
         </div>
       )}
 
-      {/* All other modals (New Module, Edit Module, New Content, Edit Content) remain the same... */}
       {/* Enhanced New Module Modal */}
       {showNewModuleModal && (
         <div style={{
@@ -2582,6 +2585,63 @@ const CourseDetail = () => {
                     fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box',
                     resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Added estimated_duration and min_required_time fields */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
+                  Durée estimée (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={moduleForm.estimated_duration || ''}
+                  onChange={(e) => setModuleForm(prev => ({ 
+                    ...prev, 
+                    estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                  }))}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: responsiveStyles.inputPadding,
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: responsiveStyles.body.fontSize,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
+                  Temps minimum requis (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={moduleForm.min_required_time || ''}
+                  onChange={(e) => setModuleForm(prev => ({ 
+                    ...prev, 
+                    min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                  }))}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: responsiveStyles.inputPadding,
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: responsiveStyles.body.fontSize,
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>
@@ -2710,6 +2770,63 @@ const CourseDetail = () => {
                     fontSize: responsiveStyles.body.fontSize,
                     boxSizing: 'border-box',
                     resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Added estimated_duration and min_required_time fields */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
+                  Durée estimée (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={moduleForm.estimated_duration || ''}
+                  onChange={(e) => setModuleForm(prev => ({ 
+                    ...prev, 
+                    estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                  }))}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: responsiveStyles.inputPadding,
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: responsiveStyles.body.fontSize,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: responsiveStyles.body.fontSize, 
+                  fontWeight: '500' 
+                }}>
+                  Temps minimum requis (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={moduleForm.min_required_time || ''}
+                  onChange={(e) => setModuleForm(prev => ({ 
+                    ...prev, 
+                    min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                  }))}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: responsiveStyles.inputPadding,
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: responsiveStyles.body.fontSize,
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>
@@ -2997,6 +3114,70 @@ const CourseDetail = () => {
                         resize: 'vertical'
                       }}
                     />
+                  </div>
+
+                  {/* Added estimated_duration and min_required_time fields */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
+                    gap: '1rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <div>
+                      <label style={{ 
+                        display: 'block', 
+                        marginBottom: '0.5rem', 
+                        fontSize: responsiveStyles.body.fontSize, 
+                        fontWeight: '500' 
+                      }}>
+                        Durée estimée (minutes)
+                      </label>
+                      <input
+                        type="number"
+                        value={contentForm.estimated_duration || ''}
+                        onChange={(e) => setContentForm(prev => ({ 
+                          ...prev, 
+                          estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                        }))}
+                        min="0"
+                        style={{
+                          width: '100%',
+                          padding: responsiveStyles.inputPadding,
+                          border: '1px solid #D1D5DB',
+                          borderRadius: '4px',
+                          fontSize: responsiveStyles.body.fontSize,
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label style={{ 
+                        display: 'block', 
+                        marginBottom: '0.5rem', 
+                        fontSize: responsiveStyles.body.fontSize, 
+                        fontWeight: '500' 
+                      }}>
+                        Temps minimum requis (minutes)
+                      </label>
+                      <input
+                        type="number"
+                        value={contentForm.min_required_time || ''}
+                        onChange={(e) => setContentForm(prev => ({ 
+                          ...prev, 
+                          min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                        }))}
+                        min="0"
+                        style={{
+                          width: '100%',
+                          padding: responsiveStyles.inputPadding,
+                          border: '1px solid #D1D5DB',
+                          borderRadius: '4px',
+                          fontSize: responsiveStyles.body.fontSize,
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
                   </div>
 
                   {/* File Upload for PDF and Video */}
@@ -3476,6 +3657,70 @@ const CourseDetail = () => {
                     resize: 'vertical'
                   }}
                 />
+              </div>
+
+              {/* Added estimated_duration and min_required_time fields */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
+                gap: '1rem',
+                marginBottom: '1rem'
+              }}>
+                <div>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '0.5rem', 
+                    fontSize: responsiveStyles.body.fontSize, 
+                    fontWeight: '500' 
+                  }}>
+                    Durée estimée (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={contentForm.estimated_duration || ''}
+                    onChange={(e) => setContentForm(prev => ({ 
+                      ...prev, 
+                      estimated_duration: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="0"
+                    style={{
+                      width: '100%',
+                      padding: responsiveStyles.inputPadding,
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: responsiveStyles.body.fontSize,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                
+                <div>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '0.5rem', 
+                    fontSize: responsiveStyles.body.fontSize, 
+                    fontWeight: '500' 
+                  }}>
+                    Temps minimum requis (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={contentForm.min_required_time || ''}
+                    onChange={(e) => setContentForm(prev => ({ 
+                      ...prev, 
+                      min_required_time: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    min="0"
+                    style={{
+                      width: '100%',
+                      padding: responsiveStyles.inputPadding,
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px',
+                      fontSize: responsiveStyles.body.fontSize,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
               </div>
 
               {/* File Upload for PDF and Video */}
