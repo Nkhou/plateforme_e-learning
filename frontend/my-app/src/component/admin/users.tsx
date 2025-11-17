@@ -828,7 +828,7 @@ const UsersManagement: React.FC = () => {
                 </select>
                 
                 <div style={{ display: 'flex', gap: '0.5rem', width: isMobile ? '100%' : 'auto' }}>
-                  <button
+                  {/* <button
                     style={{
                       backgroundColor: '#10B981',
                       color: 'white',
@@ -859,7 +859,7 @@ const UsersManagement: React.FC = () => {
                     onClick={handleExportUsers}
                   >
                     📤
-                  </button>
+                  </button> */}
                   <button
                     style={{
                       backgroundColor: '#4338CA',

@@ -244,7 +244,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const [showSearchCard, setShowSearchCard] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchCardRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  // const [activeTab, setActiveTab] = useState('overview');
  
 
   // Notification states
@@ -252,19 +252,63 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
-  let isAdmin = false;
-  useEffect(() => {
-        // fetchData(activeNavItem === 'dashboard' ? activeTab : activeNavItem);
-        isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
-        // const isFormateur = user?.privilege === 'F' || user?.privilege === 'Formateur'; // adjust according to your backend
-      }, [user]);
+  // const [isAdmin, setSisAdmin] = useState(false);
+  // let ;
+  const isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
+  
+  console.log('------------------------------------------------', isAdmin)
+  console.log('user?.privilege', user?.privilege)
 
-console.log('------------------------------------------------', isAdmin)
-const [activeNavItem, setActiveNavItem] = useState(() => {
-  if (isAdmin) return 'dashboard';
-  // if (isFormateur) return 'formation';
-  return 'formations'; // default for others
-});
+  // Fix: Use useEffect to update activeNavItem when isAdmin changes
+  const [activeNavItem, setActiveNavItem] = useState('formations');
+  const [activeTab, setActiveTab] = useState('overview');
+
+  useEffect(() => {
+    // Update activeNavItem when authentication completes and we know if user is admin
+    if (isAdmin) {
+      setActiveNavItem('dashboard');
+    } else {
+      setActiveNavItem('formations');
+    }
+  }, [isAdmin]);
+  // Your existing authentication useEffect
+  useEffect(() => {
+    const checkAuthentication = async () => {
+      try {
+        const res = await api.get('CheckAuthentification/', {
+          withCredentials: true,
+        });
+
+        const auth = res.data.authenticated;
+        setIsAuthenticated(auth);
+        setUser(res.data.user);
+        setLoading(false);
+
+        if (!auth && location.pathname !== '/') {
+          navigate('/');
+        } else if (auth && location.pathname === '/') {
+          const privilege = res.data.user?.privilege;
+          console.log('User privilege:', privilege)
+          if (privilege === 'A' || privilege === 'Admin') {
+            navigate('/admin');
+          } else if (privilege === 'F') {
+            navigate('/cours');
+          } else {
+            navigate('/dashboard');
+          }
+        }
+      } catch (error) {
+        console.error('Authentication check failed:', error);
+        setIsAuthenticated(false);
+        setLoading(false);
+        if (location.pathname !== '/') {
+          navigate('/');
+        }
+      }
+    };
+
+    checkAuthentication();
+  }, [navigate, location]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -484,47 +528,48 @@ const [activeNavItem, setActiveNavItem] = useState(() => {
     }
   };
 
-  useEffect(() => {
-    const checkAuthentication = async () => {
-      try {
-        const res = await api.get('CheckAuthentification/', {
-          withCredentials: true,
-        });
+  // useEffect(() => {
+  //   const checkAuthentication = async () => {
+  //     try {
+  //       const res = await api.get('CheckAuthentification/', {
+  //         withCredentials: true,
+  //       });
 
-        const auth = res.data.authenticated;
-        setIsAuthenticated(auth);
-        setUser(res.data.user);
-        setLoading(false);
+  //       const auth = res.data.authenticated;
+  //       setIsAuthenticated(auth);
+  //       setUser(res.data.user);
+  //       setLoading(false);
 
-        if (!auth && location.pathname !== '/') {
-          navigate('/');
-        } else if (auth && location.pathname === '/') {
-          const privilege = res.data.user?.privilege;
-          if (privilege === 'A' || privilege === 'Admin') {
-            navigate('/admin');
-          } else if (privilege === 'F') {
-            navigate('/cours');
-          } else {
-            navigate('/dashboard');
-          }
-        }
-      } catch (error) {
-        console.error('Authentication check failed:', error);
-        setIsAuthenticated(false);
-        setLoading(false);
-        if (location.pathname !== '/') {
-          navigate('/');
-        }
-      }
-    };
+  //       if (!auth && location.pathname !== '/') {
+  //         navigate('/');
+  //       } else if (auth && location.pathname === '/') {
+  //         const privilege = res.data.user?.privilege;
+  //         console.log('999999999999999999999999999999999999999999', privilege)
+  //         if (privilege === 'A' || privilege === 'Admin') {
+  //           navigate('/admin');
+  //         } else if (privilege === 'F') {
+  //           navigate('/cours');
+  //         } else {
+  //           navigate('/dashboard');
+  //         }
+  //       }
+  //     } catch (error) {
+  //       console.error('Authentication check failed:', error);
+  //       setIsAuthenticated(false);
+  //       setLoading(false);
+  //       if (location.pathname !== '/') {
+  //         navigate('/');
+  //       }
+  //     }
+  //   };
 
-    checkAuthentication();
-  }, [navigate, location]);
+  //   checkAuthentication();
+  // }, [navigate, location]);
 
   const handleNavigation = (item: string) => {
     setActiveNavItem(item);
     const privilege = user?.privilege;
-
+    
     switch (item) {
       case 'dashboard':
         if (privilege === 'A' || privilege === 'Admin') {

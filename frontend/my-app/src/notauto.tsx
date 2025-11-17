@@ -1,4 +1,4 @@
-const NotFound = () => {
+const Notauto= () => {
   const handleGoHome = () => {
     window.location.href = '/';
   };
@@ -14,7 +14,7 @@ const NotFound = () => {
       <div className="flex-grow-1 container-fluid h-100 d-flex align-items-center justify-content-center">
         <div className="row w-100 justify-content-center align-items-center" style={{ maxWidth: '1800px', margin: '0 auto' }}>
 
-          {/* IMAGE SECTION */}
+          {/* IMAGE SECTION - Wider but same height */}
           <div className="col-xl-6 col-lg-6 col-md-10 d-flex justify-content-center">
             <div
               className="card rounded-5 overflow-hidden"
@@ -26,29 +26,27 @@ const NotFound = () => {
                 maxWidth: '800px'
               }}
             >
-              <div className="card-body p-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center text-center">
-
-                {/* Titre + bouton */}
-                <h1 className="text-1xl lg:text-2xl font-bold text-gray-900 leading-tight mb-4">
-                  Oops! Cette page n'existe paq!!
-                </h1>
-
-                <button
-                  onClick={handleGoHome}
-                  className="bg-indigo-900 hover:bg-indigo-800 text-white font-semibold px-8 py-4 rounded-lg transition-colors duration-200 inline-flex items-center gap-2"
-                style={{
+              <div className="card-body p-0 w-100 h-100 d-flex align-items-center justify-content-center">
+                 <h1 className="text-1xl lg:text-2xl font-bold text-gray-900 leading-tight">
+            Vous n'êtes pas autorisé pour accèder à cette page
+          </h1>
+          
+          <button
+            onClick={handleGoHome}
+            className="bg-indigo-900 hover:bg-indigo-800 text-white font-semibold px-8 py-4 rounded-lg transition-colors duration-200 inline-flex items-center gap-2"
+          
+           style={{
     backgroundColor: '#212068',
-  }}
->
-                  <span>‹</span>
-                  <span>Retourner à la page d'accueil</span>
-                </button>
+  }}>
 
+            <span>‹</span>
+            <span>Retourner à la page d'accueil</span>
+          </button>
               </div>
             </div>
           </div>
 
-          {/* LOGIN SECTION */}
+          {/* LOGIN SECTION - Wider but same height */}
           <div className="col-xl-6 col-lg-6 col-md-8 d-flex justify-content-center">
             <div
               className="card rounded-6"
@@ -61,21 +59,25 @@ const NotFound = () => {
               }}
             >
               <div className="card-body d-flex flex-column justify-content-center p-4 p-md-5">
-                <div className="w-100 d-flex justify-content-center">
-                  <img
-                    src="/notfound.jpg"
-                    alt="notfound"
+                {/* Login Header - Centered */}
+  
+                {/* Form - Centered */}
+                <div className="w-100">
+                     <img
+                    src="/noauto.jpg"
+                    alt="noauto"
                     style={{
                       width: '500px',
                       height: '500px',
-                      objectFit: 'contain'
+                      objectFit: 'contain',
+                      marginRight: '0.75rem'
                     }}
                   />
                 </div>
+
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </div>
@@ -83,4 +85,4 @@ const NotFound = () => {
 };
 
 
-export default NotFound;
+export default Notauto;

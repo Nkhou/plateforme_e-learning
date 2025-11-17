@@ -97,7 +97,7 @@ function App() {
             </AuthGuard>
           }
         />
-        <Route path="*" element={<NotFound />} />
+        <Route path="*" element={<AuthGuard><NotFound /></AuthGuard>} />
       </Routes>
     </BrowserRouter>
   );

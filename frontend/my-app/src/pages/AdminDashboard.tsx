@@ -584,6 +584,7 @@ const AdminDashboard: React.FC = () => {
   const { activeTab, activeNavItem } = context;
 
   useEffect(() => {
+    console.log('----------------------------------------------------');
     fetchData(activeNavItem === 'dashboard' ? activeTab : activeNavItem);
   }, [activeTab, activeNavItem]);
 

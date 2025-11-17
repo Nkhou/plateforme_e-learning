@@ -717,6 +717,7 @@ class RegisterwithoutFileView(APIView):
                     'user': user,
                     'password': password,
                     'login_link': login_link
+                    'loginImageUrl' : 
                 })
                 msg = EmailMessage('Password', html_message, sender_email, [user.email])
                 msg.content_subtype = "html"
