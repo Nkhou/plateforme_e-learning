@@ -14,14 +14,10 @@ import {
   Filler
 } from 'chart.js';
 import { Bar, Doughnut, Pie } from 'react-chartjs-2';
-import OverviewStatistics from '../component/admin/overview';
-import UsersManagement from '../component/admin/users';
-import CoursesManagement from '../component/admin/courses';
-import AnalyticsDashboard from '../component/admin/analytics';
 import ContentManagement from '../component/admin/content';
 import SystemHealth from '../component/admin/systems';
 import { NavigationContext } from '../layout';
-import { createContext, useContext } from 'react';
+import {  useContext } from 'react';
 
 // Register ChartJS components
 ChartJS.register(
@@ -257,32 +253,6 @@ interface AdminStats {
   account_status?: Array<{ status: string; count: number }>;
 }
 
-interface UserData {
-  users: Array<{
-    id: number;
-    username: string;
-    email: string;
-    full_name: string;
-    privilege: string;
-    date_joined: string;
-    last_login: string;
-    is_active: boolean;
-    course_count: number;
-    subscription_count: number;
-  }>;
-  user_growth: {
-    labels: string[];
-    data: number[];
-  };
-}
-
-interface CourseData {
-  courses: Array<any>;
-  enrollment_stats: {
-    labels: string[];
-    data: number[];
-  };
-}
 
 interface AnalyticsData {
   course_statistics: Array<any>;
@@ -331,163 +301,6 @@ interface SystemHealthData {
   };
 }
 
-// Sample stats for demonstration
-const sampleStats = {
-  overview: {
-    total_users: 1250,
-    total_courses: 89,
-    active_subscriptions: 843,
-    recent_users: 32,
-    recent_courses: 5,
-    engagement_rate: 68,
-    trends: {
-      total_users: { formatted: "+4.8%", is_positive: true },
-      total_courses: { formatted: "+2.1%", is_positive: true },
-      recent_users: { formatted: "-3.9%", is_positive: false },
-      active_subscriptions: { formatted: "+1.2%", is_positive: true },
-      engagement_rate: { formatted: "+5.3%", is_positive: true }
-    }
-  },
-  user_distribution: [
-    { privilege: "Admin", count: 5 },
-    { privilege: "Instructor", count: 45 },
-    { privilege: "Student", count: 1200 }
-  ],
-  user_registration_chart: {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    data: [65, 59, 80, 81, 56, 55]
-  },
-  course_statistics: [],
-  dau_weekly: {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    data: [430, 450, 470, 460, 480, 490, 500]
-  },
-  account_status: [
-    { status: "Active", count: 1180 },
-    { status: "Inactive", count: 70 }
-  ]
-};
-
-// StatCardsSection Component
-const StatCardsSection: React.FC<{ stats: any }> = ({ stats }) => {
-  const trends = stats?.overview?.trends || {};
-
-  return (
-    <div style={{ 
-      display: 'grid', 
-      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-      gap: '1rem', 
-      maxWidth: '1400px', 
-      margin: '0 auto',
-      padding: '0 1rem'
-    }}>
-      <StatCard
-        title="N° des utilisateurs"
-        value={stats?.overview?.total_users?.toLocaleString() || '0'}
-        subtitle=""
-        trend={trends.total_users?.formatted || "+0%"}
-        trendLabel="vs mois dernier"
-        trendUp={trends.total_users?.is_positive !== false}
-      />
-
-      <StatCard
-        title="N° de formations"
-        value={stats?.overview?.total_courses || 0}
-        subtitle=""
-        trend={trends.total_courses?.formatted || "+0%"}
-        trendLabel="vs mois dernier"
-        trendUp={trends.total_courses?.is_positive !== false}
-      />
-
-      <StatCard
-        title="Nouveaux utilisateurs"
-        value={stats?.overview?.recent_users || 0}
-        subtitle=""
-        trend={trends.recent_users?.formatted || "+0%"}
-        trendLabel="vs 7 jours derniers"
-        trendUp={trends.recent_users?.is_positive !== false}
-      />
-
-      <StatCard
-        title="Utilisateurs actifs"
-        value={stats?.overview?.active_subscriptions || 0}
-        subtitle=""
-        trend={trends.active_subscriptions?.formatted || "+0%"}
-        trendLabel="vs mois dernier"
-        trendUp={trends.active_subscriptions?.is_positive !== false}
-      />
-
-      {stats?.overview?.engagement_rate && (
-        <StatCard
-          title="Taux d'engagement"
-          value={`${stats.overview.engagement_rate}%`}
-          subtitle=""
-          trend={trends.engagement_rate?.formatted || "+0%"}
-          trendLabel="vs mois dernier"
-          trendUp={trends.engagement_rate?.is_positive !== false}
-        />
-      )}
-    </div>
-  );
-};
-
-// StatCard Component
-const StatCard: React.FC<{
-  title: string;
-  value: string | number;
-  subtitle: string;
-  trend: string;
-  trendLabel: string;
-  trendUp: boolean;
-}> = ({ title, value, subtitle, trend, trendLabel, trendUp }) => (
-  <div style={{ 
-    lineHeight: '1.5',
-    padding: '0.5rem'
-  }}>
-    <div style={{ 
-      fontSize: '0.875rem', 
-      marginBottom: '0.5rem', 
-      opacity: 0.9, 
-      fontWeight: '400',
-      wordWrap: 'break-word'
-    }}>
-      {title}
-    </div>
-    <div style={{ 
-      fontSize: 'clamp(1.5rem, 4vw, 2.25rem)', 
-      fontWeight: 'bold', 
-      marginBottom: '0.25rem', 
-      letterSpacing: '-0.02em',
-      lineHeight: '1.2'
-    }}>
-      {value}
-    </div>
-    {subtitle && (
-      <div style={{ 
-        fontSize: '0.875rem', 
-        opacity: 0.8, 
-        marginBottom: '0.5rem' 
-      }}>
-        {subtitle}
-      </div>
-    )}
-    <div style={{
-      fontSize: '0.75rem',
-      marginTop: '0.5rem',
-      color: trendUp ? '#86EFAC' : '#FCA5A5',
-      fontWeight: '500',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.25rem',
-      flexWrap: 'wrap'
-    }}>
-      <span style={{ fontSize: '0.875rem' }}>
-        {trendUp ? '▲' : '▼'}
-      </span>
-      <span>{trend} {trendLabel}</span>
-    </div>
-  </div>
-);
 
 // ChartCard Component
 const ChartCard: React.FC<{ title: string; subtitle: string; children: React.ReactNode }> = ({ title, subtitle, children }) => (
@@ -517,36 +330,6 @@ const ChartCard: React.FC<{ title: string; subtitle: string; children: React.Rea
   </div>
 );
 
-// NavButton Component
-const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
-  <button
-    onClick={onClick}
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.5rem',
-      backgroundColor: active ? '#4338CA' : 'transparent',
-      color: active ? 'white' : '#A0AEC0',
-      border: 'none',
-      padding: '0.5rem 0.75rem',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      fontSize: 'clamp(0.8rem, 2vw, 0.9375rem)',
-      fontWeight: '500',
-      transition: 'all 0.2s ease',
-      whiteSpace: 'nowrap'
-    }}
-  >
-    <span style={{ fontSize: '1rem' }}>{icon}</span>
-    <span style={{ 
-      display: 'inline-block',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
-    }}>{label}</span>
-  </button>
-);
-
 const AdminDashboard: React.FC = () => {
   // Add notification state
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -569,8 +352,6 @@ const AdminDashboard: React.FC = () => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
 
   const [stats, setStats] = useState<AdminStats | null>(null);
-  const [users, setUsers] = useState<UserData | null>(null);
-  const [courses, setCourses] = useState<CourseData | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [contents, setContents] = useState<ContentData | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealthData | null>(null);
@@ -612,13 +393,13 @@ const AdminDashboard: React.FC = () => {
         case 'users':
         case 'utilisateurs':
           response = await api.get('admin/users/');
-          setUsers(response.data);
+          // setUsers(response.data);
           addNotification("success", "Utilisateurs chargés", "Les données des utilisateurs ont été chargées avec succès", 3000);
           break;
         case 'courses':
         case 'formations':
           response = await api.get('admin/courses/');
-          setCourses(response.data);
+          // setCourses(response.data);
           addNotification("success", "Formations chargées", "Les données des formations ont été chargées avec succès", 3000);
           break;
         case 'contents':
@@ -749,30 +530,6 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const getPageTitle = () => {
-    switch (activeNavItem) {
-      case 'dashboard':
-        return activeTab === 'overview' ? 'Dashboard - Overview' :
-          activeTab === 'analytics' ? 'Dashboard - Analytics' : 'Dashboard - System';
-      case 'formations':
-        return 'Liste des Formations';
-      case 'utilisateurs':
-        return 'Liste des Utilisateurs';
-      case 'messages':
-        return 'Messages';
-      case 'favoris':
-        return 'Favoris';
-      default:
-        return 'Dashboard';
-    }
-  };
-
-  const getBreadcrumb = () => {
-    if (activeNavItem === 'dashboard') {
-      return `Dashboard > ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`;
-    }
-    return activeNavItem.charAt(0).toUpperCase() + activeNavItem.slice(1);
-  };
 
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
@@ -969,10 +726,10 @@ const AdminDashboard: React.FC = () => {
                                     {getSafeString(course.creator, 'Hannah Arendt')}
                                   </td>
                                   <td style={{ padding: '0.75rem', color: '#1F2937' }}>
-                                    {getSafeNumber(course.total_subscribers || course.subscribers, 10)} subsc.
+                                    {getSafeNumber(course.total_subscribers)} subsc.
                                   </td>
                                   <td style={{ padding: '0.75rem', color: '#1F2937' }}>
-                                    {getSafeNumber(course.completed_count || course.completed, 4)}
+                                    {getSafeNumber(course.completed_count )}
                                   </td>
                                   <td style={{ padding: '0.75rem' }}>
                                     <span style={{
@@ -983,7 +740,7 @@ const AdminDashboard: React.FC = () => {
                                     </span>
                                   </td>
                                   <td style={{ padding: '0.75rem', color: '#1F2937' }}>
-                                    {getSafeNumber(course.average_score || course.avg_score, 76.3)}%
+                                    {getSafeNumber(course.average_score )}%
                                   </td>
                                 </tr>
                               ))
@@ -1033,35 +790,27 @@ const AdminDashboard: React.FC = () => {
           </div>
         </>
       )}
-
-      {/* Users Section */}
-      {/* {activeNavItem === 'utilisateurs' && users && <UsersManagement users={users} />} */}
-
-      {/* Courses Section */}
-      {/* {activeNavItem === 'formations' && courses && <CoursesManagement courses={courses} />} */}
-
-      {/* Content Section */}
-      {activeNavItem === 'contents' && contents && <ContentManagement contents={contents} />}
+      {/* {activeNavItem === 'contents' && contents && <ContentManagement contents={contents} />} */}
 
       {/* Messages Section */}
-      {activeNavItem === 'messages' && (
+      {/* {activeNavItem === 'messages' && (
         <div style={{ padding: '1.5rem clamp(1rem, 3vw, 2rem)', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center' }}>
             <h3 style={{ color: '#4B5563', marginBottom: '0.5rem' }}>Messages</h3>
             <p style={{ color: '#9CA3AF' }}>Content coming soon...</p>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Favoris Section */}
-      {activeNavItem === 'favoris' && (
+      {/* {activeNavItem === 'favoris' && (
         <div style={{ padding: '1.5rem clamp(1rem, 3vw, 2rem)', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '2rem', textAlign: 'center' }}>
             <h3 style={{ color: '#4B5563', marginBottom: '0.5rem' }}>Favoris</h3>
             <p style={{ color: '#9CA3AF' }}>Content coming soon...</p>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };

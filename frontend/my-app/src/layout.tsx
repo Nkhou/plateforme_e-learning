@@ -78,7 +78,7 @@ interface Notification {
   related_module_title?: string;
   related_content_title?: string;
 }
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
 
 interface NavigationContextType {
   activeTab: string;
@@ -95,11 +95,12 @@ const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
     style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '1.2rem',
+      gap: '0.7rem',
       backgroundColor: 'transparent',
       color: active ? 'white' : '#A0AEC0',
       border: 'none',
-      padding: '0.5rem 0.875rem',
+      // padding: '0.5rem',
+      paddingLeft: '0.875rem',
       borderRadius: '6px',
       cursor: 'pointer',
       fontSize: '0.875rem',
@@ -528,43 +529,6 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
     }
   };
 
-  // useEffect(() => {
-  //   const checkAuthentication = async () => {
-  //     try {
-  //       const res = await api.get('CheckAuthentification/', {
-  //         withCredentials: true,
-  //       });
-
-  //       const auth = res.data.authenticated;
-  //       setIsAuthenticated(auth);
-  //       setUser(res.data.user);
-  //       setLoading(false);
-
-  //       if (!auth && location.pathname !== '/') {
-  //         navigate('/');
-  //       } else if (auth && location.pathname === '/') {
-  //         const privilege = res.data.user?.privilege;
-  //         console.log('999999999999999999999999999999999999999999', privilege)
-  //         if (privilege === 'A' || privilege === 'Admin') {
-  //           navigate('/admin');
-  //         } else if (privilege === 'F') {
-  //           navigate('/cours');
-  //         } else {
-  //           navigate('/dashboard');
-  //         }
-  //       }
-  //     } catch (error) {
-  //       console.error('Authentication check failed:', error);
-  //       setIsAuthenticated(false);
-  //       setLoading(false);
-  //       if (location.pathname !== '/') {
-  //         navigate('/');
-  //       }
-  //     }
-  //   };
-
-  //   checkAuthentication();
-  // }, [navigate, location]);
 
   const handleNavigation = (item: string) => {
     setActiveNavItem(item);
@@ -661,32 +625,6 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         return 'Dashboard';
     }
   };
-  const getSafeNumber = (value: any, defaultValue: number = 0): number => {
-    if (typeof value === 'number') return value;
-    if (typeof value === 'string') return parseInt(value) || defaultValue;
-    return defaultValue;
-  };
-
-  const getSafeString = (value: any, defaultValue: string = ''): string => {
-    if (typeof value === 'string') return value;
-    if (value != null) return String(value);
-    return defaultValue;
-  };
-  const accountStatusData = stats?.account_status ? {
-    labels: stats.account_status.map(d => getSafeString(d.status)),
-    datasets: [{
-      data: stats.account_status.map(d => getSafeNumber(d.count)),
-      backgroundColor: ['#4F46E5', '#818CF8'],
-      borderWidth: 0,
-      hoverOffset: 4
-    }]
-  } : null;
-  // Check if user is admin
-  // const isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
-
-  // if (loading) return <div className="text-center p-5">Loading...</div>;
-  // if (!isAuthenticated) return <>{children}</>;
-
   const notificationGroups = groupNotificationsByDate();
 
   return (
@@ -741,7 +679,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
             style={{ background: 'rgba(5, 44, 101, 0.9)' }}
           >
             <div className="container">
-              <div className="container-fluid">
+              {/* <div className="container-fluid"> */}
                 <div className="d-flex align-items-center w-100">
                   {/* Logo Image */}
                   <img
@@ -1161,7 +1099,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                     </div>
                   </div>
                 </div>
-              </div>
+              {/* </div> */}
             </div>
           </nav>
 
@@ -1226,7 +1164,6 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                     }
                     label="Dashboard"
                   />
-
                 )}
                 <NavButton active={activeNavItem === 'formations'} onClick={() => handleNavigation('formations')} icon={<div
                   style={{
@@ -1244,8 +1181,6 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                       display: 'inline-block', // ensures no collapsing
                   }}
                 />} label="Formations" />
-
-
                 {/* Only show Utilisateurs for admin users */}
                 {isAdmin && (
                   <NavButton active={activeNavItem === 'utilisateurs'} onClick={() => handleNavigation('utilisateurs')} icon={<div
@@ -1393,11 +1328,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
           {/* Page Content */}
           <div className="flex-grow-1" style={{ background: '#f8f9fa' }}>
-            {/* <div className="container-fluid" style={{ maxWidth: '1400px', margin: '0 auto' }}> */}
-              {/* <NavigationContext.Provider value={{ activeTab, activeNavItem, setActiveTab, setActiveNavItem }}> */}
               {children}
-              {/* </NavigationContext.Provider> */}
-            {/* </div> */}
           </div>
         </div>
       </div>

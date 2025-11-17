@@ -30,7 +30,7 @@ const NotFound = () => {
 
                 {/* Titre + bouton */}
                 <h1 className="text-1xl lg:text-2xl font-bold text-gray-900 leading-tight mb-4">
-                  Oops! Cette page n'existe paq!!
+                  Oops! Cette page n'existe pas!!
                 </h1>
 
                 <button

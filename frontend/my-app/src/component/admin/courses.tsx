@@ -557,7 +557,31 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
       addNotification('error', 'Erreur', 'Une erreur est survenue. Veuillez réessayer.');
     }
   };
+  const BASE_URL = 'http://localhost:8000';
+  const getimageUrl = (contentOrPath:  string | undefined): string | undefined => {
+    if (!contentOrPath) return undefined;
 
+    let imagePath: string | undefined;
+
+    if (typeof contentOrPath === 'string') {
+      imagePath = contentOrPath;
+    } else {
+      // imagePath = contentOrPath.video_content?.video_file
+      //   || (contentOrPath as any).video_file
+      //   || contentOrPath.pdf_content?.pdf_file
+      (contentOrPath as any).image_url;
+    }
+
+    if (!imagePath) return undefined;
+
+    let url = imagePath.replace('http://backend:8000', BASE_URL);
+
+    if (!url.startsWith('http')) {
+      url = `${BASE_URL}${url}`;
+    }
+
+    return url;
+  };
   // Safe status color getter
   const getStatusColor = (status: any) => {
     const statusValue = getStatusValue(status);
@@ -583,7 +607,9 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
 
     return matchesStatus && matchesCategory;
   });
-
+  const handleDisplayMore = () => {
+    
+  }
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.currentTarget;
     const parent = target.parentElement;
@@ -1221,7 +1247,8 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                         <td style={{ padding: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
                           {course.image_url ? (
                             <img
-                              src={course.image_url.startsWith('http') ? course.image_url : `${window.location.protocol}//${window.location.hostname}:8000${course.image_url}`}
+                            src={getimageUrl(course.image_url)} 
+                              // src={course.image_url.startsWith('http') ? course.image_url : `${window.location.protocol}//${window.location.hostname}:8000${course.image_url}`}
                               alt={course.title_of_course}
                               style={{
                                 width: '50px',
@@ -1549,6 +1576,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#78472A'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#8B5A3C'}
+                onClick={handleDisplayMore}
               >
                 Afficher plus de résultat
               </button>

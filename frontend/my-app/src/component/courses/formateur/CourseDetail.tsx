@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api from '../../../api/api';
 
 // Add the notification types and interfaces from the second component
@@ -273,7 +273,7 @@ interface Course {
 
 const CourseDetail = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   
   // Add notification state
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -301,7 +301,7 @@ const CourseDetail = () => {
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [timeSpent, setTimeSpent] = useState(0);
-  const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
+  const [timerInterval, setTimerInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [showNewModuleModal, setShowNewModuleModal] = useState(false);
   const [showEditModuleModal, setShowEditModuleModal] = useState(false);
   const [showNewContentModal, setShowNewContentModal] = useState(false);
@@ -385,12 +385,12 @@ const CourseDetail = () => {
   // Helper functions for responsive design
   const isMobile = windowWidth < 768;
   const isTablet = windowWidth >= 768 && windowWidth < 1024;
-  const isDesktop = windowWidth >= 1024;
+  // const isDesktop = windowWidth >= 1024;
 
   // Responsive typography using clamp()
   const getResponsiveFontSize = (minSize: number, maxSize: number, minWidth = 320, maxWidth = 1920) => {
     const minWidthPx = `${minWidth}px`;
-    const maxWidthPx = `${maxWidth}px`;
+    // const maxWidthPx = `${maxWidth}px`;
     const minSizeRem = `${minSize / 16}rem`;
     const maxSizeRem = `${maxSize / 16}rem`;
     
@@ -726,42 +726,42 @@ const CourseDetail = () => {
   };
 
   // Enhanced mark as completed with time validation
-  const handleMarkAsCompleted = async () => {
-    if (selectedContent) {
-      const hasMetTimeRequirement = !selectedContent.min_required_time ||
-        (userProgress.timeSpent[selectedContent.id] || 0) >= (selectedContent.min_required_time * 60);
+  // const handleMarkAsCompleted = async () => {
+  //   if (selectedContent) {
+  //     const hasMetTimeRequirement = !selectedContent.min_required_time ||
+  //       (userProgress.timeSpent[selectedContent.id] || 0) >= (selectedContent.min_required_time * 60);
 
-      if (!hasMetTimeRequirement) {
-        addNotification("warning", "Temps requis", `Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`);
-        return;
-      }
+  //     if (!hasMetTimeRequirement) {
+  //       addNotification("warning", "Temps requis", `Vous devez passer au moins ${selectedContent.min_required_time} minutes sur ce contenu avant de le marquer comme terminé.`);
+  //       return;
+  //     }
 
-      try {
-        await api.patch(`contents/${selectedContent.id}/complete-content/`);
+  //     try {
+  //       await api.patch(`contents/${selectedContent.id}/complete-content/`);
 
-        // Update local state
-        setUserProgress(prev => {
-          const newProgress = {
-            ...prev,
-            completedContents: [...prev.completedContents, selectedContent.id]
-          };
-          localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
-          return newProgress;
-        });
+  //       // Update local state
+  //       setUserProgress(prev => {
+  //         const newProgress = {
+  //           ...prev,
+  //           completedContents: [...prev.completedContents, selectedContent.id]
+  //         };
+  //         localStorage.setItem(`course_progress_${id}`, JSON.stringify(newProgress));
+  //         return newProgress;
+  //       });
 
-        addNotification("success", "Contenu terminé", "Le contenu a été marqué comme terminé avec succès");
-        setShowModal(false);
-        setSelectedContent(null);
+  //       addNotification("success", "Contenu terminé", "Le contenu a été marqué comme terminé avec succès");
+  //       setShowModal(false);
+  //       setSelectedContent(null);
 
-        // Refresh course data
-        const response = await api.get(`courses/${id}/`);
-        setCourse(response.data);
-      } catch (error) {
-        console.error('Error marking content as completed:', error);
-        addNotification("error", "Erreur", "Erreur lors de la mise à jour du contenu");
-      }
-    }
-  };
+  //       // Refresh course data
+  //       const response = await api.get(`courses/${id}/`);
+  //       setCourse(response.data);
+  //     } catch (error) {
+  //       console.error('Error marking content as completed:', error);
+  //       addNotification("error", "Erreur", "Erreur lors de la mise à jour du contenu");
+  //     }
+  //   }
+  // };
 
   const handleCloseModal = () => {
     setShowModal(false);
@@ -1311,9 +1311,9 @@ const CourseDetail = () => {
 
   // Calculate progress statistics
   const totalContents = course?.modules?.reduce((total, module) => total + (module.contents?.length || 0), 0) || 0;
-  const completedContents = userProgress.completedContents.length;
-  const progressPercentage = totalContents > 0 ? Math.round((completedContents / totalContents) * 100) : 0;
-  const totalTimeSpent = Object.values(userProgress.timeSpent).reduce((total, time) => total + time, 0);
+  // const completedContents = userProgress.completedContents.length;
+  // const progressPercentage = totalContents > 0 ? Math.round((completedContents / totalContents) * 100) : 0;
+  // const totalTimeSpent = Object.values(userProgress.timeSpent).reduce((total, time) => total + time, 0);
 
   if (loading) {
     return (
@@ -1903,9 +1903,9 @@ const CourseDetail = () => {
                   }}>
                     {module.contents && module.contents.length > 0 ? (
                       module.contents.map((content) => {
-                        const isCompleted = userProgress.completedContents.includes(content.id);
+                        // const isCompleted = userProgress.completedContents.includes(content.id);
                         const contentTimeSpent = userProgress.timeSpent[content.id] || 0;
-                        const hasMetTimeRequirement = !content.min_required_time || contentTimeSpent >= (content.min_required_time * 60);
+                        // const hasMetTimeRequirement = !content.min_required_time || contentTimeSpent >= (content.min_required_time * 60);
 
                         return (
                           <div

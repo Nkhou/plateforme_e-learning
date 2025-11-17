@@ -1,9 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect,  useState } from "react";
 import '../css/cours.css';
 import NewCours from '../component/courses/new_courses';
 import api from '../api/api';
-import CourseDetail from "../component/courses/formateur/CourseDetail";
-import CourseImage from '../component/courses/CourseImage';
 import { useNavigate } from 'react-router-dom';
 
 interface Course {
@@ -231,7 +229,7 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
 const Cours = () => {
     const [newProject, setNewProject] = useState(false);
     const [showCourseDetail, setShowCourseDetail] = useState(false);
-    const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+    // const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
     const [myCourses, setMyCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -315,10 +313,10 @@ const Cours = () => {
     }, []);
 
     // Add the edit course handler
-    const handleEditCourse = (courseId: number) => {
-        console.log('Edit course requested:', courseId);
-        addNotification('info', 'Modification', `Modification du cours avec ID: ${courseId}`);
-    };
+    // const handleEditCourse = (courseId: number) => {
+    //     console.log('Edit course requested:', courseId);
+    //     addNotification('info', 'Modification', `Modification du cours avec ID: ${courseId}`);
+    // };
 
     // Fetch user's created courses
     const fetchMyCourses = async () => {
@@ -353,14 +351,14 @@ const Cours = () => {
     };
 
     const handleCardClick = (courseId: number) => {
-        setSelectedCourseId(courseId);
+        // setSelectedCourseId(courseId);
         navigate(`/formations/${courseId}`);
         setShowCourseDetail(true);
     };
 
     const handleCloseCourseDetail = () => {
         setShowCourseDetail(false);
-        setSelectedCourseId(null);
+        // setSelectedCourseId(null);
     };
 
     // Safe status value extraction
@@ -404,7 +402,9 @@ const Cours = () => {
         const statusChoice = STATUS_CHOICES.find(s => s.value === statusValue);
         return statusChoice ? statusChoice.label : 'Non défini';
     };
+    const handledisplay_more = async () => {
 
+    }
     const getDepartmentLabel = (code?: string | null) => {
         if (!code) return '';
         const dept = DEPARTMENT_CHOICES.find(d => d.code === code);
@@ -1257,6 +1257,7 @@ const Cours = () => {
                                 }}
                                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#78472A'}
                                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#8B5A3C'}
+                                onClick={handledisplay_more}
                             >
                                 Afficher plus de résultat
                             </button>
@@ -1299,12 +1300,6 @@ const Cours = () => {
                     >
                         ×
                     </button>
-                    {/* Fixed: Added the missing onEditCourse prop */}
-                    {/* <CourseDetail 
-                        courseId={selectedCourseId} 
-                        onClose={handleCloseCourseDetail}
-                        onEditCourse={handleEditCourse}
-                    /> */}
                 </div>
             ) : (
                 <div style={{
