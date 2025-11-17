@@ -613,6 +613,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
       await api.post('logout/', {}, {
         withCredentials: true,
       });
+      setOpen(false);
       navigate('/');
     } catch (error) {
       console.error('Logout failed:', error);

@@ -667,7 +667,7 @@ class CSVUploadView(APIView):
             
         except Exception as e:
             return Response({'error': f'Failed to process CSV: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+from django.templatetags.static import static
 class RegisterwithoutFileView(APIView):
     def post(self, request):
         try:
@@ -713,11 +713,12 @@ class RegisterwithoutFileView(APIView):
                 user = serializer.save()
                 sender_email = os.environ.get('EMAIL_HOST_USER')
                 login_link = "http://localhost:3000/signup"
+                logo_url = request.build_absolute_uri(static('images/logo-colored.png'))
                 html_message = render_to_string('register.html', {
                     'user': user,
                     'password': password,
                     'login_link': login_link,
-                    'loginImageUrl': f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/logo-colored.png"
+                    'loginImageUrl': logo_url
                 })
                 msg = EmailMessage('Password', html_message, sender_email, [user.email])
                 msg.content_subtype = "html"
