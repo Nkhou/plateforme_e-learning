@@ -1498,7 +1498,7 @@ const CourseDetail = () => {
           </div>
           {!isMobile && (
             <>
-              <div>
+              {/* <div>
                 <div style={{ 
                   fontSize: responsiveStyles.small.fontSize, 
                   opacity: 0.8,
@@ -1527,7 +1527,7 @@ const CourseDetail = () => {
                 }}>
                   {formatTime(totalTimeSpent)}
                 </div>
-              </div>
+              </div> */}
             </>
           )}
         </div>

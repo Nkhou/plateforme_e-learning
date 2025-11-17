@@ -716,8 +716,8 @@ class RegisterwithoutFileView(APIView):
                 html_message = render_to_string('register.html', {
                     'user': user,
                     'password': password,
-                    'login_link': login_link
-                    'loginImageUrl' : 
+                    'login_link': login_link,
+                    'loginImageUrl': f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/logo-colored.png"
                 })
                 msg = EmailMessage('Password', html_message, sender_email, [user.email])
                 msg.content_subtype = "html"
