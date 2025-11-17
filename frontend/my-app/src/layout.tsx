@@ -684,13 +684,18 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   // Check if user is admin
   // const isAdmin = user?.privilege === 'A' || user?.privilege === 'Admin';
 
-  if (loading) return <div className="text-center p-5">Loading...</div>;
-  if (!isAuthenticated) return <>{children}</>;
+  // if (loading) return <div className="text-center p-5">Loading...</div>;
+  // if (!isAuthenticated) return <>{children}</>;
 
   const notificationGroups = groupNotificationsByDate();
 
   return (
     <NavigationContext.Provider value={{ activeTab, activeNavItem, setActiveTab, setActiveNavItem }}>
+    {loading ? (
+      <div>Loading...</div>  // ✅ Inside provider!
+    ) : !isAuthenticated ? (
+      <>{children}</>  // ✅ Inside provider!
+    ) : (
       <div className="d-flex" style={{ minHeight: '100vh' }}>
         {/* Search Overlay Card */}
         {showSearchCard && (
@@ -1396,6 +1401,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           </div>
         </div>
       </div>
+    )}
     </NavigationContext.Provider>
   );
 };

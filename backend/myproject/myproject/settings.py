@@ -116,14 +116,14 @@ if DEBUG:
         "http://frontend:3000",
     ]
 
-BASE_URL = 'http://localhost:8000'  # For development
+BASE_URL = '51.178.87.234:3000'  # For development
 
 # Custom User Model
 AUTH_USER_MODEL = 'user.CustomUser'
 
 # Application definition
 INSTALLED_APPS = [
-    'daphne',
+    #'daphne',
     'user',
     'channels',
     'django.contrib.admin',
@@ -344,7 +344,6 @@ else:
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        
     ]
 
 CORS_ALLOW_CREDENTIALS = True

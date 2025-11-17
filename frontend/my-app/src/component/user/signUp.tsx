@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from "axios";
+import api from '../../api/api';
 
 function SignUp() {
     const [toggle, setToggle] = useState(true);
@@ -99,12 +100,12 @@ function SignUp() {
             if (!validateSingleUser()) return;
 
             try {
-                await axios.get('http://localhost:8000/api/CheckAuthentification/', {
+                await api.get('CheckAuthentification/', {
                     withCredentials: true
                 });
 
-                const response = await axios.post(
-                    'http://localhost:8000/api/RegisterwithoutFile/',
+                const response = await api.post(
+                    'RegisterwithoutFile/',
                     {
                         email: email,
                         firstName: firstName,
@@ -152,8 +153,7 @@ function SignUp() {
             }
 
             try {
-                await axios.get('http://localhost:8000/api/CheckAuthentification/', {
-                    withCredentials: true
+                await api.get('CheckAuthentification/', {
                 });
 
                 const jsonData = await readCSVFile(file);

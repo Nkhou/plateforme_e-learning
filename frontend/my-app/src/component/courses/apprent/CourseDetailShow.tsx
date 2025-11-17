@@ -279,8 +279,20 @@ const CourseDetail = () => {
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [timeSpent, setTimeSpent] = useState(0);
-  const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
   const [selectedQCMOptions, setSelectedQCMOptions] = useState<{ [questionId: number]: number[] }>({});
+  const [timerInterval, setTimerInterval] = useState<number | null>(null);
+
+useEffect(() => {
+  const id = setTimeout(() => {
+    console.log("Hello");
+  }, 1000);
+
+  setTimerInterval(id);
+
+  return () => {
+    if (timerInterval) clearTimeout(timerInterval);
+  };
+}, []);
 
   // 2️⃣ Add Notification State
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from "axios";
+import api from '../../api/api';
 
 // Notification types and components (copied from second component)
 export type NotificationType = "success" | "info" | "warning" | "error";
@@ -298,12 +299,12 @@ function SignUp() {
             if (!validateSingleUser()) return;
 
             try {
-                await axios.get('http://localhost:8000/api/CheckAuthentification/', {
+                await api.get('CheckAuthentification/', {
                     withCredentials: true
                 });
 
-                const response = await axios.post(
-                    'http://localhost:8000/api/RegisterwithoutFile/',
+                const response = await api.post(
+                    'RegisterwithoutFile/',
                     {
                         email: email,
                         firstName: firstName,
