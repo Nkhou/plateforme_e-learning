@@ -355,3 +355,203 @@ class CourseConsumer(AsyncWebsocketConsumer):
             }
         except ObjectDoesNotExist:
             return {'error': 'Course not found'}
+        
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+from django.contrib.auth import get_user_model
+from .models import ChatMessage
+from .serializers import ChatMessageSerializer
+
+User = get_user_model()
+
+class ChatConsumer(AsyncWebsocketConsumer):
+    """WebSocket consumer for real-time chat"""
+    
+    async def connect(self):
+        """Handle WebSocket connection"""
+        self.user = self.scope["user"]
+        
+        if self.user.is_anonymous:
+            await self.close()
+            return
+        
+        # Create a unique room name for this user
+        self.room_group_name = f'chat_{self.user.id}'
+        
+        # Join room group
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+        
+        await self.accept()
+        
+        # Send connection confirmation
+        await self.send(text_data=json.dumps({
+            'type': 'connection_established',
+            'message': 'Connected to chat server'
+        }))
+    
+    async def disconnect(self, close_code):
+        """Handle WebSocket disconnection"""
+        # Leave room group
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+    
+    async def receive(self, text_data):
+        """Receive message from WebSocket"""
+        try:
+            data = json.loads(text_data)
+            message_type = data.get('type')
+            
+            if message_type == 'chat_message':
+                await self.handle_chat_message(data)
+            elif message_type == 'typing_indicator':
+                await self.handle_typing_indicator(data)
+            elif message_type == 'mark_read':
+                await self.handle_mark_read(data)
+        
+        except Exception as e:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': str(e)
+            }))
+    
+    async def handle_chat_message(self, data):
+        """Handle incoming chat message"""
+        receiver_id = data.get('receiver_id')
+        message_text = data.get('message')
+        
+        if not receiver_id or not message_text:
+            return
+        
+        # Save message to database
+        message = await self.save_message(
+            sender_id=self.user.id,
+            receiver_id=receiver_id,
+            message_text=message_text
+        )
+        
+        if message:
+            # Serialize message
+            message_data = await self.serialize_message(message)
+            
+            # Send message to sender (confirmation)
+            await self.send(text_data=json.dumps({
+                'type': 'message_sent',
+                'message': message_data
+            }))
+            
+            # Send message to receiver
+            await self.channel_layer.group_send(
+                f'chat_{receiver_id}',
+                {
+                    'type': 'chat_message_handler',
+                    'message': message_data
+                }
+            )
+    
+    async def handle_typing_indicator(self, data):
+        """Handle typing indicator"""
+        receiver_id = data.get('receiver_id')
+        is_typing = data.get('is_typing', False)
+        
+        if receiver_id:
+            # Send typing indicator to receiver
+            await self.channel_layer.group_send(
+                f'chat_{receiver_id}',
+                {
+                    'type': 'typing_indicator_handler',
+                    'user_id': self.user.id,
+                    'username': self.user.username,
+                    'is_typing': is_typing
+                }
+            )
+    
+    async def handle_mark_read(self, data):
+        """Handle mark messages as read"""
+        message_ids = data.get('message_ids', [])
+        
+        if message_ids:
+            await self.mark_messages_read(message_ids)
+            
+            # Get sender ID from first message
+            sender_id = await self.get_message_sender(message_ids[0])
+            
+            if sender_id:
+                # Notify sender that messages were read
+                await self.channel_layer.group_send(
+                    f'chat_{sender_id}',
+                    {
+                        'type': 'messages_read_handler',
+                        'message_ids': message_ids,
+                        'read_by': self.user.id
+                    }
+                )
+    
+    async def chat_message_handler(self, event):
+        """Send chat message to WebSocket"""
+        await self.send(text_data=json.dumps({
+            'type': 'new_message',
+            'message': event['message']
+        }))
+    
+    async def typing_indicator_handler(self, event):
+        """Send typing indicator to WebSocket"""
+        await self.send(text_data=json.dumps({
+            'type': 'typing_indicator',
+            'user_id': event['user_id'],
+            'username': event['username'],
+            'is_typing': event['is_typing']
+        }))
+    
+    async def messages_read_handler(self, event):
+        """Send read receipt to WebSocket"""
+        await self.send(text_data=json.dumps({
+            'type': 'messages_read',
+            'message_ids': event['message_ids'],
+            'read_by': event['read_by']
+        }))
+    
+    @database_sync_to_async
+    def save_message(self, sender_id, receiver_id, message_text):
+        """Save message to database"""
+        try:
+            sender = User.objects.get(id=sender_id)
+            receiver = User.objects.get(id=receiver_id)
+            
+            message = ChatMessage.objects.create(
+                sender=sender,
+                receiver=receiver,
+                message=message_text
+            )
+            return message
+        except Exception as e:
+            print(f"Error saving message: {e}")
+            return None
+    
+    @database_sync_to_async
+    def serialize_message(self, message):
+        """Serialize message for JSON response"""
+        serializer = ChatMessageSerializer(message)
+        return serializer.data
+    
+    @database_sync_to_async
+    def mark_messages_read(self, message_ids):
+        """Mark messages as read"""
+        ChatMessage.objects.filter(
+            id__in=message_ids,
+            receiver=self.user
+        ).update(is_read=True)
+    
+    @database_sync_to_async
+    def get_message_sender(self, message_id):
+        """Get sender ID of a message"""
+        try:
+            message = ChatMessage.objects.get(id=message_id)
+            return message.sender.id
+        except ChatMessage.DoesNotExist:
+            return None
