@@ -257,6 +257,23 @@ const UsersManagement: React.FC = () => {
   // Responsive state
   const [isMobile, setIsMobile] = useState(false);
 
+  // Pagination state - EXACTLY like CoursesManagement
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+
+  // Close dropdown when clicking outside - EXACTLY like CoursesManagement
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-menu-container]')) {
+        setOpenMenuId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Detect screen size and handle resize
   useEffect(() => {
     const checkScreenSize = () => {
@@ -503,27 +520,62 @@ const UsersManagement: React.FC = () => {
     }
   };
 
-  const handleExportUsers = () => {
-    addNotification("success", "Export réussi", "La liste des utilisateurs a été exportée avec succès", 3000);
-  };
-
-  const handleRefreshUsers = () => {
-    addNotification("info", "Rafraîchissement", "Mise à jour de la liste des utilisateurs...", 2000);
-    setRefresh(prev => !prev);
+  // EXACTLY like CoursesManagement - Load More Results function
+  const handleLoadMoreResults = () => {
+    setItemsPerPage(prev => prev + 5);
   };
 
   // Loading state
   if (loading && !userData) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Chargement...</div>;
+    return (
+      <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          padding: '3rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⏳</div>
+          <div style={{ fontSize: '1rem', fontWeight: '500', color: '#374151' }}>
+            Chargement des utilisateurs...
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Error state
   if (error && !userData) {
     return (
-      <div style={{ padding: '2rem' }}>
-        <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <p style={{ color: '#DC2626' }}>Erreur: {error}</p>
-          <button onClick={() => window.location.reload()}>
+      <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          padding: '3rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>❌</div>
+          <div style={{ fontSize: '1rem', fontWeight: '500', color: '#DC2626', marginBottom: '1rem' }}>
+            Erreur: {error}
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              backgroundColor: '#4338CA',
+              color: 'white',
+              border: 'none',
+              padding: '0.75rem 1.5rem',
+              borderRadius: '6px',
+              fontSize: '0.9375rem',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3730A3'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
+          >
             Réessayer
           </button>
         </div>
@@ -546,7 +598,11 @@ const UsersManagement: React.FC = () => {
     return matchesStatus && matchesPrivilege;
   });
 
-  // Mobile Card View Component
+  // EXACTLY like CoursesManagement - Pagination logic
+  const currentUsers = filteredUsers.slice(0, itemsPerPage);
+  const remainingUsers = filteredUsers.length - currentUsers.length;
+
+  // Mobile Card View Component with updated dropdown
   const UserCard = ({ user }: { user: User }) => (
     <div style={{
       backgroundColor: 'white',
@@ -568,39 +624,57 @@ const UsersManagement: React.FC = () => {
             @{user.username}
           </p>
         </div>
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} data-menu-container>
           <button
-            onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMenuPosition({
+                top: rect.bottom + 5,
+                left: rect.right - 250
+              });
+              setOpenMenuId(openMenuId === user.id ? null : user.id);
+            }}
             style={{
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               color: '#6B7280',
               fontSize: '1.25rem',
-              padding: '0.25rem',
+              padding: '0.25rem 0.5rem',
+              borderRadius: '4px',
+              transition: 'background-color 0.2s',
               width: '2rem',
               height: '2rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             ⋯
           </button>
           {openMenuId === user.id && (
-            <div style={{
-              position: 'absolute',
-              right: '0',
-              top: '100%',
-              backgroundColor: 'white',
-              border: '1px solid #E5E7EB',
-              borderRadius: '6px',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              zIndex: 1000,
-              minWidth: '180px'
-            }}>
+            <div
+              style={{
+                position: 'fixed',
+                top: `${menuPosition.top}px`,
+                left: `${menuPosition.left}px`,
+                backgroundColor: 'white',
+                border: '1px solid #E5E7EB',
+                borderRadius: '6px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                zIndex: 1000,
+                minWidth: '200px'
+              }}
+            >
               <button
-                onClick={() => handleUserAction(user.id, 'edit')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleUserAction(user.id, 'edit');
+                }}
                 style={{
                   width: '100%',
                   padding: '0.75rem 1rem',
@@ -609,13 +683,23 @@ const UsersManagement: React.FC = () => {
                   backgroundColor: 'transparent',
                   cursor: 'pointer',
                   fontSize: '0.875rem',
-                  color: '#374151'
+                  color: '#374151',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'background-color 0.2s'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 ✏️ Modifier utilisateur
               </button>
               <button
-                onClick={() => handleUserAction(user.id, 'status')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleUserAction(user.id, 'status');
+                }}
                 style={{
                   width: '100%',
                   padding: '0.75rem 1rem',
@@ -624,13 +708,23 @@ const UsersManagement: React.FC = () => {
                   backgroundColor: 'transparent',
                   cursor: 'pointer',
                   fontSize: '0.875rem',
-                  color: '#374151'
+                  color: '#374151',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'background-color 0.2s'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 🔄 Changer statut
               </button>
               <button
-                onClick={() => deleteUser(user.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  deleteUser(user.id);
+                }}
                 style={{
                   width: '100%',
                   padding: '0.75rem 1rem',
@@ -639,8 +733,14 @@ const UsersManagement: React.FC = () => {
                   backgroundColor: 'transparent',
                   cursor: 'pointer',
                   fontSize: '0.875rem',
-                  color: '#DC2626'
+                  color: '#DC2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'background-color 0.2s'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 🗑️ Supprimer
               </button>
@@ -713,7 +813,8 @@ const UsersManagement: React.FC = () => {
     <div style={{ 
       padding: isMobile ? '1rem' : '2rem', 
       maxWidth: '1400px', 
-      margin: '0 auto' 
+      margin: '0 auto',
+      minHeight: '100vh'
     }}>
       {/* Notification Container */}
       <NotificationContainer 
@@ -751,8 +852,11 @@ const UsersManagement: React.FC = () => {
                   padding: '0.5rem 1rem',
                   borderRadius: '6px',
                   cursor: 'pointer',
-                  marginBottom: '1rem'
+                  marginBottom: '1rem',
+                  transition: 'background-color 0.2s'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4B5563'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#6B7280'}
               >
                 ← Retour à la liste
               </button>
@@ -761,34 +865,35 @@ const UsersManagement: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Header - Responsive Layout */}
+            {/* Header - EXACTLY like CoursesManagement */}
             <div style={{ 
               display: 'flex', 
-              flexDirection: isMobile ? 'column' : 'row',
               justifyContent: 'space-between', 
-              alignItems: isMobile ? 'stretch' : 'center', 
+              alignItems: 'center', 
               marginBottom: '1.5rem', 
+              flexWrap: 'wrap', 
               gap: '1rem' 
             }}>
-              <h2 style={{ 
-                fontSize: isMobile ? '1.125rem' : '1.25rem', 
-                fontWeight: '600', 
-                color: '#1F2937', 
-                margin: 0,
-                textAlign: isMobile ? 'center' : 'left'
-              }}>
-                {filteredUsers.length} utilisateurs ajoutés
-              </h2>
-
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                <h2 style={{ 
+                  fontSize: isMobile ? '1.125rem' : '1.25rem', 
+                  fontWeight: '600', 
+                  color: '#1F2937', 
+                  margin: 0 
+                }}>
+                  {filteredUsers.length} utilisateur{filteredUsers.length !== 1 ? 's' : ''} ajouté{filteredUsers.length !== 1 ? 's' : ''}
+                </h2>
+              </div>
               <div style={{ 
                 display: 'flex', 
-                flexDirection: isMobile ? 'column' : 'row',
-                gap: '0.75rem',
-                width: isMobile ? '100%' : 'auto'
+                gap: '0.5rem', 
+                alignItems: 'center', 
+                flexWrap: 'wrap' 
               }}>
+                {/* Status Filter - EXACTLY like CoursesManagement */}
                 <select
                   value={statusFilter}
-                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  onChange={(e) => setStatusFilter(e.target.value)}
                   style={{
                     backgroundColor: '#EEF2FF',
                     border: '1px solid #C7D2FE',
@@ -798,7 +903,11 @@ const UsersManagement: React.FC = () => {
                     fontWeight: '500',
                     color: '#4338CA',
                     cursor: 'pointer',
-                    width: isMobile ? '100%' : 'auto'
+                    appearance: 'none',
+                    backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 0.5rem center',
+                    minWidth: '180px'
                   }}
                 >
                   <option value="all">Statut &gt; Tous</option>
@@ -806,9 +915,10 @@ const UsersManagement: React.FC = () => {
                   <option value="inactive">Suspendu</option>
                 </select>
 
+                {/* Privilege Filter - EXACTLY like CoursesManagement */}
                 <select
                   value={privilegeFilter}
-                  onChange={(e) => handleFilterChange('privilege', e.target.value)}
+                  onChange={(e) => setPrivilegeFilter(e.target.value)}
                   style={{
                     backgroundColor: '#EEF2FF',
                     border: '1px solid #C7D2FE',
@@ -818,7 +928,11 @@ const UsersManagement: React.FC = () => {
                     fontWeight: '500',
                     color: '#4338CA',
                     cursor: 'pointer',
-                    width: isMobile ? '100%' : 'auto'
+                    appearance: 'none',
+                    backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 0.5rem center',
+                    minWidth: '220px'
                   }}
                 >
                   <option value="all">Privilège &gt; Tous</option>
@@ -826,57 +940,29 @@ const UsersManagement: React.FC = () => {
                   <option value="F">Formateur</option>
                   <option value="Ap">Apprenant</option>
                 </select>
-                
-                <div style={{ display: 'flex', gap: '0.5rem', width: isMobile ? '100%' : 'auto' }}>
-                  {/* <button
-                    style={{
-                      backgroundColor: '#10B981',
-                      color: 'white',
-                      border: 'none',
-                      padding: '0.625rem 1rem',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      flex: 1
-                    }}
-                    onClick={handleRefreshUsers}
-                  >
-                    🔄
-                  </button>
-                  <button
-                    style={{
-                      backgroundColor: '#3B82F6',
-                      color: 'white',
-                      border: 'none',
-                      padding: '0.625rem 1rem',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      flex: 1
-                    }}
-                    onClick={handleExportUsers}
-                  >
-                    📤
-                  </button> */}
-                  <button
-                    style={{
-                      backgroundColor: '#4338CA',
-                      color: 'white',
-                      border: 'none',
-                      padding: '0.625rem 1.25rem',
-                      borderRadius: '6px',
-                      fontSize: '0.9375rem',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      flex: 2
-                    }}
-                    onClick={handleNewUser}
-                  >
-                    + Nouvel utilisateur
-                  </button>
-                </div>
+
+                {/* New User Button - EXACTLY like CoursesManagement */}
+                <button
+                  onClick={handleNewUser}
+                  style={{
+                    backgroundColor: '#4338CA',
+                    color: 'white',
+                    border: 'none',
+                    padding: '0.625rem 1.25rem',
+                    borderRadius: '6px',
+                    fontSize: '0.9375rem',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3730A3'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
+                >
+                  + Nouvel utilisateur
+                </button>
               </div>
             </div>
 
@@ -912,67 +998,57 @@ const UsersManagement: React.FC = () => {
             {isMobile ? (
               // Mobile Card View
               <div>
-                {filteredUsers.length > 0 ? (
-                  filteredUsers.map((user) => (
+                {currentUsers.length > 0 ? (
+                  currentUsers.map((user) => (
                     <UserCard key={user.id} user={user} />
                   ))
                 ) : (
                   <div style={{
                     textAlign: 'center',
-                    padding: '2rem',
+                    padding: '3rem',
                     color: '#6B7280'
                   }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👥</div>
-                    <p>Aucun utilisateur trouvé avec les filtres actuels</p>
-                    <button
-                      onClick={() => {
-                        setStatusFilter('all');
-                        setPrivilegeFilter('all');
-                        addNotification("info", "Filtres réinitialisés", "Tous les filtres ont été réinitialisés", 2000);
-                      }}
-                      style={{
-                        backgroundColor: '#4338CA',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        marginTop: '1rem'
-                      }}
-                    >
-                      Réinitialiser les filtres
-                    </button>
+                    <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>👥</div>
+                    <div style={{ fontSize: '1rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Aucun utilisateur trouvé</div>
+                    <div style={{ fontSize: '0.875rem' }}>Essayez de modifier vos filtres ou créez un nouvel utilisateur</div>
                   </div>
                 )}
               </div>
             ) : (
-              // Desktop Table View
+              // Desktop Table View - EXACTLY like CoursesManagement styling
               <div style={{ overflowX: 'auto' }}>
-                {filteredUsers.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#E5E7EB' }}>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>...</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredUsers.map((user, index) => (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#E5E7EB' }}>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Nom complet</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Email</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Username</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Privilège</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Formations</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Ajouté le</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Subscr.</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentUsers.length > 0 ? (
+                      currentUsers.map((user, index) => (
                         <tr
                           key={user.id}
                           style={{
                             borderBottom: '1px solid #E5E7EB',
-                            backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB'
+                            backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB',
+                            transition: 'background-color 0.2s'
                           }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#F9FAFB'}
                         >
-                          <td style={{ padding: '0.75rem', color: '#1F2937' }}>{user.full_name}</td>
+                          <td style={{ padding: '0.75rem', color: '#1F2937' }}>
+                            <div style={{ fontWeight: '500', color: '#1F2937' }}>
+                              {user.full_name}
+                            </div>
+                          </td>
                           <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.email}</td>
                           <td style={{ padding: '0.75rem', color: '#6B7280' }}>{user.username}</td>
                           <td style={{ padding: '0.75rem' }}>
@@ -991,7 +1067,11 @@ const UsersManagement: React.FC = () => {
                             {user.course_count < 10 ? `0${user.course_count}` : user.course_count}
                           </td>
                           <td style={{ padding: '0.75rem', color: '#6B7280' }}>
-                            {new Date(user.date_joined).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {new Date(user.date_joined).toLocaleDateString('fr-FR', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
                           </td>
                           <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
                             {user.subscription_count}
@@ -999,39 +1079,66 @@ const UsersManagement: React.FC = () => {
                           <td style={{ padding: '0.75rem' }}>
                             <span style={{
                               color: getStatusColor(user.status),
-                              fontWeight: '500'
+                              fontWeight: '500',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem'
                             }}>
+                              <span style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                backgroundColor: getStatusColor(user.status)
+                              }}></span>
                               {getStatusLabel(user.status)}
                             </span>
                           </td>
-                          <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }}>
+                          <td style={{ padding: '0.75rem', textAlign: 'center', position: 'relative' }} data-menu-container>
                             <button
-                              onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setMenuPosition({
+                                  top: rect.bottom + 5,
+                                  left: rect.right - 250
+                                });
+                                setOpenMenuId(openMenuId === user.id ? null : user.id);
+                              }}
                               style={{
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
                                 color: '#6B7280',
                                 fontSize: '1.25rem',
-                                padding: '0.25rem'
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '4px',
+                                transition: 'background-color 0.2s'
                               }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                             >
                               ⋯
                             </button>
                             {openMenuId === user.id && (
-                              <div style={{
-                                position: 'absolute',
-                                right: '0',
-                                top: '100%',
-                                backgroundColor: 'white',
-                                border: '1px solid #E5E7EB',
-                                borderRadius: '6px',
-                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                                zIndex: 1000,
-                                minWidth: '180px'
-                              }}>
+                              <div
+                                style={{
+                                  position: 'fixed',
+                                  top: `${menuPosition.top}px`,
+                                  left: `${menuPosition.left}px`,
+                                  backgroundColor: 'white',
+                                  border: '1px solid #E5E7EB',
+                                  borderRadius: '6px',
+                                  boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                                  zIndex: 1000,
+                                  minWidth: '200px'
+                                }}
+                              >
                                 <button
-                                  onClick={() => handleUserAction(user.id, 'edit')}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleUserAction(user.id, 'edit');
+                                  }}
                                   style={{
                                     width: '100%',
                                     padding: '0.75rem 1rem',
@@ -1040,13 +1147,23 @@ const UsersManagement: React.FC = () => {
                                     backgroundColor: 'transparent',
                                     cursor: 'pointer',
                                     fontSize: '0.875rem',
-                                    color: '#374151'
+                                    color: '#374151',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    transition: 'background-color 0.2s'
                                   }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
                                   ✏️ Modifier utilisateur
                                 </button>
                                 <button
-                                  onClick={() => handleUserAction(user.id, 'status')}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleUserAction(user.id, 'status');
+                                  }}
                                   style={{
                                     width: '100%',
                                     padding: '0.75rem 1rem',
@@ -1055,13 +1172,23 @@ const UsersManagement: React.FC = () => {
                                     backgroundColor: 'transparent',
                                     cursor: 'pointer',
                                     fontSize: '0.875rem',
-                                    color: '#374151'
+                                    color: '#374151',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    transition: 'background-color 0.2s'
                                   }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
                                   🔄 Changer statut
                                 </button>
                                 <button
-                                  onClick={() => deleteUser(user.id)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    deleteUser(user.id);
+                                  }}
                                   style={{
                                     width: '100%',
                                     padding: '0.75rem 1rem',
@@ -1070,8 +1197,14 @@ const UsersManagement: React.FC = () => {
                                     backgroundColor: 'transparent',
                                     cursor: 'pointer',
                                     fontSize: '0.875rem',
-                                    color: '#DC2626'
+                                    color: '#DC2626',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    transition: 'background-color 0.2s'
                                   }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
                                   🗑️ Supprimer
                                 </button>
@@ -1079,59 +1212,41 @@ const UsersManagement: React.FC = () => {
                             )}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '3rem',
-                    color: '#6B7280'
-                  }}>
-                    <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>👥</div>
-                    <h3 style={{ color: '#374151', marginBottom: '0.5rem' }}>Aucun utilisateur trouvé</h3>
-                    <p style={{ marginBottom: '1.5rem' }}>Aucun utilisateur ne correspond aux filtres actuels</p>
-                    <button
-                      onClick={() => {
-                        setStatusFilter('all');
-                        setPrivilegeFilter('all');
-                        addNotification("info", "Filtres réinitialisés", "Tous les filtres ont été réinitialisés", 2000);
-                      }}
-                      style={{
-                        backgroundColor: '#4338CA',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.75rem 1.5rem',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem',
-                        fontWeight: '500'
-                      }}
-                    >
-                      Réinitialiser les filtres
-                    </button>
-                  </div>
-                )}
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>
+                          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👥</div>
+                          <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.5rem' }}>Aucun utilisateur trouvé</div>
+                          <div style={{ fontSize: '0.875rem' }}>Essayez de modifier vos filtres ou créez un nouvel utilisateur</div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
 
-            {filteredUsers.length > 0 && (
+            {/* Load More Button - EXACTLY like CoursesManagement */}
+            {remainingUsers > 0 && (
               <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
                 <button
                   style={{
                     backgroundColor: '#8B5A3C',
                     color: 'white',
                     border: 'none',
-                    padding: isMobile ? '0.875rem 1.5rem' : '0.75rem 2rem',
+                    padding: '0.75rem 2rem',
                     borderRadius: '6px',
                     fontSize: '0.9375rem',
                     fontWeight: '500',
                     cursor: 'pointer',
-                    width: isMobile ? '100%' : 'auto'
+                    transition: 'background-color 0.2s'
                   }}
-                  onClick={() => addNotification("info", "Chargement", "Chargement des résultats supplémentaires...", 2000)}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#78472A'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#8B5A3C'}
+                  onClick={handleLoadMoreResults}
                 >
-                  Afficher plus de résultat
+                  Afficher plus de résultat ({remainingUsers} restant{remainingUsers !== 1 ? 's' : ''})
                 </button>
               </div>
             )}
