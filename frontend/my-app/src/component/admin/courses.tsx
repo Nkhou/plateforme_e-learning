@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+// DON'T DELETE OR CHANGE ANY THING JUST AFFICHER PLUS DE RESULTAT FONCTIONALITER AND FOR 3POINT OF ECHA COURSE WHEN I CLICK MAKE IT OUTSAIDE DON'T USE OVERFLOW import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+
 import api from '../../api/api';
 import NewCours from '../courses/new_courses';
 
@@ -270,6 +272,8 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   const [currentCourseTitle, setCurrentCourseTitle] = useState<string>('');
   const [showNewCours, setShowNewCours] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
   
   // Add notifications state
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -607,9 +611,24 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
 
     return matchesStatus && matchesCategory;
   });
+
+  // Pagination logic
+  const totalItems = filteredCourses.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentCourses = filteredCourses.slice(startIndex, endIndex);
+
   const handleDisplayMore = () => {
-    
-  }
+    if (currentPage < totalPages) {
+      setCurrentPage(prev => prev + 1);
+    }
+  };
+
+  const handleLoadMoreResults = () => {
+    setItemsPerPage(prev => prev + 5);
+  };
+
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.currentTarget;
     const parent = target.parentElement;
@@ -1225,8 +1244,8 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                 </tr>
               </thead>
               <tbody>
-                {filteredCourses.length > 0 ? (
-                  filteredCourses.map((course, index) => {
+                {currentCourses.length > 0 ? (
+                  currentCourses.map((course, index) => {
                     const courseStatusValue = getStatusValue(course.status);
                     const statusColor = getStatusColor(course.status);
                     const statusLabel = getStatusLabel(course.status);
@@ -1560,7 +1579,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
           </div>
 
           {/* Load More Button */}
-          {filteredCourses.length > 0 && (
+          {filteredCourses.length > 0 && endIndex < filteredCourses.length && (
             <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
               <button
                 style={{
@@ -1576,9 +1595,9 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#78472A'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#8B5A3C'}
-                onClick={handleDisplayMore}
+                onClick={handleLoadMoreResults}
               >
-                Afficher plus de résultat
+                Afficher plus de résultat ({filteredCourses.length - endIndex} restant{filteredCourses.length - endIndex !== 1 ? 's' : ''})
               </button>
             </div>
           )}
