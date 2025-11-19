@@ -1,4 +1,4 @@
-import type { CourseContent } from './CourseDetail';
+import type { CourseContent} from './CourseDetail';
 import React, { useState, useEffect } from 'react';
 
 interface QuizState {

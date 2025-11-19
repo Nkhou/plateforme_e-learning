@@ -260,18 +260,32 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   console.log('------------------------------------------------', isAdmin)
   console.log('user?.privilege', user?.privilege)
 
+  
   // Fix: Use useEffect to update activeNavItem when isAdmin changes
-  const [activeNavItem, setActiveNavItem] = useState('formations');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeNavItem, setActiveNavItem] = useState(() => {
+  const saved = localStorage.getItem("activeNavItem");
 
+  // If saved value exists → use it  
+  if (saved) return saved;
+
+  // Otherwise use default depending on admin
+  return isAdmin ? "dashboard" : "formations";
+});
+  const [activeTab, setActiveTab] = useState('overview');
+  
   useEffect(() => {
-    // Update activeNavItem when authentication completes and we know if user is admin
-    if (isAdmin) {
-      setActiveNavItem('dashboard');
-    } else {
-      setActiveNavItem('formations');
-    }
-  }, [isAdmin]);
+  localStorage.setItem("activeNavItem", activeNavItem);
+}, [activeNavItem]);
+  useEffect(() => {
+  const saved = localStorage.getItem("activeNavItem");
+
+  // Only apply default if nothing was saved before
+  if (!saved) {
+    if (isAdmin) setActiveNavItem("dashboard");
+    else setActiveNavItem("formations");
+  }
+}, [isAdmin]);
+
   // Your existing authentication useEffect
   useEffect(() => {
     const checkAuthentication = async () => {
@@ -1106,7 +1120,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           {/* Bottom Navigation Bar */}
           <nav style={{
             backgroundColor: '#12114a',
-            padding: '0.80rem 1rem',
+            padding: '0.70rem',
+            paddingRight:'3.7rem',
             borderBottom: '1px solid rgba(255,255,255,0.1)',
             overflowX: 'auto',
             WebkitOverflowScrolling: 'touch',
