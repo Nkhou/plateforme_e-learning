@@ -274,7 +274,9 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
-  
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+
+
   // Add notifications state
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
@@ -329,15 +331,15 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await api.get('courses/');
       console.log('API Response:', response.data);
-      
+
       if (response.data && response.data.courses && response.data.courses.length > 0) {
         console.log('First course data:', response.data.courses[0]);
         console.log('Available properties:', Object.keys(response.data.courses[0]));
       }
-      
+
       // Handle different response structures
       if (Array.isArray(response.data)) {
         setCourses({
@@ -368,15 +370,15 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
     try {
       setStudentsLoading(courseId);
       const response = await api.get(`courses/${courseId}/students/`);
-      
+
       console.log('Students API Response:', response.data);
-      
+
       // Type assertion for students response
       const studentsResponse = response.data as {
         students?: Student[];
         course_title?: string;
       };
-      
+
       if (studentsResponse && studentsResponse.students) {
         setStudentsData(studentsResponse.students);
         setCurrentCourseTitle(studentsResponse.course_title || '');
@@ -426,32 +428,32 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   // Safe status value extraction
   const getStatusValue = (status: any): string => {
     if (!status && status !== 0) return '';
-    
+
     // If status is a number, map to French string
     if (typeof status === 'number') {
       const statusMap: { [key: number]: string } = {
         0: 'Brouillon',
-        1: 'Actif', 
+        1: 'Actif',
         2: 'Archivé'
       };
       return statusMap[status] || '';
     }
-    
+
     // If status is a string, return it directly
     if (typeof status === 'string') {
       return status;
     }
-    
+
     // If status is an object with a value property
     if (typeof status === 'object' && status.value) {
       return String(status.value);
     }
-    
+
     // If status is an object with other properties, try common field names
     if (typeof status === 'object') {
       return String(status.name || status.status || status.id || '');
     }
-    
+
     // Fallback
     return String(status);
   };
@@ -464,11 +466,11 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
     console.log(`Changing course ${courseId} to status: ${newStatus}`);
     setChangingStatus(courseId);
     setOpenMenuId(null);
-    
+
     try {
       // Find the status choice to get numeric value
       const statusChoice = STATUS_CHOICES.find(s => s.value === newStatus);
-      
+
       if (!statusChoice) {
         throw new Error(`Invalid status: ${newStatus}`);
       }
@@ -503,14 +505,14 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   const handleCourseAction = async (courseId: number, action: string) => {
     console.log(`${action} course ${courseId}`);
     setOpenMenuId(null);
-    
+
     try {
       switch (action) {
         case 'delete':
           if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) {
             return;
           }
-          
+
           const deleteResponse = await api.delete(`courses/${courseId}/`);
 
           if (deleteResponse.status === 200 || deleteResponse.status === 204) {
@@ -562,7 +564,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
     }
   };
   const BASE_URL = 'http://localhost:8000';
-  const getimageUrl = (contentOrPath:  string | undefined): string | undefined => {
+  const getimageUrl = (contentOrPath: string | undefined): string | undefined => {
     if (!contentOrPath) return undefined;
 
     let imagePath: string | undefined;
@@ -586,6 +588,8 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
 
     return url;
   };
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
   // Safe status color getter
   const getStatusColor = (status: any) => {
     const statusValue = getStatusValue(status);
@@ -655,20 +659,20 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
       try {
         setSaving(true);
         const response = await api.patch(`courses/${editingCourse?.id}/`, formData);
-        
+
         if (response.status === 200) {
           // Update local state
           setCourses(prev => ({
             ...prev,
             courses: prev.courses.map(course =>
               course.id === editingCourse?.id
-                ? { 
-                    ...course, 
-                    title_of_course: formData.title_of_course,
-                    description: formData.description,
-                    department: formData.department,
-                    status: formData.status
-                  }
+                ? {
+                  ...course,
+                  title_of_course: formData.title_of_course,
+                  description: formData.description,
+                  department: formData.department,
+                  status: formData.status
+                }
                 : course
             )
           }));
@@ -972,9 +976,9 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                 </thead>
                 <tbody>
                   {students.map((student, index) => (
-                    <tr 
-                      key={student.id} 
-                      style={{ 
+                    <tr
+                      key={student.id}
+                      style={{
                         borderBottom: '1px solid #E5E7EB',
                         backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB',
                         transition: 'background-color 0.2s'
@@ -1004,7 +1008,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                         </span>
                       </td>
                       <td style={{ padding: '1rem', textAlign: 'center' }}>
-                        <div style={{ 
+                        <div style={{
                           backgroundColor: '#EFF6FF',
                           color: '#1E40AF',
                           padding: '0.5rem',
@@ -1018,7 +1022,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                         </div>
                       </td>
                       <td style={{ padding: '1rem', textAlign: 'center' }}>
-                        <div style={{ 
+                        <div style={{
                           backgroundColor: '#F0FDF4',
                           color: '#166534',
                           padding: '0.5rem',
@@ -1076,10 +1080,10 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   if (loading) {
     return (
       <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ 
-          backgroundColor: 'white', 
-          borderRadius: '8px', 
-          padding: '3rem', 
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          padding: '3rem',
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
           textAlign: 'center'
         }}>
@@ -1096,10 +1100,10 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   if (error) {
     return (
       <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ 
-          backgroundColor: 'white', 
-          borderRadius: '8px', 
-          padding: '3rem', 
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          padding: '3rem',
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
           textAlign: 'center'
         }}>
@@ -1131,16 +1135,16 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', minHeight: '100vh' }}>
       {/* Add Notification Container */}
-      <NotificationContainer 
-        notifications={notifications} 
-        removeNotification={removeNotification} 
+      <NotificationContainer
+        notifications={notifications}
+        removeNotification={removeNotification}
       />
-      
+
       {showStudentsModal && <StudentsModal />}
       {editingCourse && <EditCourseModal />}
-      
+
       {!showNewCours && (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           {/* Header with filters and button */}
@@ -1176,7 +1180,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                 <option value="Brouillon">Brouillon</option>
                 <option value="Archivé">Archivé</option>
               </select>
-              
+
               {/* Category/Department Filter */}
               <select
                 value={categoryFilter}
@@ -1249,7 +1253,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                     const courseStatusValue = getStatusValue(course.status);
                     const statusColor = getStatusColor(course.status);
                     const statusLabel = getStatusLabel(course.status);
-                    
+
                     return (
                       <tr
                         key={course.id}
@@ -1266,7 +1270,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                         <td style={{ padding: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
                           {course.image_url ? (
                             <img
-                            src={getimageUrl(course.image_url)} 
+                              src={getimageUrl(course.image_url)}
                               // src={course.image_url.startsWith('http') ? course.image_url : `${window.location.protocol}//${window.location.hostname}:8000${course.image_url}`}
                               alt={course.title_of_course}
                               style={{
@@ -1306,7 +1310,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                         </td>
                         <td style={{ padding: '0.75rem', color: '#6B7280' }}>{course.creator_username}</td>
                         <td style={{ padding: '0.75rem', color: '#1F2937', textAlign: 'center' }}>
-                          <span 
+                          <span
                             style={{
                               backgroundColor: '#EEF2FF',
                               color: '#4338CA',
@@ -1333,10 +1337,10 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                           {course.module_count || 0}
                         </td>
                         <td style={{ padding: '0.75rem', color: '#6B7280' }}>
-                          {new Date(course.created_at).toLocaleDateString('fr-FR', { 
-                            day: '2-digit', 
-                            month: 'short', 
-                            year: 'numeric' 
+                          {new Date(course.created_at).toLocaleDateString('fr-FR', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
                           })}
                         </td>
                         <td style={{ padding: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
@@ -1368,8 +1372,17 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+
+                                const rect = e.currentTarget.getBoundingClientRect();
+
+                                setMenuPosition({
+                                  top: rect.bottom + 5,        // correct vertical position
+                                  left: rect.right - 250       // adjust horizontal based on menu width
+                                });
+
                                 setOpenMenuId(openMenuId === course.id ? null : course.id);
                               }}
+
                               style={{
                                 background: 'none',
                                 border: 'none',
@@ -1385,23 +1398,23 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
                             >
                               ⋯
                             </button>
-                            
+
                             {openMenuId === course.id && (
-                              <div 
+
+                              <div
                                 style={{
-                                  position: 'absolute',
-                                  right: '0',
-                                  top: '100%',
+                                  position: 'fixed',
+                                  top: `${menuPosition.top}px`,
+                                  left: `${menuPosition.left}px`,
                                   backgroundColor: 'white',
                                   border: '1px solid #E5E7EB',
                                   borderRadius: '6px',
                                   boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
                                   zIndex: 1000,
-                                  minWidth: '250px',
-                                  marginTop: '0.25rem'
+                                  minWidth: '250px'
                                 }}
-                                onClick={(e) => e.stopPropagation()}
                               >
+
                                 {/* Student Actions */}
                                 <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #E5E7EB' }}>
                                   <button
