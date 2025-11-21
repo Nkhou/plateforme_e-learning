@@ -666,11 +666,12 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 width: '90%',
                 maxWidth: '600px',
                 maxHeight: '80vh',
+                marginTop: '30px',
                 zIndex: 1050,
                 boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
                 border: 'none',
                 borderRadius: '12px',
-                top: '50%',
+                // top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)'
               }}
@@ -680,6 +681,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                 placeholder="Que cherchez-vous?"
                 className="w-100"
                 autoFocus={true}
+                
               />
             </div>
           </div>

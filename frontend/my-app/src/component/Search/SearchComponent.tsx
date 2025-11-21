@@ -165,13 +165,24 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
     setShowResults(false);
     setSearchTerm('');
   };
+  useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (inputRef.current && !inputRef.current.contains(event.target as Node)) {
+      setShowResults(false);
+    }
+  };
 
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => {
+    document.removeEventListener('mousedown', handleClickOutside);
+  };
+}, []);
   // Group results by type
   const courses = searchResults.filter(result => result.type === 'course');
   const modules = searchResults.filter(result => result.type === 'module');
 
   return (
-    <div className={`search-component ${className}`} style={{ position: 'relative', width: '100%' }}>
+    <div className={`search-component ${className}`} style={{ position: 'fixed', width: '100%' }}>
       {/* Search Input */}
       <div className="search-form">
         <div className="input-group" style={{ position: 'relative', width: '100%' }}>
