@@ -712,7 +712,7 @@ class RegisterwithoutFileView(APIView):
             if serializer.is_valid():
                 user = serializer.save()
                 sender_email = os.environ.get('EMAIL_HOST_USER')
-                login_link = "http://localhost:3000/signup"
+                login_link = "http://51.178.87.234:3000/signup"
                 logo_url = request.build_absolute_uri(static('images/logo-colored.png'))
                 html_message = render_to_string('register.html', {
                     'user': user,

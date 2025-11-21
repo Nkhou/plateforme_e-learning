@@ -102,7 +102,7 @@ def send_course_activation_email(sender, instance, created, **kwargs):
                     )
                     
                     # Prepare course URL
-                    course_url = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/courses/{instance.id}"
+                    course_url = f"{getattr(settings, 'FRONTEND_URL', 'http://51.178.87.234:3000')}/courses/{instance.id}"
                     
                     # Render HTML email template
                     try:
@@ -215,7 +215,7 @@ def send_module_activation_email(sender, instance, created, **kwargs):
                     )
                     
                     # Prepare module URL
-                    module_url = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/courses/{instance.course.id}/modules/{instance.id}"
+                    module_url = f"{getattr(settings, 'FRONTEND_URL', 'http://51.178.87.234:3000')}/courses/{instance.course.id}/modules/{instance.id}"
                     
                     # Render HTML email template
                     try:
@@ -343,7 +343,7 @@ def send_content_notification_email(sender, instance, created, **kwargs):
                 )
                 
                 # Prepare content URL
-                content_url = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/courses/{instance.module.course.id}/modules/{instance.module.id}/contents/{instance.id}"
+                content_url = f"{getattr(settings, 'FRONTEND_URL', 'http://51.178.87.234:3000')}/courses/{instance.module.course.id}/modules/{instance.module.id}/contents/{instance.id}"
                 
                 # Render HTML email template
                 try:
