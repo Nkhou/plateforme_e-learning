@@ -166,16 +166,9 @@ function SignUp() {
                     privilege: user.privilege || user.Privilege || 'AP', // Handle both field names
                 }));
 
-                const response = await axios.post(
-                    'http://localhost:8000/api/CSVUpload/',
-                    { csv_file: processedData },
-                    {
-                        withCredentials: true,
-                        headers: {
-                            'X-CSRFToken': getCsrfToken(),
-                            'Content-Type': 'application/json',
-                        }
-                    }
+                const response = await api.post(
+                    '/CSVUpload/',
+                    { csv_file: processedData }
                 );
 
                 console.log("CSV upload success:", response.data);

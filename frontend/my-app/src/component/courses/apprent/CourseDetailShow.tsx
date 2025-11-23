@@ -182,6 +182,88 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
   </div>
 );
 
+// Composant pour gérer l'affichage des descriptions avec "Afficher plus"
+const DescriptionWithToggle = ({ 
+  description, 
+  id, 
+  maxLength = 150,
+  fontSize = 'body',
+  color = '#4B5563',
+  lineHeight = '1.5'
+}: {
+  description: string;
+  id: string;
+  maxLength?: number;
+  fontSize?: string;
+  color?: string;
+  lineHeight?: string;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  if (!description) return null;
+
+  const shouldTruncate = description.length > maxLength;
+  const displayText = isExpanded || !shouldTruncate 
+    ? description 
+    : `${description.substring(0, maxLength)}...`;
+
+  const handleToggle = () => {
+    setIsAnimating(true);
+    setIsExpanded(!isExpanded);
+    setTimeout(() => setIsAnimating(false), 300);
+  };
+
+  return (
+    <div style={{ 
+      lineHeight: lineHeight,
+      overflow: 'hidden'
+    }}>
+      <p 
+        style={{ 
+          margin: 0, 
+          fontSize: fontSize === 'body' ? '14px' : fontSize === 'small' ? '12px' : '16px',
+          color: color,
+          transition: isAnimating ? 'all 0.3s ease' : 'none',
+          opacity: isAnimating ? 0.8 : 1
+        }}
+      >
+        {displayText}
+      </p>
+      {shouldTruncate && (
+        <button
+          onClick={handleToggle}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#F97316',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: '500',
+            padding: '0.25rem 0',
+            marginTop: '0.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem'
+          }}
+        >
+          {isExpanded ? (
+            <>
+              <span style={{ fontSize: '0.75rem' }}>▲</span>
+              Afficher moins
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '0.75rem' }}>▼</span>
+              Afficher plus
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  );
+};
+
 interface VideoContent {
   video_file: string;
   duration?: number;
@@ -1032,15 +1114,22 @@ useEffect(() => {
             </span>
           </div>
         </div>
-        <p style={{
-          maxWidth: '1400px',      // Same as your main content
-          margin: '0 auto',         // Center the container
-          padding: isMobile ? '0.5rem 1rem 0' : '0.5rem 2rem 0',  // Add padding inside
-          fontSize: isMobile ? '0.8rem' : '0.9rem',
-          opacity: 0.9
+        
+        {/* Description avec fonctionnalité "Afficher plus" */}
+        <div style={{
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: isMobile ? '0.5rem 1rem 0' : '0.5rem 2rem 0'
         }}>
-          {course.description}
-        </p>
+          <DescriptionWithToggle 
+            description={course.description}
+            id="course-main"
+            maxLength={isMobile ? 100 : 150}
+            color="white"
+            fontSize={isMobile ? '14px' : '16px'}
+            lineHeight="1.5"
+          />
+        </div>
       </div>
 
       {/* Stats Bar */}
@@ -1150,21 +1239,22 @@ useEffect(() => {
             </div>
           )}
 
-          <p style={{
-            fontSize: '0.875rem',
-            color: '#4B5563',
-            lineHeight: '1.6',
-            marginBottom: '1rem',
-            display: isMobile ? 'none' : 'block'
-          }}>
-            {course.description}
-          </p>
+          {/* Description de la sidebar avec "Afficher plus" */}
+          <DescriptionWithToggle 
+            description={course.description}
+            id="course-sidebar"
+            maxLength={isMobile ? 80 : 120}
+            fontSize="14px"
+            color="#4B5563"
+            lineHeight="1.6"
+          />
 
           <div style={{
             display: 'flex',
             flexDirection: isMobile ? 'row' : 'column',
             gap: isMobile ? '2rem' : '0',
-            justifyContent: isMobile ? 'space-between' : 'flex-start'
+            justifyContent: isMobile ? 'space-between' : 'flex-start',
+            marginTop: '1rem'
           }}>
             <div>
               <div style={{ marginBottom: '0.5rem' }}>
@@ -1214,6 +1304,23 @@ useEffect(() => {
                       Module {module.order} • {module.title}
                     </h3>
                   </div>
+
+                  {/* Description du module avec "Afficher plus" */}
+                  {module.description && (
+                    <div style={{ 
+                      marginTop: '0.5rem',
+                      marginBottom: '1rem'
+                    }}>
+                      <DescriptionWithToggle 
+                        description={module.description}
+                        id={`module-${module.id}`}
+                        maxLength={isMobile ? 60 : 100}
+                        fontSize="12px"
+                        color="#6B7280"
+                        lineHeight="1.4"
+                      />
+                    </div>
+                  )}
 
                   {module.contents && module.contents.length > 0 ? (
                     module.contents.map((content: Content) => (
@@ -1411,14 +1518,14 @@ useEffect(() => {
                 }}>
                   À propos du contenu
                 </h4>
-                <p style={{
-                  margin: 0,
-                  fontSize: isMobile ? '0.75rem' : '0.875rem',
-                  color: '#6B7280',
-                  lineHeight: '1.5'
-                }}>
-                  {selectedContent.caption}
-                </p>
+                <DescriptionWithToggle 
+                  description={selectedContent.caption}
+                  id={`content-caption-${selectedContent.id}`}
+                  maxLength={isMobile ? 80 : 120}
+                  fontSize={isMobile ? '12px' : '14px'}
+                  color="#6B7280"
+                  lineHeight="1.5"
+                />
               </div>
             )}
 

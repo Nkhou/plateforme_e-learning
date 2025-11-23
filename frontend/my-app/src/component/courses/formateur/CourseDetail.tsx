@@ -271,9 +271,90 @@ interface Course {
   modules: Module[];
 }
 
+// Composant pour gérer l'affichage des descriptions avec "Afficher plus"
+const DescriptionWithToggle = ({ 
+  description, 
+  id, 
+  maxLength = 150,
+  fontSize = 'body',
+  color = '#4B5563',
+  lineHeight = '1.5'
+}: {
+  description: string;
+  id: string;
+  maxLength?: number;
+  fontSize?: keyof any;
+  color?: string;
+  lineHeight?: string;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  if (!description) return null;
+
+  const shouldTruncate = description.length > maxLength;
+  const displayText = isExpanded || !shouldTruncate 
+    ? description 
+    : `${description.substring(0, maxLength)}...`;
+
+  const handleToggle = () => {
+    setIsAnimating(true);
+    setIsExpanded(!isExpanded);
+    setTimeout(() => setIsAnimating(false), 300);
+  };
+
+  return (
+    <div style={{ 
+      lineHeight: lineHeight,
+      overflow: 'hidden'
+    }}>
+      <p 
+        style={{ 
+          margin: 0, 
+          fontSize: fontSize === 'body' ? '14px' : fontSize === 'small' ? '12px' : '16px',
+          color: color,
+          transition: isAnimating ? 'all 0.3s ease' : 'none',
+          opacity: isAnimating ? 0.8 : 1
+        }}
+      >
+        {displayText}
+      </p>
+      {shouldTruncate && (
+        <button
+          onClick={handleToggle}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#F97316',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: '500',
+            padding: '0.25rem 0',
+            marginTop: '0.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem'
+          }}
+        >
+          {isExpanded ? (
+            <>
+              <span style={{ fontSize: '0.75rem' }}>▲</span>
+              Afficher moins
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '0.75rem' }}>▼</span>
+              Afficher plus
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  );
+};
+
 const CourseDetail = () => {
   const { id } = useParams();
-  // const navigate = useNavigate();
   
   // Add notification state
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -1377,9 +1458,9 @@ const CourseDetail = () => {
         padding: isMobile ? '1rem 0' : '1.5rem 0'
       }}>
         <div style={{
-          maxWidth: '1400px',  // Same as your main content
-          margin: '0 auto',     // Center the container
-          padding: isMobile ? '0 1rem' : '0 2rem',  // Add padding inside
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: isMobile ? '0 1rem' : '0 2rem',
           display: 'flex',
           gap: '1rem',
           flexDirection: isMobile ? 'column' : 'row',
@@ -1411,15 +1492,22 @@ const CourseDetail = () => {
             </span>
           </div>
         </div>
-        <p style={{
-          maxWidth: '1400px',      // Same as your main content
-          margin: '0 auto',         // Center the container
-          padding: isMobile ? '0.5rem 1rem 0' : '0.5rem 2rem 0',  // Add padding inside
-          fontSize: isMobile ? '0.8rem' : '0.9rem',
-          opacity: 0.9
+        
+        {/* Description avec fonctionnalité "Afficher plus" */}
+        <div style={{
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: isMobile ? '0.5rem 1rem 0' : '0.5rem 2rem 0'
         }}>
-          {course.description}
-        </p>
+          <DescriptionWithToggle 
+            description={course.description}
+            id="course-main"
+            maxLength={isMobile ? 100 : 150}
+            color="white"
+            fontSize={isMobile ? '14px' : '16px'}
+            lineHeight="1.5"
+          />
+        </div>
       </div>
 
       {/* Enhanced Responsive Stats Bar */}
@@ -1597,19 +1685,21 @@ const CourseDetail = () => {
             </div>
           )}
 
-          <p style={{ 
-            fontSize: responsiveStyles.body.fontSize, 
-            color: '#4B5563', 
-            lineHeight: responsiveStyles.body.lineHeight, 
-            marginBottom: responsiveStyles.elementGap
-          }}>
-            {course.description}
-          </p>
+          {/* Description de la sidebar avec "Afficher plus" */}
+          <DescriptionWithToggle 
+            description={course.description}
+            id="course-sidebar"
+            maxLength={isMobile ? 80 : 120}
+            fontSize="body"
+            color="#4B5563"
+            lineHeight="1.5"
+          />
 
           <div style={{ 
             display: 'grid',
             gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr',
-            gap: responsiveStyles.elementGap
+            gap: responsiveStyles.elementGap,
+            marginTop: responsiveStyles.elementGap
           }}>
             <div>
               <div style={{ marginBottom: '0.25rem' }}>
@@ -1896,6 +1986,23 @@ const CourseDetail = () => {
                       </button>
                     </div>
                   </div>
+
+                  {/* Description du module avec "Afficher plus" */}
+                  {module.description && (
+                    <div style={{ 
+                      marginTop: '0.5rem',
+                      marginBottom: '1rem'
+                    }}>
+                      <DescriptionWithToggle 
+                        description={module.description}
+                        id={`module-${module.id}`}
+                        maxLength={isMobile ? 60 : 100}
+                        fontSize="small"
+                        color="#6B7280"
+                        lineHeight="1.4"
+                      />
+                    </div>
+                  )}
 
                   {/* Module Contents - Collapsible on Mobile */}
                   <div style={{
@@ -2252,20 +2359,27 @@ const CourseDetail = () => {
             {selectedContent.caption && (
               <div style={{ padding: '1rem 1.5rem', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
                 <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>À propos du contenu</h4>
-                <p style={{ margin: 0, fontSize: '0.875rem', color: '#6B7280', lineHeight: '1.5' }}>{selectedContent.caption}</p>
+                <DescriptionWithToggle 
+                  description={selectedContent.caption}
+                  id={`content-caption-${selectedContent.id}`}
+                  maxLength={isMobile ? 80 : 120}
+                  fontSize="small"
+                  color="#6B7280"
+                  lineHeight="1.5"
+                />
               </div>
             )}
 
             {/* Enhanced Timer Display */}
-            <div style={{
+            {/* <div style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#EEF2FF',
               borderBottom: '1px solid #E5E7EB',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            }}> */}
+              {/* <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ fontSize: '1.25rem' }}>⏱️</span>
                 <span style={{ fontSize: '0.875rem', color: '#4338CA', fontWeight: '500' }}>
                   Temps estimé : {selectedContent.estimated_duration || 15}min
@@ -2279,8 +2393,8 @@ const CourseDetail = () => {
                     {selectedContent.min_required_time * 60 <= timeSpent ? '✓ Temps requis atteint' : '⏳ Temps requis non atteint'}
                   </div>
                 )}
-              </div>
-            </div>
+              </div> */}
+            {/* </div> */}
 
             {/* Content Area */}
             <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
