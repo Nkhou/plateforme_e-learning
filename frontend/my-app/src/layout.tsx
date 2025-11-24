@@ -790,6 +790,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
                   <div className="btn-group custom-dropdown-group ms-auto ms-md-0" ref={dropdownRef}>
                     {/* Notifications Dropdown */}
+                    {
+                      user?.privilege === 'AP' && (
                     <div className="dropdown me-2">
                       <button
                         type="button"
@@ -1012,6 +1014,9 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                         </div>
                       )}
                     </div>
+                        // <></>
+                      )
+                    }
 
                     {/* User Menu Dropdown */}
                     <div className="dropdown">
@@ -1217,39 +1222,47 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                     }}
                   />} label="Utilisateurs" />
                 )}
-
-                <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon={<div
-                  style={{
-                    WebkitMaskImage: 'url(/inbox.png)',
-                    maskImage: 'url(/inbox.png)', // use the same image unless intentional
-                    WebkitMaskRepeat: 'no-repeat',
-                      maskRepeat: 'no-repeat',
-                      WebkitMaskPosition: 'center',
-                      maskPosition: 'center',
-                      WebkitMaskSize: '100% 100%', // make mask fill the div fully
-                      maskSize: '100% 100%',
-                      backgroundColor: 'white', // visible color through mask
-                      width: 17,
-                      height: 17,
-                      display: 'inline-block', // ensures no collapsing
-                  }}
-                />} label="Messages" />
-                <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon={<div
-                  style={{
-                    WebkitMaskImage: 'url(/bookmark.png)',
-                    maskImage: 'url(/bookmark.png)', // use the same image unless intentional
-                    WebkitMaskRepeat: 'no-repeat',
-                      maskRepeat: 'no-repeat',
-                      WebkitMaskPosition: 'center',
-                      maskPosition: 'center',
-                      WebkitMaskSize: '100% 100%', // make mask fill the div fully
-                      maskSize: '100% 100%',
-                      backgroundColor: 'white', // visible color through mask
-                      width: 17,
-                      height: 17,
-                      display: 'inline-block', // ensures no collapsing
-                  }}
-                />} label="Favoris" />
+                { user?.privilege != 'A' && (
+                  <>
+                  <NavButton active={activeNavItem === 'messages'} onClick={() => handleNavigation('messages')} icon={<div
+                    style={{
+                      WebkitMaskImage: 'url(/inbox.png)',
+                      maskImage: 'url(/inbox.png)', // use the same image unless intentional
+                      WebkitMaskRepeat: 'no-repeat',
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        maskPosition: 'center',
+                        WebkitMaskSize: '100% 100%', // make mask fill the div fully
+                        maskSize: '100% 100%',
+                        backgroundColor: 'white', // visible color through mask
+                        width: 17,
+                        height: 17,
+                        display: 'inline-block', // ensures no collapsing
+                    }}
+                  />} label="Messages" />
+                  </>
+                )}
+                { user?.privilege == 'AP' && (
+                  <>
+                  
+                  <NavButton active={activeNavItem === 'favoris'} onClick={() => handleNavigation('favoris')} icon={<div
+                    style={{
+                      WebkitMaskImage: 'url(/bookmark.png)',
+                      maskImage: 'url(/bookmark.png)', // use the same image unless intentional
+                      WebkitMaskRepeat: 'no-repeat',
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        maskPosition: 'center',
+                        WebkitMaskSize: '100% 100%', // make mask fill the div fully
+                        maskSize: '100% 100%',
+                        backgroundColor: 'white', // visible color through mask
+                        width: 17,
+                        height: 17,
+                        display: 'inline-block', // ensures no collapsing
+                    }}
+                  />} label="Favoris" />
+                  </>
+                )}
               </div>
             </div>
           </nav>

@@ -5,10 +5,10 @@ const NotFound = () => {
 
   return (
     <div
-      className="min-vh-100 d-flex flex-column"
+      className="min-vh-100 d-flex flex-column container"
       style={{
         fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
-        padding: '2rem 0'
+        paddingLeft: '2rem 0'
       }}
     >
       <div className="flex-grow-1 container-fluid h-100 d-flex align-items-center justify-content-center">
@@ -35,12 +35,12 @@ const NotFound = () => {
 
                 <button
                   onClick={handleGoHome}
-                  className="bg-indigo-900 hover:bg-indigo-800 text-white font-semibold px-8 py-4 rounded-lg transition-colors duration-200 inline-flex items-center gap-2"
-                style={{
-    backgroundColor: '#212068',
-  }}
->
-                  <span>‹</span>
+                  className="bg-indigo-900 hover:bg-indigo-800 text-white font-semibold px-4 py-4 rounded-lg transition-colors duration-200 inline-flex items-center gap-2"
+                  style={{
+                    backgroundColor: '#212068',
+                  }}
+                >
+                  <span> ‹ </span>
                   <span>Retourner à la page d'accueil</span>
                 </button>
 

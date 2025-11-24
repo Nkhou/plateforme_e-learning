@@ -250,10 +250,11 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
   }
 
   return (
-    <div style={{
-      padding: '2rem 3rem',
+    <div className='container' style={{
+      paddingLeft: '2rem 3rem',
       backgroundColor: '#f8f9fa',
-      minHeight: '100vh'
+      minHeight: '100vh',
+
     }}>
       <style>
         {`
@@ -302,61 +303,6 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
         </div>
         
         {/* Filters */}
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Status Filter */}
-          {/* <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            style={{
-              backgroundColor: '#EEF2FF',
-              border: '1px solid #C7D2FE',
-              borderRadius: '6px',
-              padding: '0.5rem 2rem 0.5rem 0.75rem',
-              fontSize: '0.875rem',
-              fontWeight: '500',
-              color: '#4338CA',
-              cursor: 'pointer',
-              appearance: 'none',
-              backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 0.5rem center',
-              minWidth: '180px'
-            }}
-          >
-            <option value="all">Statut &gt; Tous</option>
-            <option value="Actif">Actif</option>
-            <option value="Brouillon">Brouillon</option>
-            <option value="Archivé">Archivé</option>
-          </select> */}
-          
-          {/* Category Filter */}
-          {/* <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            style={{
-              backgroundColor: '#EEF2FF',
-              border: '1px solid #C7D2FE',
-              borderRadius: '6px',
-              padding: '0.5rem 2rem 0.5rem 0.75rem',
-              fontSize: '0.875rem',
-              fontWeight: '500',
-              color: '#4338CA',
-              cursor: 'pointer',
-              appearance: 'none',
-              // backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%234338CA\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 0.5rem center',
-              minWidth: '180px'
-            }}
-          >
-            <option value="all">Catégorie &gt; Tous</option>
-            <option value="F">Finance</option>
-            <option value="H">Human Resources</option>
-            <option value="M">Marketing</option>
-            <option value="O">Operations/Production</option>
-            <option value="S">Sales</option>
-          </select> */}
-        </div>
       </div>
 
       {/* Courses Grid */}

@@ -607,8 +607,8 @@ const Dashboard = () => {
     );
 
     return (
-        <div style={{
-            padding: '2rem 3rem',
+        <div className="container" style={{
+            paddingLeft: '2rem 3rem',
             backgroundColor: '#f8f9fa',
             minHeight: '100vh'
         }}>
