@@ -297,8 +297,9 @@ const UsersManagement: React.FC = () => {
         setLoading(true);
         const response = await api('/admin/users');
         setUserData(response.data);
+        console.log('***********--+++++++++++++++++++++++++++++++++++++++++++999', response.data)
         setError(null);
-        addNotification("success", "Utilisateurs chargés", `${response.data.users.length} utilisateurs ont été chargés avec succès`, 3000);
+        // addNotification("success", "Utilisateurs chargés", `${response.data.users.length} utilisateurs ont été chargés avec succès`, 3000);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An error occurred';
         setError(errorMessage);
@@ -1099,8 +1100,8 @@ const UsersManagement: React.FC = () => {
                                 e.stopPropagation();
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 setMenuPosition({
-                                  top: rect.bottom + 5,
-                                  left: rect.right - 250
+                                  top: rect.bottom - 15,
+                                  left: rect.right - 220
                                 });
                                 setOpenMenuId(openMenuId === user.id ? null : user.id);
                               }}

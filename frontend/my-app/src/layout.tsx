@@ -798,7 +798,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                     <div className="dropdown me-2">
                       <button
                         type="button"
-                        className="btn btn-outline-light dropdown-toggle position-relative"
+                        className="btn btn-outline-light position-relative"
                         onClick={handleNotif}
                         aria-expanded={openNotif}
                         aria-label="Notifications"
@@ -1025,7 +1025,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                     <div className="dropdown">
                       <button
                         type="button"
-                        className="btn btn-outline-light dropdown-toggle"
+                        className="btn btn-outline-light"
                         onClick={handleMenu}
                         aria-expanded={open}
                         aria-label="User menu"

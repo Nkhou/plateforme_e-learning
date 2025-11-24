@@ -534,10 +534,10 @@ const AdminDashboard: React.FC = () => {
   return (
     <div style={{ backgroundColor: '#F3F4F6', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
       {/* Notification Container */}
-      <NotificationContainer 
+      {/* <NotificationContainer 
         notifications={notifications} 
         removeNotification={removeNotification} 
-      />
+      /> */}
 
       {/* Dashboard Content */}
       {activeNavItem === 'dashboard' && stats && (
