@@ -251,7 +251,7 @@ const CourseListWithFavorites: React.FC<CoursesManagementProps> = ({ courses: in
 
   return (
     <div className='container' style={{
-      paddingLeft: '2rem 3rem',
+      padding: '2rem 3rem',
       backgroundColor: '#f8f9fa',
       minHeight: '100vh',
 

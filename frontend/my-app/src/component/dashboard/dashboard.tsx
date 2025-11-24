@@ -236,7 +236,7 @@ const Dashboard = () => {
 
     // Format duration from minutes to "Xh Ym" format
     const formatDuration = (minutes: number | undefined): string => {
-        if (!minutes) return '1h 55m';
+        if (!minutes) return '0m';
 
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
@@ -608,7 +608,7 @@ const Dashboard = () => {
 
     return (
         <div className="container" style={{
-            paddingLeft: '2rem 3rem',
+            padding: '2rem 3rem',
             backgroundColor: '#f8f9fa',
             minHeight: '100vh'
         }}>
@@ -650,7 +650,7 @@ const Dashboard = () => {
                 {myCourses.length > 0 && (
                     <div className="d-flex gap-2">
                         <button
-                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            className="btn btn-light rounded-xl d-flex align-items-center justify-content-center"
                             onClick={() => scrollLeft(scrollContainer2)}
                             style={{
                                 width: '40px',
@@ -663,7 +663,7 @@ const Dashboard = () => {
                             ‹
                         </button>
                         <button
-                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            className="btn btn-light rounded-xl d-flex align-items-center justify-content-center"
                             onClick={() => scrollRight(scrollContainer2)}
                             style={{
                                 width: '40px',
@@ -818,9 +818,9 @@ const Dashboard = () => {
                                     paddingTop: '0.75rem',
                                     borderTop: '1px solid #f0f0f0'
                                 }}>
-                                    <span>📚 {course.module_count || 5} modules</span>
+                                    <span>📚 {course.module_count } modules</span>
                                     <span>🕐 {formatDuration(course.total_duration_minutes)}</span>
-                                    <span>👥 {course.subscriber_count || 32} apprenants</span>
+                                    <span>👥 {course.subscriber_count} apprenants</span>
                                 </div>
                                 <button
                                     style={{
@@ -866,7 +866,7 @@ const Dashboard = () => {
                 {recommendedCourses.length > 0 && (
                     <div className="d-flex gap-2">
                         <button
-                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            className="btn btn-light rounded-xl d-flex align-items-center justify-content-center"
                             onClick={() => scrollLeft(scrollContainer1)}
                             style={{
                                 width: '40px',
@@ -879,7 +879,7 @@ const Dashboard = () => {
                             ‹
                         </button>
                         <button
-                            className="btn btn-light rounded-circle d-flex align-items-center justify-content-center"
+                            className="btn btn-light rounded-xl d-flex align-items-center justify-content-center"
                             onClick={() => scrollRight(scrollContainer1)}
                             style={{
                                 width: '40px',

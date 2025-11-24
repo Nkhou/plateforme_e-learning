@@ -694,7 +694,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         <div className="flex-grow-1 d-flex flex-column">
           {/* Top Navbar */}
           <nav
-            className="navbar navbar-light border-bottom px-2 px-md-3"
+            className="navbar navbar-light px-2 px-md-3 "
             style={{ background: 'rgba(5, 44, 101, 0.9)' }}
           >
             <div className="container">
@@ -1282,10 +1282,10 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           <div style={{
             backgroundColor: '#212068',
             color: 'white',
-            padding: '3rem clamp(1rem, 3vw, 2rem)'
+            padding: '2rem clamp(1rem, 3vw, 2rem)'
           }}>
             <div className='container' style={{
-              fontSize: '0.75rem',
+              fontSize: '.9rem',
               marginBottom: '0.5rem',
               opacity: 0.9,
               wordWrap: 'break-word'
@@ -1370,7 +1370,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
           ) : (<></>)}
 
           {/* Page Content */}
-          <div className="flex-grow-1" style={{ background: '#f8f9fa' }}>
+          <div className="flex-grow-1 " style={{ background: '#f8f9fa' }}>
               {children}
           </div>
         </div>
