@@ -256,7 +256,7 @@ const Cours = () => {
         { value: 'Actif', label: 'Actif', color: '#10B981', numeric: 1 },
         { value: 'Archivé', label: 'Archivé', color: '#6B7280', numeric: 2 }
     ];
-    const BASE_URL = 'http://localhost:8000';
+    const BASE_URL = 'http://51.178.87.234:8000';
 
     // Notification functions
     const addNotification = (
@@ -884,7 +884,7 @@ const Cours = () => {
                             <strong>Erreur:</strong> {error}
                             <br />
                             <small style={{ color: '#EF4444' }}>
-                                Assurez-vous que votre serveur backend fonctionne sur http://localhost:8000
+                                Assurez-vous que votre serveur backend fonctionne sur http://51.178.87.234:8000
                             </small>
                         </div>
                     )}

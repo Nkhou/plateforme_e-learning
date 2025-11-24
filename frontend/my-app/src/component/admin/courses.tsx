@@ -563,7 +563,7 @@ const CoursesManagement: React.FC<CoursesManagementProps> = ({ courses: initialC
       addNotification('error', 'Erreur', 'Une erreur est survenue. Veuillez réessayer.');
     }
   };
-  const BASE_URL = 'http://localhost:8000';
+  const BASE_URL = 'http://51.178.87.234:8000';
   const getimageUrl = (contentOrPath: string | undefined): string | undefined => {
     if (!contentOrPath) return undefined;
 

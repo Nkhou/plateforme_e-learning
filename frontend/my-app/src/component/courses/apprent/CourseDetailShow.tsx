@@ -676,7 +676,7 @@ useEffect(() => {
     }
   };
 
-  const BASE_URL = 'http://localhost:8000';
+  const BASE_URL = 'http://51.178.87.234:8000';
 
   const getVideoUrl = (content: Content) => {
     const videoFile = content.video_content?.video_file;
