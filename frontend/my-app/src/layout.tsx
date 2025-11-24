@@ -721,6 +721,8 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                       marginRight: 'auto'
                     }}
                   >
+                  { user?.privilege == 'AP' && (
+                    <>
                     <div
                       className="search-bar d-flex align-items-center"
                       onClick={handleSearchIconClick}
@@ -768,9 +770,14 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                         🔎︎
                       </button>
                     </div>
+                    </>
+                  )}
                   </div>
 
                   {/* Mobile Search Icon - Positioned near notification icon */}
+                  {user?.privilege == 'AP' && 
+                  (
+                    <>
                   <button
                     className="btn btn-outline-light d-md-none me-2"
                     onClick={handleSearchIconClick}
@@ -790,6 +797,9 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
                   >
                     🔍
                   </button>
+                    </>
+                  )
+                  }
 
                   <div className="btn-group custom-dropdown-group ms-auto ms-md-0" ref={dropdownRef}>
                     {/* Notifications Dropdown */}

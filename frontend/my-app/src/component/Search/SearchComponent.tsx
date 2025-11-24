@@ -144,21 +144,23 @@ const SearchComponent: React.FC<SearchComponentProps> = ({
   };
 
   const handleResultClick = (result: SearchResult) => {
+    console.log('222222222222222222222222222', result.type);
     if (onSearchResultClick) {
+      // Default navigation behavior
       onSearchResultClick(result);
     } else {
-      // Default navigation behavior
       switch (result.type) {
         case 'course':
-          navigate(`/cours/${result.id}`);
+          
+          navigate(`/Formation/${result.id}`);
           break;
         case 'module':
           if (result.course_id) {
-            navigate(`/cours/${result.course_id}/`);
+            navigate(`/Formation/${result.course_id}/`);
           }
           break;
         case 'content':
-          navigate(`/cours/${result.course_id}/`);
+          navigate(`/Formation/${result.course_id}/`);
           break;
       }
     }
