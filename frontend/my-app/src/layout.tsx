@@ -592,6 +592,9 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
         withCredentials: true,
       });
       setOpen(false);
+      localStorage.removeItem('activeNavItem');
+      // setActiveNavItem('activeNavItem');
+      // setActiveTab('');
       navigate('/');
     } catch (error) {
       console.error('Logout failed:', error);
