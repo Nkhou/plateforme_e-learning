@@ -673,7 +673,7 @@ const CourseDetail = () => {
           setUserProgress(JSON.parse(savedProgress));
         }
 
-        addNotification("success", "Chargement réussi", "Les données du cours ont été chargées avec succès", 3000);
+        // addNotification("success", "Chargement réussi", "Les données du cours ont été chargées avec succès", 3000);
       } catch (error) {
         console.error('Error fetching course:', error);
         addNotification("error", "Erreur de chargement", "Impossible de charger les données du cours", 5000);
@@ -1439,7 +1439,7 @@ const CourseDetail = () => {
   const statusBadge = getStatusBadge(course.status);
 
   return (
-    <div style={{ 
+    <div  style={{ 
       backgroundColor: '#F3F4F6', 
       minHeight: '100vh',
       fontSize: responsiveStyles.body.fontSize,
@@ -1457,10 +1457,10 @@ const CourseDetail = () => {
         color: 'white',
         padding: isMobile ? '1rem 0' : '1.5rem 0'
       }}>
-        <div style={{
+        <div className='container' style={{
           maxWidth: '1400px',
           margin: '0 auto',
-          padding: isMobile ? '0 1rem' : '0 2rem',
+          padding: isMobile ? '0 1rem' : '0 3rem',
           display: 'flex',
           gap: '1rem',
           flexDirection: isMobile ? 'column' : 'row',
@@ -1497,7 +1497,7 @@ const CourseDetail = () => {
         <div style={{
           maxWidth: '1400px',
           margin: '0 auto',
-          padding: isMobile ? '0.5rem 1rem 0' : '0.5rem 2rem 0'
+          padding: isMobile ? '0.5rem 1rem 0' : '0.5rem 3rem 0'
         }}>
           <DescriptionWithToggle 
             description={course.description}
@@ -1513,7 +1513,7 @@ const CourseDetail = () => {
       {/* Enhanced Responsive Stats Bar */}
       <div style={{
         backgroundColor: '#212068',
-        padding: isMobile ? '1rem' : '0 2rem 2rem 2rem'
+        padding: isMobile ? '1rem' : '0 3rem 2rem 5rem'
       }}>
         <div style={{
           display: 'grid',
